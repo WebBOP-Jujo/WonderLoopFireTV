@@ -1,0 +1,1039 @@
+package org.wonderloop.app.ui
+
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.delay
+import org.wonderloop.app.data.FullStoryResponse
+import org.wonderloop.app.data.ProfileRepository
+import org.wonderloop.app.data.SagaBook
+import org.wonderloop.app.data.StoryRepository
+import org.wonderloop.app.data.SubscriptionManager
+import org.wonderloop.app.platform.PlatformAudioService
+import org.wonderloop.app.platform.SoundEffect
+import org.wonderloop.app.platform.WonderLoopImage
+import org.wonderloop.app.theme.*
+
+// New Design System Tokens
+private val ShelfCreamBg = Color(0xFFFFFBF5)
+private val ShelfInkDark = Color(0xFF2B2340)
+private val ShelfInkMuted = Color(0xFF6B6480)
+private val ShelfCoral = Color(0xFFD9384A)
+private val ShelfCoralSoft = Color(0xFFFDECE9)
+private val ShelfCoralBorder = Color(0xFFF9D0CA)
+private val ShelfMint = Color(0xFF0E7F64)
+private val ShelfMintSoft = Color(0xFFE4F6F0)
+private val ShelfGoldSoft = Color(0xFFFFF1CF)
+private val ShelfGoldBorder = Color(0xFFF3DC9B)
+private val ShelfGoldText = Color(0xFF9E6700)
+private val ShelfCardBorder = Color(0xFFEDE8E1)
+
+// Warm Oak Wood Palette for authentic children's bookshelf
+private val WoodHighlight = Color(0xFFEDC18F)
+private val WoodPrimary = Color(0xFFBF7A45)
+private val WoodGrain = Color(0xFFA6612E)
+private val WoodShadow = Color(0xFF743E17)
+private val ShelfBracketWood = Color(0xFF8E4D20)
+
+@Composable
+fun MyStoriesScreen(
+    onBackClick: () -> Unit,
+    onOpenStory: (FullStoryResponse) -> Unit,
+    onNewAdventureClick: () -> Unit
+) {
+    var sagaToDelete by remember { mutableStateOf<SagaBook?>(null) }
+    var openingSaga by remember { mutableStateOf<SagaBook?>(null) }
+    val sagas = StoryRepository.getBookshelfSagas()
+
+    // Trigger navigation once the 3D book-opening animation finishes
+    LaunchedEffect(openingSaga) {
+        val target = openingSaga ?: return@LaunchedEffect
+        delay(580)
+        onOpenStory(target.rootStory)
+        delay(120)
+        openingSaga = null
+    }
+
+    // Story / Saga Deletion Confirmation Modal (New Design)
+    sagaToDelete?.let { saga ->
+        val isMulti = saga.isMultiChapter
+        Dialog(
+            onDismissRequest = { sagaToDelete = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Card(
+                shape = RoundedCornerShape(30.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.5.dp, ShelfCardBorder),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 26.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Top Circular Blush Icon Badge
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(ShelfCoralSoft),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "🗑️", fontSize = 34.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Story Title Pill
+                    Surface(
+                        shape = RoundedCornerShape(50.dp),
+                        color = ShelfGoldSoft,
+                        border = BorderStroke(1.dp, ShelfGoldBorder)
+                    ) {
+                        Text(
+                            text = "📖 ${saga.rootStory.title}",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = ShelfGoldText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = if (isMulti) AppStrings.deleteSagaQuestion else AppStrings.deleteStoryQuestion,
+                        fontFamily = TitleFont(),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ShelfInkDark,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = if (isMulti) {
+                            AppStrings.deleteSagaWarning(saga.rootStory.title, saga.chapterCount)
+                        } else {
+                            AppStrings.deleteStoryWarning(saga.rootStory.title)
+                        },
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ShelfInkMuted,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 20.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    // Primary: Confirm Delete
+                    Button(
+                        onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            StoryRepository.deleteSaga(saga.sagaId)
+                            sagaToDelete = null
+                        },
+                        shape = RoundedCornerShape(50.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ShelfCoral,
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Text(
+                            text = AppStrings.confirmDelete,
+                            fontFamily = TitleFont(),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Secondary: Cancel
+                    OutlinedButton(
+                        onClick = { sagaToDelete = null },
+                        shape = RoundedCornerShape(50.dp),
+                        border = BorderStroke(1.5.dp, ShelfCardBorder),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.White,
+                            contentColor = ShelfInkMuted
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                    ) {
+                        Text(
+                            text = AppStrings.cancel,
+                            fontFamily = TitleFont(),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ShelfInkMuted
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ShelfCreamBg)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(
+                        ShelfGoldSoft.copy(alpha = 0.45f),
+                        ShelfCoralSoft.copy(alpha = 0.18f),
+                        Color.Transparent
+                    ),
+                    radius = 900f
+                )
+            )
+    ) {
+        val availableWidth = (maxWidth - 36.dp).coerceAtLeast(260.dp)
+
+        val columns = when {
+            availableWidth >= 780.dp -> 4
+            availableWidth >= 520.dp -> 3
+            else -> 2
+        }
+
+        val spacing = 14.dp
+        val totalSpacing = spacing * (columns + 1)
+        val calculatedWidth = (availableWidth - totalSpacing) / columns
+        val bookWidth = calculatedWidth.coerceIn(122.dp, 152.dp)
+
+        val chunks = remember(sagas, columns) { sagas.chunked(columns) }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
+        ) {
+            // =================================================================
+            // 1. TOP BAR: Circular Back · Fredoka Title · Count Pill
+            // =================================================================
+            item(key = "top_bar") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                onBackClick()
+                            },
+                            shape = CircleShape,
+                            color = Color.White,
+                            border = BorderStroke(1.5.dp, ShelfCardBorder),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "←",
+                                    fontSize = 19.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = ShelfInkDark
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        val activeProfile = ProfileRepository.activeProfile
+                        Text(
+                            text = if (activeProfile != null) AppStrings.bookshelfOf(activeProfile.name) else AppStrings.myBookshelf,
+                            fontFamily = TitleFont(),
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ShelfInkDark,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (sagas.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(50.dp),
+                            color = ShelfCoralSoft,
+                            border = BorderStroke(1.dp, ShelfCoralBorder)
+                        ) {
+                            Text(
+                                text = "📚 ${AppStrings.booksCount(sagas.size)}",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = ShelfCoral,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+
+            if (sagas.isEmpty()) {
+                item(key = "empty_bookshelf") {
+                    // Empty Bookshelf State (New Design)
+                    Card(
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.5.dp, ShelfCardBorder),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(76.dp)
+                                    .clip(CircleShape)
+                                    .background(ShelfGoldSoft),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = "📖", fontSize = 38.sp)
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                text = AppStrings.emptyBookshelfTitle,
+                                fontFamily = TitleFont(),
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ShelfInkDark,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = AppStrings.emptyBookshelfDesc,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ShelfInkMuted,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 20.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(22.dp))
+
+                            Button(
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    onNewAdventureClick()
+                                },
+                                shape = RoundedCornerShape(50.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ShelfCoral,
+                                    contentColor = Color.White
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                            ) {
+                                Text(
+                                    text = AppStrings.createFirstBook,
+                                    fontFamily = TitleFont(),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    WoodenShelfPlank(modifier = Modifier.fillMaxWidth())
+                }
+            } else {
+                item(key = "bookshelf_subtitle") {
+                    Text(
+                        text = AppStrings.bookshelfSubtitle,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ShelfInkMuted,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                itemsIndexed(
+                    items = chunks,
+                    key = { shelfIndex, shelfSagas ->
+                        "shelf_${shelfIndex}_${shelfSagas.firstOrNull()?.sagaId ?: shelfIndex}"
+                    }
+                ) { shelfIndex, shelfSagas ->
+                    val shelfHasOpeningBook = shelfSagas.any { it.sagaId == openingSaga?.sagaId }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .zIndex(if (shelfHasOpeningBook) 10f else 0f)
+                            .padding(bottom = 22.dp)
+                    ) {
+                        // Row of books standing on the wooden shelf
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            shelfSagas.forEach { saga ->
+                                val isThisBookOpening = openingSaga?.sagaId == saga.sagaId
+                                BookCoverItem(
+                                    saga = saga,
+                                    isOpening = isThisBookOpening,
+                                    onClick = {
+                                        if (openingSaga == null) {
+                                            PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
+                                            openingSaga = saga
+                                        }
+                                    },
+                                    onDelete = {
+                                        if (openingSaga == null) {
+                                            sagaToDelete = saga
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .width(bookWidth)
+                                        .zIndex(if (isThisBookOpening) 10f else 0f)
+                                )
+                            }
+
+                            val isLastShelf = shelfIndex == chunks.size - 1
+                            if (isLastShelf && shelfSagas.size < columns) {
+                                AddBookPlaceholder(
+                                    onClick = {
+                                        if (openingSaga == null) {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            onNewAdventureClick()
+                                        }
+                                    },
+                                    modifier = Modifier.width(bookWidth)
+                                )
+                            }
+                        }
+
+                        // Authentic Wooden Shelf Plank directly beneath the books
+                        WoodenShelfPlank(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp)
+                        )
+                    }
+                }
+
+                // If all shelves are full, add a dedicated shelf with the "New Book" bookstand
+                if (sagas.size % columns == 0) {
+                    item(key = "extra_new_book_shelf") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 22.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                AddBookPlaceholder(
+                                    onClick = {
+                                        if (openingSaga == null) {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            onNewAdventureClick()
+                                        }
+                                    },
+                                    modifier = Modifier.width(bookWidth)
+                                )
+                            }
+                            WoodenShelfPlank(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Children's Picture Book Stand on the Wooden Shelf with 3D Cover-Opening Transition
+ */
+@Composable
+private fun BookCoverItem(
+    saga: SagaBook,
+    isOpening: Boolean,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val story = saga.rootStory
+    val coverImageUrl = story.character.reinterpretedImageUrl
+        ?: story.character.originalDrawingBase64
+        ?: story.scenes.firstOrNull()?.illustrationUrl
+    val firstPageIllustration = story.scenes.firstOrNull()?.illustrationUrl ?: coverImageUrl
+
+    val bookShape = RoundedCornerShape(
+        topStart = 5.dp,
+        bottomStart = 5.dp,
+        topEnd = 18.dp,
+        bottomEnd = 18.dp
+    )
+
+    // 3D cover swing angle (0° closed -> -135° open hinged on the left spine)
+    val coverRotationY by animateFloatAsState(
+        targetValue = if (isOpening) -135f else 0f,
+        animationSpec = tween(durationMillis = 540, easing = FastOutSlowInEasing),
+        label = "book_cover_swing_y"
+    )
+
+    // Slight lift scale when opening
+    val bookScale by animateFloatAsState(
+        targetValue = if (isOpening) 1.07f else 1f,
+        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        label = "book_lift_scale"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.graphicsLayer {
+            scaleX = bookScale
+            scaleY = bookScale
+        }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.72f)
+                .clickable { onClick() }
+        ) {
+            // =================================================================
+            // LAYER 1 (UNDERNEATH): First Inside Page of the Story
+            // Revealed as the hardcover front cover swings open!
+            // =================================================================
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .shadow(
+                        elevation = 6.dp,
+                        shape = bookShape,
+                        ambientColor = Color.Black.copy(alpha = 0.28f),
+                        spotColor = Color.Black.copy(alpha = 0.4f)
+                    )
+                    .clip(bookShape)
+                    .background(ShelfCreamBg)
+                    .border(1.5.dp, ShelfCardBorder, bookShape)
+            ) {
+                // Right page-block paper edges effect
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(5.dp)
+                        .align(Alignment.CenterEnd)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color(0xFFE5DEC9),
+                                    Color.White
+                                )
+                            )
+                        )
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50.dp),
+                        color = ShelfCoralSoft
+                    ) {
+                        Text(
+                            text = "✨ PÁG. 1",
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = ShelfCoral,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(vertical = 6.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(ShelfGoldSoft)
+                    ) {
+                        if ((isOpening || coverRotationY < -1f) && !firstPageIllustration.isNullOrBlank()) {
+                            WonderLoopImage(
+                                model = firstPageIllustration,
+                                contentDescription = story.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = story.title,
+                        fontFamily = TitleFont(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ShelfInkDark,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 13.sp
+                    )
+                }
+
+                // Inner spine shadow on the left edge of the page
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(10.dp)
+                        .align(Alignment.CenterStart)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.25f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+            }
+
+            // =================================================================
+            // LAYER 2 (ON TOP): 3D Swinging Front Cover (hinged on left spine)
+            // =================================================================
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                        cameraDistance = 16f * density
+                        rotationY = coverRotationY
+                    }
+                    .shadow(
+                        elevation = if (isOpening) 12.dp else 8.dp,
+                        shape = bookShape,
+                        ambientColor = Color.Black.copy(alpha = 0.32f),
+                        spotColor = Color.Black.copy(alpha = 0.45f)
+                    )
+                    .clip(bookShape)
+                    .background(Color.White)
+                    .border(1.5.dp, Color.White.copy(alpha = 0.85f), bookShape)
+            ) {
+                if (coverRotationY > -90f) {
+                    // Front side of the book cover
+                    if (!coverImageUrl.isNullOrBlank()) {
+                        WonderLoopImage(
+                            model = coverImageUrl,
+                            contentDescription = story.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(ShelfGoldSoft, ShelfCoralSoft)
+                                    )
+                                )
+                        ) {
+                            Text(text = "📖", fontSize = 42.sp)
+                        }
+                    }
+
+                    // Realistic Book Spine Effect on Left Edge
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(13.dp)
+                            .align(Alignment.CenterStart)
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.42f),
+                                        Color.White.copy(alpha = 0.28f),
+                                        Color.Black.copy(alpha = 0.18f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+
+                    // Top Ribbon Bookmark (Pages count or Saga Chapters count)
+                    Surface(
+                        shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
+                        color = if (saga.isMultiChapter) ShelfGoldSoft else ShelfCoral,
+                        shadowElevation = 3.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = 14.dp)
+                    ) {
+                        Text(
+                            text = if (saga.isMultiChapter) {
+                                "🌟 ${AppStrings.sagaChaptersBadge(saga.chapterCount)}"
+                            } else {
+                                AppStrings.pagesCountRibbon(story.scenes.size)
+                            },
+                            color = if (saga.isMultiChapter) ShelfGoldText else Color.White,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+
+                    // Crisp Circular Delete Button (Top Right)
+                    if (!isOpening) {
+                        Surface(
+                            onClick = onDelete,
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.9f),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .size(28.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(text = "🗑️", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    // Bottom Scrim & Title on the Book Cover
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color(0xFF2B2340).copy(alpha = 0.78f),
+                                        Color(0xFF2B2340).copy(alpha = 0.95f)
+                                    )
+                                )
+                            )
+                            .padding(start = 12.dp, end = 8.dp, top = 12.dp, bottom = 8.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = story.title,
+                                fontFamily = TitleFont(),
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                lineHeight = 15.5.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (saga.isMultiChapter) "🌟 Saga · ${story.character.name}" else "✨ ${story.character.name}",
+                                color = ShelfGoldSoft,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                } else {
+                    // Inside lining of the front cover when swung past -90°
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(ShelfGoldSoft, ShelfCreamBg)
+                                )
+                            )
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.8f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = "✨", fontSize = 22.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Contact shadow right at the foot of the book resting on the shelf
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .height(4.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.32f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+    }
+}
+
+/**
+ * Whimsical bookstand slot inviting the child to create a new story on the shelf
+ */
+@Composable
+private fun AddBookPlaceholder(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bookShape = RoundedCornerShape(
+        topStart = 5.dp,
+        bottomStart = 5.dp,
+        topEnd = 18.dp,
+        bottomEnd = 18.dp
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = bookShape,
+            color = Color.White.copy(alpha = 0.88f),
+            border = BorderStroke(2.dp, ShelfCoralBorder),
+            shadowElevation = 3.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.72f)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(10.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(ShelfCoralSoft)
+                ) {
+                    Text(text = "📸", fontSize = 22.sp)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = AppStrings.newStoryBookstand,
+                    fontFamily = TitleFont(),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ShelfInkDark,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                val availableStories = SubscriptionManager.availableStories.value
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(50.dp),
+                    color = if (availableStories > 0) ShelfMintSoft else ShelfCoralSoft
+                ) {
+                    Text(
+                        text = if (availableStories > 0) {
+                            "✨ ${AppStrings.storiesAvailable(availableStories)}"
+                        } else {
+                            "⚠️ ${AppStrings.storiesAvailable(0)}"
+                        },
+                        fontSize = 9.5.sp,
+                        color = if (availableStories > 0) ShelfMint else ShelfCoral,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+        }
+
+        // Contact shadow
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .height(4.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.22f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+    }
+}
+
+/**
+ * Authentic Wooden Shelf Plank (Balda de madera)
+ */
+@Composable
+fun WoodenShelfPlank(modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        // Shelf Top Surface / Highlight Bevel
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            WoodHighlight,
+                            WoodPrimary
+                        )
+                    )
+                )
+        )
+
+        // Shelf Front Plank (Thick Wooden Beam)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(16.dp)
+                .clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            WoodPrimary,
+                            WoodGrain,
+                            WoodShadow
+                        )
+                    )
+                ),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left Bracket Detail
+            Box(
+                modifier = Modifier
+                    .width(18.dp)
+                    .fillMaxHeight()
+                    .background(ShelfBracketWood)
+            )
+
+            // Subtle wood grain highlight across the front
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(2.dp)
+                    .background(WoodHighlight.copy(alpha = 0.18f))
+            )
+
+            // Right Bracket Detail
+            Box(
+                modifier = Modifier
+                    .width(18.dp)
+                    .fillMaxHeight()
+                    .background(ShelfBracketWood)
+            )
+        }
+
+        // Deep 3D Cast Shadow on the wall underneath the shelf
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.32f),
+                            Color.Black.copy(alpha = 0.10f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+    }
+}

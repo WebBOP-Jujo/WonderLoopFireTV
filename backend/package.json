@@ -1,0 +1,37 @@
+{
+  "name": "wonderloop-backend",
+  "version": "1.0.0",
+  "description": "Backend Gateway for WonderLoop (RevenueCat Shipaton 2026)",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test:pipeline": "tsx src/test-pipeline.ts"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "@google/genai": "^2.24.0",
+    "@google/generative-ai": "^0.24.0",
+    "compression": "^1.8.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.0",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.35.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.13.9",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,48 @@
+﻿# Gradle & Android Build Artifacts
+.gradle/
+build/
+*/build/
+composeApp/build/
+*.apk
+*.aar
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+
+# Local SDK & Environment
+local.properties
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Logs
+*.log
+logs.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin Multiplatform & Native
+.kotlin/
+.konan/
+
+# Backend Node.js
+backend/node_modules/
+backend/dist/
+node_modules/
+
+# OS Specific
+.DS_Store
+Thumbs.db
