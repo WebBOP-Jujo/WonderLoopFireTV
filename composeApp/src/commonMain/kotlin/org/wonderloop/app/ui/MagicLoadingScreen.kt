@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -351,17 +352,19 @@ fun MagicLoadingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFFF3E0),
-                        Color(0xFFFDF3EC),
-                        Color(0xFFFFFBF5)
-                    ),
-                    center = Offset(400f, 500f),
-                    radius = 1500f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFFFF3E0),
+                            Color(0xFFFDF3EC),
+                            Color(0xFFFFFBF5)
+                        ),
+                        center = Offset(size.width * 0.4f, size.height * 0.5f),
+                        radius = maxOf(size.width, size.height) * 0.75f
+                    )
                 )
-            )
+            }
     ) {
         // Soft ambient floating blobs
         Box(

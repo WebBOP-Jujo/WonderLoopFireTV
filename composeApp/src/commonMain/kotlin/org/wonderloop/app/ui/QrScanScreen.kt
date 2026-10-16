@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -200,16 +201,19 @@ fun QrScanScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(QrCreamBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        QrGoldSoft.copy(alpha = 0.5f),
-                        QrCoralSoft.copy(alpha = 0.2f),
-                        Color.Transparent
-                    ),
-                    radius = 1200f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            QrGoldSoft.copy(alpha = 0.5f),
+                            QrCoralSoft.copy(alpha = 0.2f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.35f, size.height * 0.45f),
+                        radius = maxOf(size.width, size.height) * 0.65f
+                    )
                 )
-            )
+            }
             .padding(horizontal = 48.dp, vertical = 20.dp) // Fire TV 5% Overscan Safe Zone
     ) {
         Row(

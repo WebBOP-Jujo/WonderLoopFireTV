@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
@@ -273,12 +274,15 @@ fun OnboardingScreen(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(
-                                    brush = Brush.radialGradient(
-                                        colors = slide.gradientColors,
-                                        radius = 900f
+                                .drawBehind {
+                                    drawRect(
+                                        brush = Brush.radialGradient(
+                                            colors = slide.gradientColors,
+                                            center = center,
+                                            radius = maxOf(size.width, size.height) * 0.7f
+                                        )
                                     )
-                                )
+                                }
                                 .padding(16.dp)
                         ) {
                             when (pageIndex) {

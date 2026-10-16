@@ -8,13 +8,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.wonderloop.app.theme.SunSecondary
 import org.wonderloop.app.theme.TextMuted
 
@@ -83,25 +87,28 @@ actual fun WonderLoopImage(
     val isBase64 = !isLocalFile && (model.startsWith("data:image") || model.contains(";base64,"))
 
     if (isLocalFile || isBase64) {
-        val bitmap = remember(model) {
-            try {
-                if (isLocalFile) {
-                    val path = model.removePrefix("file://")
-                    decodeOptimizedFile(path)?.asImageBitmap()
-                } else {
-                    val base64Data = if (model.contains(";base64,")) {
-                        model.substringAfter(";base64,")
+        val bitmapState = produceState<ImageBitmap?>(initialValue = null, model) {
+            value = withContext(Dispatchers.IO) {
+                try {
+                    if (isLocalFile) {
+                        val path = model.removePrefix("file://")
+                        decodeOptimizedFile(path)?.asImageBitmap()
                     } else {
-                        model
+                        val base64Data = if (model.contains(";base64,")) {
+                            model.substringAfter(";base64,")
+                        } else {
+                            model
+                        }
+                        val bytes = Base64.decode(base64Data, Base64.DEFAULT)
+                        decodeOptimizedByteArray(bytes)?.asImageBitmap()
                     }
-                    val bytes = Base64.decode(base64Data, Base64.DEFAULT)
-                    decodeOptimizedByteArray(bytes)?.asImageBitmap()
+                } catch (e: Throwable) {
+                    println("Error decoding image asynchronously in WonderLoopImage: $e")
+                    null
                 }
-            } catch (e: Throwable) {
-                println("Error decoding image in WonderLoopImage: $e")
-                null
             }
         }
+        val bitmap = bitmapState.value
 
         if (bitmap != null) {
             Image(

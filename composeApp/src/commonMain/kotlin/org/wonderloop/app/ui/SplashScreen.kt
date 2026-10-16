@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -177,17 +178,19 @@ fun SplashScreen() {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFFE9DC),
-                        Color(0xFFFCEFEA),
-                        Color(0xFFF7ECF4)
-                    ),
-                    center = Offset(300f, 450f),
-                    radius = 1600f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFFFE9DC),
+                            Color(0xFFFCEFEA),
+                            Color(0xFFF7ECF4)
+                        ),
+                        center = Offset(size.width * 0.3f, size.height * 0.45f),
+                        radius = maxOf(size.width, size.height) * 0.8f
+                    )
                 )
-            )
+            }
     ) {
         val screenW = maxWidth
         val screenH = maxHeight

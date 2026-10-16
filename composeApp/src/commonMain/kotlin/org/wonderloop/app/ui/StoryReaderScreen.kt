@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -466,16 +467,19 @@ fun StoryReaderScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(ReaderCreamBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        ReaderGoldSoft.copy(alpha = 0.45f),
-                        ReaderCoralSoft.copy(alpha = 0.2f),
-                        Color.Transparent
-                    ),
-                    radius = 950f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            ReaderGoldSoft.copy(alpha = 0.45f),
+                            ReaderCoralSoft.copy(alpha = 0.2f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = maxOf(size.width, size.height) * 0.65f
+                    )
                 )
-            )
+            }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyUp && !showExitDialog) {
                     when (event.key) {

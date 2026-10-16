@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -170,16 +171,19 @@ fun ChildProfileScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(ChildCreamBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        ChildGoldSoft.copy(alpha = 0.35f),
-                        ChildCoralSoft.copy(alpha = 0.15f),
-                        Color.Transparent
-                    ),
-                    radius = 950f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            ChildGoldSoft.copy(alpha = 0.35f),
+                            ChildCoralSoft.copy(alpha = 0.15f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = maxOf(size.width, size.height) * 0.65f
+                    )
                 )
-            )
+            }
             .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV 5% Safe Zone
     ) {
         Column(

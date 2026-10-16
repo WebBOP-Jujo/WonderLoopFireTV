@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -493,16 +494,19 @@ fun StoryGeneratingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(GenCreamBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        GenGoldSoft.copy(alpha = 0.6f),
-                        GenCoralSoft.copy(alpha = 0.35f),
-                        Color.Transparent
-                    ),
-                    radius = 850f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            GenGoldSoft.copy(alpha = 0.6f),
+                            GenCoralSoft.copy(alpha = 0.35f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = maxOf(size.width, size.height) * 0.65f
+                    )
                 )
-            )
+            }
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(horizontal = 24.dp, vertical = 16.dp),

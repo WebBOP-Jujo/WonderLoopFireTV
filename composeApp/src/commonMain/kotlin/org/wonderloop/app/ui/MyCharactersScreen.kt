@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -127,16 +128,19 @@ fun MyCharactersScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BoardCreamBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        BoardMintSoft.copy(alpha = 0.45f),
-                        BoardGoldSoft.copy(alpha = 0.25f),
-                        Color.Transparent
-                    ),
-                    radius = 900f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            BoardMintSoft.copy(alpha = 0.45f),
+                            BoardGoldSoft.copy(alpha = 0.25f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = maxOf(size.width, size.height) * 0.65f
+                    )
                 )
-            )
+            }
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         // =================================================================

@@ -15,8 +15,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -113,16 +115,19 @@ fun HeroConfirmScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(HeroCreamBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        HeroGoldSoft.copy(alpha = 0.55f),
-                        HeroCoralSoft.copy(alpha = 0.25f),
-                        Color.Transparent
-                    ),
-                    radius = 1100f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            HeroGoldSoft.copy(alpha = 0.55f),
+                            HeroCoralSoft.copy(alpha = 0.25f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = maxOf(size.width, size.height) * 0.65f
+                    )
                 )
-            ),
+            },
         contentAlignment = Alignment.Center
     ) {
         ConfettiEffect()

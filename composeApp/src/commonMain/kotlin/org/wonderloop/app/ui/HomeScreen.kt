@@ -145,13 +145,15 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(TvCreamBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(TvIvoryGlow, TvCreamBg),
-                    center = Offset(1300f, 250f),
-                    radius = 900f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(TvIvoryGlow, TvCreamBg),
+                        center = Offset(size.width * 0.72f, size.height * 0.25f),
+                        radius = maxOf(size.width, size.height) * 0.55f
+                    )
                 )
-            )
+            }
             .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV 5% Safe Zone
     ) {
         Column(
@@ -337,13 +339,15 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .weight(1.15f)
                     .clip(RoundedCornerShape(32.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(TvCoral, TvCoralGradientEnd),
-                            start = Offset(0f, 0f),
-                            end = Offset(1200f, 400f)
+                    .drawBehind {
+                        drawRect(
+                            brush = Brush.linearGradient(
+                                listOf(TvCoral, TvCoralGradientEnd),
+                                start = Offset.Zero,
+                                end = Offset(size.width, size.height)
+                            )
                         )
-                    )
+                    }
             ) {
                 // Background subtle decorative circle
                 Canvas(modifier = Modifier.fillMaxSize()) {

@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -239,16 +240,19 @@ fun MyStoriesScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(ShelfCreamBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        ShelfGoldSoft.copy(alpha = 0.45f),
-                        ShelfCoralSoft.copy(alpha = 0.18f),
-                        Color.Transparent
-                    ),
-                    radius = 900f
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            ShelfGoldSoft.copy(alpha = 0.45f),
+                            ShelfCoralSoft.copy(alpha = 0.18f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = maxOf(size.width, size.height) * 0.65f
+                    )
                 )
-            )
+            }
     ) {
         val availableWidth = (maxWidth - 36.dp).coerceAtLeast(260.dp)
 
