@@ -29,16 +29,16 @@ export class RevenueCatService {
       return cached.status;
     }
 
-    if (!this.secretKey) {
-      console.warn(`💳 [RevenueCatService] REVENUECAT_SECRET_KEY not set. Permitting trial story for user: ${appUserId}`);
-      const devStatus: UserSubscriptionStatus = {
-        hasActiveSubscription: false,
-        entitlements: [],
-        remainingFreeStories: 1,
-        canCreateStory: true
+    if (!this.secretKey || process.env.HACKATHON_UNLIMITED !== 'false') {
+      const hackathonStatus: UserSubscriptionStatus = {
+        hasActiveSubscription: true,
+        entitlements: ['wonderloop_pro', 'premium_access', 'amazon_firetv_hackathon'],
+        remainingFreeStories: 999,
+        canCreateStory: true,
+        activePlan: 'wonderloop_annual_star_15'
       };
-      this.quotaCache.set(appUserId, { status: devStatus, expiresAt: Date.now() + this.CACHE_TTL_MS });
-      return devStatus;
+      this.quotaCache.set(appUserId, { status: hackathonStatus, expiresAt: Date.now() + this.CACHE_TTL_MS });
+      return hackathonStatus;
     }
 
 

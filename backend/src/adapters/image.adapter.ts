@@ -29,20 +29,26 @@ export class NanobananaImageAdapter implements IImageAdapter {
 
   /**
    * Compresses raw Gemini PNG/JPEG image output (~800 KB - 1 MB) into an optimized
-   * JPEG (quality 82, max 1024px) of ~110-140 KB (-85% network payload & disk usage).
+   * JPEG (quality 82, max dimensions configurable: 1024x1024 for 1:1 portraits, 1280x720 for 16:9 TV scenes).
    */
-  private async compressToJpegDataUri(base64Data: string, fallbackMime: string, label: string): Promise<string> {
+  private async compressToJpegDataUri(
+    base64Data: string,
+    fallbackMime: string,
+    label: string,
+    maxWidth: number = 1024,
+    maxHeight: number = 1024
+  ): Promise<string> {
     try {
       const rawBuf = Buffer.from(base64Data, 'base64');
       const jpegBuf = await sharp(rawBuf)
-        .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+        .resize({ width: maxWidth, height: maxHeight, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 82, mozjpeg: true })
         .toBuffer();
 
       if (jpegBuf.length > 0 && jpegBuf.length < rawBuf.length) {
         const inKb = Math.round(rawBuf.length / 1024);
         const outKb = Math.round(jpegBuf.length / 1024);
-        console.log(`    🗜️ [GeminiImageAdapter] ${label}: compressed ${inKb} KB -> ${outKb} KB JPEG`);
+        console.log(`    🗜️ [GeminiImageAdapter] ${label}: compressed ${inKb} KB -> ${outKb} KB JPEG (${maxWidth}x${maxHeight})`);
         return `data:image/jpeg;base64,${jpegBuf.toString('base64')}`;
       }
     } catch (err: any) {
@@ -131,7 +137,10 @@ CRITICAL ARTISTIC GUIDELINES:
               }
             ],
             config: {
-              responseModalities: ['IMAGE']
+              responseModalities: ['IMAGE'],
+              imageConfig: {
+                aspectRatio: '1:1'
+              }
             }
           }),
         { retries: 3, delayMs: 1500, label: `Character Portrait (${character.name})` }
@@ -181,17 +190,17 @@ Show them interacting as a warm, affectionate team in the scene.`;
 
     const enrichedPrompt = is3D
       ? `
-3D animated movie scene illustration for page ${pageNumber} in charming Pixar / Disney & tactile soft clay animation style.
+Widescreen 16:9 horizontal cinematic 3D animated movie scene illustration for page ${pageNumber} in charming Pixar / Disney & tactile soft clay animation style, designed for a large living-room television display.
 ${consistencyDirective}
 Scene: ${visualPrompt}
-Style: High-end 3D animated feature film render, cute rounded 3D character proportions, soft tactile textures, subsurface scattering, cinematic warm volumetric lighting, shallow depth of field, vibrant joyful colors.
+Composition & Style: Wide 16:9 horizontal framing with expansive scenic background, high-end 3D animated feature film render, cute rounded 3D character proportions, soft tactile textures, subsurface scattering, cinematic warm volumetric lighting, shallow depth of field, vibrant joyful colors.
 Absolutely NO text, no words, no letters, no watermark.
 `.trim()
       : `
-Children's storybook watercolor illustration for page ${pageNumber}.
+Widescreen 16:9 horizontal children's storybook watercolor illustration for page ${pageNumber}, designed for a large living-room television display.
 ${consistencyDirective}
 Scene: ${visualPrompt}
-Style: Whimsical children's picture book watercolor, soft gentle textures, warm magical lighting, pastel tones.
+Composition & Style: Wide 16:9 horizontal panoramic storybook framing, whimsical children's picture book watercolor, soft gentle textures, warm magical lighting, rich pastel tones.
 Absolutely NO text, no words, no letters, no watermark.
 `.trim();
 
@@ -205,7 +214,10 @@ Absolutely NO text, no words, no letters, no watermark.
           model: 'gemini-3.1-flash-lite-image',
           contents,
           config: {
-            responseModalities: ['IMAGE']
+            responseModalities: ['IMAGE'],
+            imageConfig: {
+              aspectRatio: '16:9'
+            }
           }
         }),
       { retries: 3, delayMs: 1500, label: `Scene Illustration (Page ${pageNumber})` }
@@ -217,8 +229,8 @@ Absolutely NO text, no words, no letters, no watermark.
     if (imagePart?.inlineData?.data) {
       const mimeType = imagePart.inlineData.mimeType || 'image/png';
       const base64Data = imagePart.inlineData.data;
-      console.log(`✅ [GeminiImageAdapter] Page ${pageNumber} illustration generated successfully (${mimeType})`);
-      return await this.compressToJpegDataUri(base64Data, mimeType, `Page ${pageNumber}`);
+      console.log(`✅ [GeminiImageAdapter] Page ${pageNumber} 16:9 illustration generated successfully (${mimeType})`);
+      return await this.compressToJpegDataUri(base64Data, mimeType, `Page ${pageNumber} (16:9)`, 1280, 720);
     }
 
     throw new Error(`La respuesta de Gemini Image para la página ${pageNumber} no contenía datos de imagen.`);

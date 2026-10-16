@@ -151,14 +151,14 @@ ${prevCompanions ? `- ${prevCompanions} (Puedes hacer un breve guiño cariñoso 
         : `"${sagaHero.name} y ${newCompanion.name}: [Subtítulo emocionante, divertido y sonoro] (Capítulo ${chapterNum})"`;
 
       const stylePrefix = is3D
-        ? "A charming 3D animated movie scene in Pixar / Disney animation style featuring BOTH"
-        : "A whimsical watercolor children's picture book illustration featuring BOTH";
+        ? "Wide 16:9 horizontal widescreen 3D animated movie scene in Pixar / Disney animation style featuring BOTH"
+        : "Wide 16:9 horizontal widescreen whimsical watercolor children's picture book illustration featuring BOTH";
       const styleSuffix = is3D
-        ? "Cinematic warm volumetric lighting, tactile 3D textures, shallow depth of field, high quality, no text, no words, no letters."
-        : "Soft warm lighting, pastel textures, storybook art, high quality, no text, no words, no letters.";
+        ? "16:9 widescreen cinematic warm volumetric lighting, tactile 3D textures, shallow depth of field, high quality, no text, no words, no letters."
+        : "16:9 widescreen panoramic composition, soft warm lighting, pastel textures, storybook art, high quality, no text, no words, no letters.";
 
       visualPromptGuideline = `
-COMO ES UNA CONTINUACIÓN DE SAGA, EN CADA UNA DE LAS 5 PÁGINAS el "visualPrompt" DEBE describir OBLIGATORIAMENTE a AMBOS personajes interactuando juntos en la escena:
+COMO ES UNA CONTINUACIÓN DE SAGA, EN CADA UNA DE LAS 5 PÁGINAS el "visualPrompt" DEBE describir OBLIGATORIAMENTE a AMBOS personajes interactuando juntos en la escena panorámica 16:9:
 "${stylePrefix}: 1) ${sagaHero.name}, the protagonist cute ${sagaHero.species} with ${sagaHero.primaryColors.join(' and ')} colors and ${sagaHero.distinctiveFeatures.join(', ')}, AND 2) ${newCompanion.name}, their new companion ${newCompanion.species} with ${newCompanion.primaryColors.join(' and ')} colors and ${newCompanion.distinctiveFeatures.join(', ')}, [setting and interaction]. ${styleSuffix}"
 `;
     } else {
@@ -167,14 +167,14 @@ COMO ES UNA CONTINUACIÓN DE SAGA, EN CADA UNA DE LAS 5 PÁGINAS el "visualPromp
         : `Título sugerente, mágico y sonoro del cuento que incluya a ${sagaHero.name}`;
 
       const stylePrefix = is3D
-        ? "A charming 3D animated movie scene in Pixar / Disney animation style of"
-        : "A whimsical watercolor children's picture book illustration of";
+        ? "Wide 16:9 horizontal widescreen 3D animated movie scene in Pixar / Disney animation style of"
+        : "Wide 16:9 horizontal widescreen whimsical watercolor children's picture book illustration of";
       const styleSuffix = is3D
-        ? "Cinematic warm volumetric lighting, tactile 3D textures, shallow depth of field, high quality, no text, no words, no letters."
-        : "Soft warm lighting, pastel textures, storybook art, high quality, no text, no words, no letters.";
+        ? "16:9 widescreen cinematic warm volumetric lighting, tactile 3D textures, shallow depth of field, high quality, no text, no words, no letters."
+        : "16:9 widescreen panoramic composition, soft warm lighting, pastel textures, storybook art, high quality, no text, no words, no letters.";
 
       visualPromptGuideline = `
-En cada una de las 5 páginas, el "visualPrompt" DEBE describir con precisión al protagonista:
+En cada una de las 5 páginas, el "visualPrompt" DEBE describir con precisión al protagonista en composición panorámica 16:9:
 "${stylePrefix} ${sagaHero.name}, a cute ${sagaHero.species} with ${sagaHero.primaryColors.join(' and ')} colors and ${sagaHero.distinctiveFeatures.join(', ')}, in [setting/action]. ${styleSuffix}"
 `;
     }
@@ -186,6 +186,7 @@ ${continuation ? `Esta historia une al protagonista de la saga "${sagaHero.name}
 
 ${languageDirective}
 ${sagaContinuationSection}
+${visualPromptGuideline}
 
 ---
 DATOS DEL PROTAGONISTA DE LA SAGA:

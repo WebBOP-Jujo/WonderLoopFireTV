@@ -27,10 +27,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import org.wonderloop.app.platform.PlatformAudioService
+import org.wonderloop.app.platform.SoundEffect
 import org.wonderloop.app.theme.*
+import org.wonderloop.app.ui.components.tvFocusable
 
 @Composable
 fun ParentalGateDialog(
@@ -40,7 +45,6 @@ fun ParentalGateDialog(
 ) {
     var num1 by remember { mutableStateOf((6..9).random()) }
     var num2 by remember { mutableStateOf((4..9).random()) }
-    var inputAnswer by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
 
     val brandRed = CoralHero // #D9384A
@@ -49,11 +53,45 @@ fun ParentalGateDialog(
     val softBlush = Color(0xFFFDECE9)
     val softBlushBorder = Color(0xFFF6D5D0)
 
-    fun refreshQuestion() {
-        num1 = (6..9).random()
-        num2 = (4..9).random()
-        inputAnswer = ""
-        showError = true
+    val correctAnswer = num1 * num2
+    val options = remember(num1, num2) {
+        val list = mutableSetOf(correctAnswer)
+        val candidates = listOf(
+            correctAnswer + num1,
+            correctAnswer - num1,
+            correctAnswer + num2,
+            correctAnswer - num2,
+            correctAnswer + 10,
+            correctAnswer - 10,
+            (num1 + 1) * (num2 - 1),
+            (num1 - 1) * (num2 + 1),
+            correctAnswer + 4,
+            correctAnswer - 4
+        ).filter { it > 0 && it != correctAnswer }.shuffled()
+
+        for (c in candidates) {
+            list.add(c)
+            if (list.size == 4) break
+        }
+        var offset = 1
+        while (list.size < 4) {
+            val cand = correctAnswer + offset
+            if (cand > 0) list.add(cand)
+            offset++
+        }
+        list.toList().shuffled()
+    }
+
+    fun selectAnswer(selected: Int) {
+        if (selected == correctAnswer) {
+            PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+            onSuccess()
+        } else {
+            PlatformAudioService.playSfx(SoundEffect.POP)
+            showError = true
+            num1 = (6..9).random()
+            num2 = (4..9).random()
+        }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -61,9 +99,7 @@ fun ParentalGateDialog(
             shape = RoundedCornerShape(30.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(6.dp)
+            modifier = Modifier.width(480.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -189,112 +225,81 @@ fun ParentalGateDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                val submitAnswer: () -> Unit = {
-                    val answerInt = inputAnswer.toIntOrNull()
-                    if (answerInt != null && answerInt == num1 * num2) {
-                        onSuccess()
-                    } else {
-                        refreshQuestion()
+                // 4 Large D-Pad Navigable Option Cards
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val firstOptionRequester = remember { FocusRequester() }
+                    LaunchedEffect(Unit) {
+                        try { firstOptionRequester.requestFocus() } catch (_: Exception) {}
+                    }
+
+                    options.forEachIndexed { index, option ->
+                        Surface(
+                            onClick = { selectAnswer(option) },
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color(0xFFFFFBF9),
+                            border = BorderStroke(1.5.dp, Color(0xFFE2DCEB)),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .then(if (index == 0) Modifier.focusRequester(firstOptionRequester) else Modifier)
+                                .tvFocusable(
+                                    shape = RoundedCornerShape(18.dp),
+                                    focusedScale = 1.08f,
+                                    onClick = { selectAnswer(option) }
+                                )
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = option.toString(),
+                                    fontFamily = TitleFont(),
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = deepInk
+                                )
+                            }
+                        }
                     }
                 }
 
-                OutlinedTextField(
-                    value = inputAnswer,
-                    onValueChange = { raw ->
-                        val clean = raw.filter { char -> char.isDigit() }
-                        if (clean.length <= 4) {
-                            inputAnswer = clean
-                            val answerInt = clean.toIntOrNull()
-                            if (answerInt != null && answerInt == num1 * num2) {
-                                onSuccess()
-                            }
-                        }
-                    },
-                    label = {
-                        Text(
-                            text = AppStrings.writeResult,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    },
-                    textStyle = LocalTextStyle.current.copy(
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = deepInk
-                    ),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { submitAnswer() }),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = brandRed,
-                        unfocusedBorderColor = Color(0xFFE2DCEB),
-                        focusedLabelColor = brandRed,
-                        unfocusedLabelColor = mutedInk,
-                        cursorColor = brandRed,
-                        focusedContainerColor = Color(0xFFFFFBF9),
-                        unfocusedContainerColor = Color(0xFFFFFBF9)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
                 if (showError) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = AppStrings.wrongAnswer,
-                        fontSize = 12.5.sp,
+                        fontSize = 13.sp,
                         color = brandRed,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
                 }
 
-                Spacer(modifier = Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                OutlinedButton(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(50.dp),
+                    border = BorderStroke(1.5.dp, Color(0xFFE2DCEB)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.White,
+                        contentColor = deepInk
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth(0.55f)
+                        .height(44.dp)
+                        .tvFocusable(shape = RoundedCornerShape(50.dp), onClick = onDismiss)
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        shape = RoundedCornerShape(25.dp),
-                        border = BorderStroke(1.8.dp, Color(0xFFE2DCEB)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color.White,
-                            contentColor = deepInk
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                    ) {
-                        Text(
-                            text = AppStrings.cancel,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = deepInk
-                        )
-                    }
-
-                    Button(
-                        onClick = submitAnswer,
-                        shape = RoundedCornerShape(25.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = brandRed),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                    ) {
-                        Text(
-                            text = AppStrings.continueText,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-                    }
+                    Text(
+                        text = AppStrings.cancel,
+                        fontFamily = TitleFont(),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = deepInk
+                    )
                 }
             }
         }

@@ -479,7 +479,7 @@ object AppStrings {
 
     val paywallAnnualEquivalent get() = if (isEnglish) "Billed $69.99/year" else "Facturado 69,99€/año"
     val paywallBasicAnnualEquivalent get() = if (isEnglish) "Billed $39.99/year" else "Facturado 39,99€/año"
-    val paywallCancelGuarantee get() = if (isEnglish) "Cancel anytime in Google Play" else "Cancela cuando quieras en Google Play"
+    val paywallCancelGuarantee get() = if (isEnglish) "Cancel anytime via Amazon" else "Cancela cuando quieras en Amazon"
     val paywallOneTimeGuarantee get() = if (isEnglish) "One-time payment · Stories never expire" else "Pago único · Tus cuentos nunca caducan"
     val paywallPackMemberSavings get() = if (isEnglish) "Pro discount applied (-33%)" else "Descuento Pro aplicado (-33%)"
     val paywallPackRegularHint get() = if (isEnglish) "With Pro: $2.99 (-33%)" else "Con Pro: 2,99€ (-33%)"

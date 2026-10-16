@@ -137,3 +137,31 @@ data class RedeemCodeResponse(
     val status: QuotaResponse? = null
 )
 
+@Serializable
+data class CreateTvSessionRequest(
+    val language: String = "es"
+)
+
+@Serializable
+data class TvSessionResponse(
+    val success: Boolean = true,
+    val sessionId: String,
+    val shortCode: String = "",
+    val uploadUrl: String,
+    val lanIp: String = "",
+    val expiresInSeconds: Int = 900
+)
+
+@Serializable
+data class TvSessionStatusResponse(
+    val success: Boolean = true,
+    val sessionId: String = "",
+    val shortCode: String = "",
+    val status: String = "waiting",
+    val language: String = "es",
+    val imageBase64: String? = null,
+    val mimeType: String? = null,
+    val expiresInSeconds: Int = 900
+)
+
+

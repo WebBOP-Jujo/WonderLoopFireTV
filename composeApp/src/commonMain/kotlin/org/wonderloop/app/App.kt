@@ -18,8 +18,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import org.wonderloop.app.ui.components.tvFocusable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -137,19 +140,21 @@ fun App(
                     onDismissRequest = { showExitConfirmDialog = false },
                     properties = DialogProperties(usePlatformDefaultWidth = false)
                 ) {
+                    val stayFocusRequester = remember { FocusRequester() }
+                    LaunchedEffect(Unit) {
+                        try { stayFocusRequester.requestFocus() } catch (_: Exception) {}
+                    }
                     Card(
-                        shape = RoundedCornerShape(30.dp),
+                        shape = RoundedCornerShape(28.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
+                        modifier = Modifier.width(480.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 22.dp, vertical = 26.dp),
+                                .padding(horizontal = 28.dp, vertical = 26.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Box(
@@ -187,52 +192,70 @@ fun App(
                             Spacer(modifier = Modifier.height(22.dp))
 
                             // Primary: Stay in the app
-                            Button(
+                            Surface(
                                 onClick = { showExitConfirmDialog = false },
                                 shape = RoundedCornerShape(50.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFD9384A),
-                                    contentColor = Color.White
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
+                                color = Color(0xFFD9384A),
+                                shadowElevation = 4.dp,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(50.dp)
+                                    .height(48.dp)
+                                    .focusRequester(stayFocusRequester)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(50.dp),
+                                        focusedScale = 1.05f,
+                                        onClick = { showExitConfirmDialog = false }
+                                    )
                             ) {
-                                Text(
-                                    text = "${AppStrings.exitDialogStay} ✨",
-                                    fontFamily = TitleFont(),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White
-                                )
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${AppStrings.exitDialogStay} ✨",
+                                        fontFamily = TitleFont(),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(10.dp))
 
                             // Secondary: Confirm Exit
-                            OutlinedButton(
+                            Surface(
                                 onClick = {
                                     showExitConfirmDialog = false
                                     onExitApp()
                                 },
                                 shape = RoundedCornerShape(50.dp),
+                                color = Color.White,
                                 border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = Color.White,
-                                    contentColor = Color(0xFF6B6480)
-                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(46.dp)
+                                    .height(44.dp)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(50.dp),
+                                        focusedScale = 1.05f,
+                                        onClick = {
+                                            showExitConfirmDialog = false
+                                            onExitApp()
+                                        }
+                                    )
                             ) {
-                                Text(
-                                    text = AppStrings.exitDialogConfirm,
-                                    fontFamily = TitleFont(),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF6B6480)
-                                )
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = AppStrings.exitDialogConfirm,
+                                        fontFamily = TitleFont(),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF6B6480)
+                                    )
+                                }
                             }
                         }
                     }
@@ -346,19 +369,21 @@ fun App(
                     },
                     properties = DialogProperties(usePlatformDefaultWidth = false)
                 ) {
+                    val dailyLimitFocusRequester = remember { FocusRequester() }
+                    LaunchedEffect(Unit) {
+                        try { dailyLimitFocusRequester.requestFocus() } catch (_: Exception) {}
+                    }
                     Card(
-                        shape = RoundedCornerShape(30.dp),
+                        shape = RoundedCornerShape(28.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
+                        modifier = Modifier.width(480.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 22.dp, vertical = 26.dp),
+                                .padding(horizontal = 28.dp, vertical = 26.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Box(
@@ -428,7 +453,7 @@ fun App(
 
                             Spacer(modifier = Modifier.height(22.dp))
 
-                            Button(
+                            Surface(
                                 onClick = {
                                     showDailyLimitDialog = false
                                     dailyLimitHeroName = null
@@ -438,40 +463,70 @@ fun App(
                                     }
                                 },
                                 shape = RoundedCornerShape(50.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFD9384A),
-                                    contentColor = Color.White
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
+                                color = Color(0xFFD9384A),
+                                shadowElevation = 4.dp,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(50.dp)
+                                    .height(48.dp)
+                                    .focusRequester(dailyLimitFocusRequester)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(50.dp),
+                                        focusedScale = 1.05f,
+                                        onClick = {
+                                            showDailyLimitDialog = false
+                                            dailyLimitHeroName = null
+                                            if (currentScreen !is Screen.Home) {
+                                                isBackNav = true
+                                                screenStack = listOf(Screen.Home)
+                                            }
+                                        }
+                                    )
                             ) {
-                                Text(
-                                    text = if (AppStrings.isEnglish) "Okay, see you tomorrow! ✨" else "¡Vale, hasta mañana! ✨",
-                                    fontFamily = TitleFont(),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White
-                                )
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (AppStrings.isEnglish) "Okay, see you tomorrow! ✨" else "¡Vale, hasta mañana! ✨",
+                                        fontFamily = TitleFont(),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                }
                             }
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                            TextButton(
+                            Surface(
                                 onClick = {
                                     showDailyLimitDialog = false
                                     dailyLimitHeroName = null
                                     parentalGateExplanation = null
                                     parentalGateOnSuccess = { navigateTo(Screen.ParentsZone) }
                                     showParentalGate = true
-                                }
+                                },
+                                shape = RoundedCornerShape(50.dp),
+                                color = Color.Transparent,
+                                modifier = Modifier
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(50.dp),
+                                        focusedScale = 1.05f,
+                                        onClick = {
+                                            showDailyLimitDialog = false
+                                            dailyLimitHeroName = null
+                                            parentalGateExplanation = null
+                                            parentalGateOnSuccess = { navigateTo(Screen.ParentsZone) }
+                                            showParentalGate = true
+                                        }
+                                    )
                             ) {
                                 Text(
                                     text = if (AppStrings.isEnglish) "🔒 Parents Zone (adjust daily limit)" else "🔒 Zona de padres (ajustar límite)",
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF6B6480)
+                                    color = Color(0xFF6B6480),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                                 )
                             }
                         }
@@ -763,8 +818,10 @@ fun App(
                     is Screen.CameraScan -> {
                         val initialArtStyle = screen.continuation?.artStyle
                             ?: ProfileRepository.getEffectiveArtStyle(childAge)
-                        CameraScanScreen(
+                        QrScanScreen(
                             initialArtStyle = initialArtStyle,
+                            continuation = screen.continuation,
+                            api = api,
                             onPhotoCaptured = { base64, chosenArtStyle ->
                                 if (!SubscriptionManager.canCreateStory()) {
                                     parentalGateExplanation = AppStrings.quotaExhaustedPrompt

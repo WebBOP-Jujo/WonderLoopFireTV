@@ -5,15 +5,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,8 +29,10 @@ import org.wonderloop.app.data.ProfileRepository
 import org.wonderloop.app.data.StoryRepository
 import org.wonderloop.app.data.SubscriptionManager
 import org.wonderloop.app.platform.PlatformAudioService
+import org.wonderloop.app.platform.PlatformBackHandler
 import org.wonderloop.app.platform.SoundEffect
 import org.wonderloop.app.theme.*
+import org.wonderloop.app.ui.components.*
 
 private val ParentsCreamBg = Color(0xFFFFFBF5)
 private val ParentsInkDark = Color(0xFF2B2340)
@@ -73,6 +78,17 @@ fun ParentsZoneScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showConfirmClearStories by remember { mutableStateOf(false) }
 
+    PlatformBackHandler(enabled = true) {
+        if (showLanguageDialog) showLanguageDialog = false
+        else if (showVoiceDialog) showVoiceDialog = false
+        else if (showArtStyleDialog) showArtStyleDialog = false
+        else if (showDailyLimitDialog) showDailyLimitDialog = false
+        else if (showPrivacyDialog) showPrivacyDialog = false
+        else if (showAboutDialog) showAboutDialog = false
+        else if (showConfirmClearStories) showConfirmClearStories = false
+        else onBackClick()
+    }
+
     val voiceStyleDisplay = when (voiceStyle) {
         "soft" -> AppStrings.voiceSoftLabel
         "lively" -> AppStrings.voiceLivelyLabel
@@ -87,386 +103,525 @@ fun ParentsZoneScreen(
 
     val dailyLimitDisplay = if (AppStrings.isEnglish) "$dailyLimit / day" else "$dailyLimit al día"
 
+    val activeProfileFocusRequester = remember { FocusRequester() }
+    val addProfileFocusRequester = remember { FocusRequester() }
+    val gestionarFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(120)
+        try {
+            if (profiles.isNotEmpty()) {
+                activeProfileFocusRequester.requestFocus()
+            } else {
+                addProfileFocusRequester.requestFocus()
+            }
+        } catch (_: Exception) {}
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(ParentsCreamBg)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 14.dp)
+            .padding(horizontal = 48.dp, vertical = 16.dp)
     ) {
         // -------------------------------------------------------------
-        // 1. TOP BAR: [ ← ] Zona de padres
+        // 1. TOP BAR: [ ← Volver ]       Zona de padres        [ Spacer ]
         // -------------------------------------------------------------
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                onClick = {
-                    PlatformAudioService.playSfx(SoundEffect.POP)
-                    onBackClick()
-                },
-                shape = CircleShape,
+                shape = RoundedCornerShape(50.dp),
                 color = Color.White,
                 border = BorderStroke(1.5.dp, ParentsCardBorder),
-                shadowElevation = 2.dp,
-                modifier = Modifier.size(42.dp)
+                modifier = Modifier.tvFocusable(
+                    shape = RoundedCornerShape(50.dp),
+                    focusedScale = 1.08f,
+                    onClick = {
+                        PlatformAudioService.playSfx(SoundEffect.POP)
+                        onBackClick()
+                    }
+                )
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = "←",
-                        fontSize = 20.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
+                        color = ParentsInkDark
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (AppStrings.isEnglish) "Back" else "Volver",
+                        fontFamily = TitleFont(),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
                         color = ParentsInkDark
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.weight(1f))
 
             Text(
                 text = AppStrings.parentsZoneTitle,
                 fontFamily = TitleFont(),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
                 color = ParentsInkDark
             )
+
+            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.width(110.dp)) // balances the left back pill
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         // -------------------------------------------------------------
-        // 2. SUBSCRIPTION BANNER CARD (👑 Plan Pro · activo [Gestionar])
+        // 2. MAIN 2-COLUMN WIDESCREEN LAYOUT (NO SCROLL)
         // -------------------------------------------------------------
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = ParentsGoldSoft),
-            border = BorderStroke(1.5.dp, ParentsGoldBorder),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(36.dp)
         ) {
-            Row(
+            // LEFT COLUMN (Pro Card + Perfiles)
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .weight(0.44f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (isPremium) "👑" else "🌱",
-                            fontSize = 18.sp
+                // 2A. PRO CARD
+                Card(
+                    shape = RoundedCornerShape(26.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    border = BorderStroke(1.5.dp, ParentsGoldBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFFFFF1CF), Color(0xFFFFE3A3))
+                            ),
+                            shape = RoundedCornerShape(26.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (isPremium) AppStrings.planProActiveLabel else AppStrings.planFreeActiveLabel,
-                            fontFamily = TitleFont(),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ParentsInkDark,
-                            maxLines = 1
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (AppStrings.isEnglish) {
-                            if (availableStories == 1) "1 story credit available" else "$availableStories story credits available"
-                        } else {
-                            if (availableStories == 1) "1 cuento disponible" else "$availableStories cuentos disponibles"
-                        },
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ParentsGoldText
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Surface(
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        onManageSubscriptionClick()
-                    },
-                    shape = RoundedCornerShape(50.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.dp, ParentsGoldBorder),
-                    shadowElevation = 2.dp
                 ) {
-                    Text(
-                        text = AppStrings.manageButtonLabel,
-                        fontFamily = TitleFont(),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ParentsCoral,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(22.dp))
-
-        // -------------------------------------------------------------
-        // 3. SECTION: PERFILES
-        // -------------------------------------------------------------
-        Text(
-            text = AppStrings.profilesSectionHeader,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = ParentsInkMuted,
-            letterSpacing = 0.8.sp,
-            modifier = Modifier.padding(start = 6.dp, bottom = 8.dp)
-        )
-
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(1.5.dp, ParentsCardBorder),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                profiles.forEach { profile ->
-                    val isActive = profile.id == activeProfileId
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                PlatformAudioService.playSfx(SoundEffect.POP)
-                                onEditProfileClick(profile.id)
-                            }
-                            .padding(horizontal = 18.dp, vertical = 15.dp),
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .shadow(elevation = 4.dp, shape = CircleShape)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isPremium) "👑" else "🌱",
+                                fontSize = 28.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isPremium) AppStrings.planProActiveLabel else AppStrings.planFreeActiveLabel,
+                                fontFamily = TitleFont(),
+                                fontSize = 17.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ParentsInkDark,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = if (AppStrings.isEnglish) {
+                                    if (availableStories == 1) "1 story available" else "$availableStories stories available"
+                                } else {
+                                    if (availableStories == 1) "1 cuento disponible" else "$availableStories cuentos disponibles"
+                                },
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ParentsGoldText
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(50.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, ParentsGoldBorder),
+                            modifier = Modifier.tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.08f,
+                                focusRequester = gestionarFocusRequester,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    onManageSubscriptionClick()
+                                }
+                            )
+                        ) {
+                            Text(
+                                text = AppStrings.manageButtonLabel,
+                                fontFamily = TitleFont(),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ParentsCoral,
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 2B. PERFILES SECTION
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(ParentsCoralSoft)
-                            ) {
-                                Text(text = profile.avatar, fontSize = 19.sp)
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Text(
-                                text = profile.name,
-                                fontFamily = TitleFont(),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ParentsInkDark
-                            )
-
-                            if (isActive) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50.dp))
-                                        .background(ParentsCoralSoft)
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = if (AppStrings.isEnglish) "Active" else "Activo",
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = ParentsCoral
-                                    )
-                                }
-                            }
-                        }
-
                         Text(
-                            text = "${profile.age} ${AppStrings.yearsOld}  ›",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            text = AppStrings.profilesSectionHeader,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = ParentsInkDark
+                        )
+                        Text(
+                            text = "${profiles.size} de 3",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
                             color = ParentsInkMuted
                         )
                     }
 
-                    HorizontalDivider(
-                        color = ParentsCardBorder,
-                        thickness = 1.dp,
-                        modifier = Modifier.padding(horizontal = 18.dp)
-                    )
-                }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        profiles.forEach { profile ->
+                            val isActive = profile.id == activeProfileId
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = Color.White,
+                                border = BorderStroke(
+                                    width = if (isActive) 2.5.dp else 1.5.dp,
+                                    color = if (isActive) ParentsCoral else ParentsCardBorder
+                                ),
+                                shadowElevation = 2.dp,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(24.dp),
+                                        focusedScale = 1.06f,
+                                        focusRequester = if (isActive) activeProfileFocusRequester else null,
+                                        onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            onEditProfileClick(profile.id)
+                                        }
+                                    )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(60.dp)
+                                            .clip(CircleShape)
+                                            .background(ParentsCoralSoft),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(text = profile.avatar, fontSize = 32.sp)
+                                    }
 
-                // + Añadir perfil row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            PlatformAudioService.playSfx(SoundEffect.POP)
-                            onAddProfileClick()
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Text(
+                                        text = profile.name,
+                                        fontFamily = TitleFont(),
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ParentsInkDark,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    Text(
+                                        text = "${profile.age} ${AppStrings.yearsOld}",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ParentsInkMuted
+                                    )
+
+                                    if (isActive) {
+                                        Spacer(modifier = Modifier.height(5.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(50.dp),
+                                            color = ParentsCoralSoft
+                                        ) {
+                                            Text(
+                                                text = if (AppStrings.isEnglish) "Active" else "Activo",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = ParentsCoral,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+
+                        // Add Profile Card if fewer than 3
+                        if (profiles.size < 3) {
+                            val freeSlots = 3 - profiles.size
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = Color.White,
+                                border = BorderStroke(2.dp, ParentsCoralBorder),
+                                shadowElevation = 0.dp,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(24.dp),
+                                        focusedScale = 1.06f,
+                                        focusRequester = addProfileFocusRequester,
+                                        onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            onAddProfileClick()
+                                        }
+                                    )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(60.dp)
+                                            .clip(CircleShape)
+                                            .background(ParentsCoralSoft),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "+",
+                                            fontSize = 32.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = ParentsCoral
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Text(
+                                        text = if (AppStrings.isEnglish) "Add profile" else "Añadir perfil",
+                                        fontFamily = TitleFont(),
+                                        fontSize = 14.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ParentsCoral,
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    Text(
+                                        text = if (freeSlots == 1) {
+                                            if (AppStrings.isEnglish) "1 free slot" else "1 plaza libre"
+                                        } else {
+                                            if (AppStrings.isEnglish) "$freeSlots free slots" else "$freeSlots plazas libres"
+                                        },
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ParentsInkMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // RIGHT COLUMN (Ajustes Card)
+            Column(
+                modifier = Modifier
+                    .weight(0.56f)
+                    .fillMaxHeight()
+            ) {
+                Text(
+                    text = AppStrings.settingsSectionHeader,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = ParentsInkDark,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                )
+
+                Card(
+                    shape = RoundedCornerShape(26.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.5.dp, ParentsCardBorder),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = AppStrings.addProfileRowLabel,
-                        fontFamily = TitleFont(),
-                        fontSize = 15.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ParentsCoral
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        // 1. Límite diario
+                        ParentsSettingsRow(
+                            iconEmoji = "⏱️",
+                            iconBg = Color(0xFFFFF1CF),
+                            title = if (AppStrings.isEnglish) "Daily limit" else "Límite diario",
+                            valueText = dailyLimitDisplay,
+                            onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                showDailyLimitDialog = true
+                            }
+                        )
+                        HorizontalDivider(color = ParentsCardBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                        // 2. Idioma de los cuentos
+                        ParentsSettingsRow(
+                            iconEmoji = "🌍",
+                            iconBg = Color(0xFFDDF5EE),
+                            title = AppStrings.storyLanguageRowLabel,
+                            valueText = if (AppStrings.isStoryEnglish) "English" else "Español",
+                            onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                showLanguageDialog = true
+                            }
+                        )
+                        HorizontalDivider(color = ParentsCardBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                        // 3. Voz de lectura
+                        ParentsSettingsRow(
+                            iconEmoji = "🎙️",
+                            iconBg = Color(0xFFE4EEFF),
+                            title = AppStrings.readingVoiceRowLabel,
+                            valueText = voiceStyleDisplay,
+                            onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                showVoiceDialog = true
+                            }
+                        )
+                        HorizontalDivider(color = ParentsCardBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                        // 4. Estilo de ilustración
+                        ParentsSettingsRow(
+                            iconEmoji = "🎨",
+                            iconBg = Color(0xFFFCEAE7),
+                            title = if (AppStrings.isEnglish) "Illustration style" else "Estilo de ilustración",
+                            valueText = artStyleDisplay,
+                            onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                showArtStyleDialog = true
+                            }
+                        )
+                        HorizontalDivider(color = ParentsCardBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                        // 5. Efectos de sonido
+                        ParentsSettingsRow(
+                            iconEmoji = "🔊",
+                            iconBg = Color(0xFFE4F6F0),
+                            title = AppStrings.soundEffectsRowLabel,
+                            valueText = if (sfxEnabled) AppStrings.sfxActiveLabel else AppStrings.sfxMutedLabel,
+                            onClick = {
+                                val nextState = !sfxEnabled
+                                sfxEnabled = nextState
+                                PlatformAudioService.setSfxEnabled(nextState)
+                                if (nextState) {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                }
+                            }
+                        )
+                        HorizontalDivider(color = ParentsCardBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                        // 6. Tutorial de bienvenida
+                        ParentsSettingsRow(
+                            iconEmoji = "💡",
+                            iconBg = Color(0xFFFFF1CF),
+                            title = AppStrings.replayTutorialRowLabel,
+                            valueText = if (AppStrings.isEnglish) "View" else "Ver",
+                            onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                onReplayOnboardingClick()
+                            }
+                        )
+                        HorizontalDivider(color = ParentsCardBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                        // 7. Privacidad y datos
+                        ParentsSettingsRow(
+                            iconEmoji = "🔒",
+                            iconBg = Color(0xFFEDE7F8),
+                            title = AppStrings.privacyAndDataRowLabel,
+                            valueText = "",
+                            onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                showPrivacyDialog = true
+                            }
+                        )
+                        HorizontalDivider(color = ParentsCardBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                        // 8. Ayuda y acerca de
+                        ParentsSettingsRow(
+                            iconEmoji = "❓",
+                            iconBg = Color(0xFFFCEAE7),
+                            title = AppStrings.helpAndAboutRowLabel,
+                            valueText = "",
+                            onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                showAboutDialog = true
+                            }
+                        )
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // -------------------------------------------------------------
-        // 4. SECTION: AJUSTES
+        // 3. BOTTOM HINT BAR
         // -------------------------------------------------------------
-        Text(
-            text = AppStrings.settingsSectionHeader,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = ParentsInkMuted,
-            letterSpacing = 0.8.sp,
-            modifier = Modifier.padding(start = 6.dp, bottom = 8.dp)
-        )
-
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(1.5.dp, ParentsCardBorder),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                // Row 1: Idioma de los cuentos
-                ParentsSettingsRow(
-                    title = AppStrings.storyLanguageRowLabel,
-                    valueText = "${if (AppStrings.isStoryEnglish) "English" else "Español"}  ›",
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        showLanguageDialog = true
-                    }
-                )
-
-                HorizontalDivider(
-                    color = ParentsCardBorder,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 18.dp)
-                )
-
-                // Row 2: Voz de lectura
-                ParentsSettingsRow(
-                    title = AppStrings.readingVoiceRowLabel,
-                    valueText = "$voiceStyleDisplay  ›",
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        showVoiceDialog = true
-                    }
-                )
-
-                HorizontalDivider(
-                    color = ParentsCardBorder,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 18.dp)
-                )
-
-                // Row 2b: Estilo de ilustración
-                ParentsSettingsRow(
-                    title = if (AppStrings.isEnglish) "Illustration style" else "Estilo de ilustración",
-                    valueText = "$artStyleDisplay  ›",
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        showArtStyleDialog = true
-                    }
-                )
-
-                HorizontalDivider(
-                    color = ParentsCardBorder,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 18.dp)
-                )
-
-                // Row 2c: Límite diario
-                ParentsSettingsRow(
-                    title = if (AppStrings.isEnglish) "Daily limit" else "Límite diario",
-                    valueText = "$dailyLimitDisplay  ›",
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        showDailyLimitDialog = true
-                    }
-                )
-
-                HorizontalDivider(
-                    color = ParentsCardBorder,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 18.dp)
-                )
-
-                // Row 3: Efectos de sonido (Real Toggle)
-                ParentsSettingsRow(
-                    title = AppStrings.soundEffectsRowLabel,
-                    valueText = "${if (sfxEnabled) AppStrings.sfxActiveLabel else AppStrings.sfxMutedLabel}  ›",
-                    onClick = {
-                        val nextState = !sfxEnabled
-                        sfxEnabled = nextState
-                        PlatformAudioService.setSfxEnabled(nextState)
-                        if (nextState) {
-                            PlatformAudioService.playSfx(SoundEffect.POP)
-                        }
-                    }
-                )
-
-                HorizontalDivider(
-                    color = ParentsCardBorder,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 18.dp)
-                )
-
-                // Row 4: Tutorial de bienvenida
-                ParentsSettingsRow(
-                    title = AppStrings.replayTutorialRowLabel,
-                    valueText = "${if (AppStrings.isEnglish) "View" else "Ver"}  ›",
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        onReplayOnboardingClick()
-                    }
-                )
-
-                HorizontalDivider(
-                    color = ParentsCardBorder,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 18.dp)
-                )
-
-                // Row 5: Privacidad y datos
-                ParentsSettingsRow(
-                    title = AppStrings.privacyAndDataRowLabel,
-                    valueText = "›",
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        showPrivacyDialog = true
-                    }
-                )
-
-                HorizontalDivider(
-                    color = ParentsCardBorder,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 18.dp)
-                )
-
-                // Row 6: Ayuda y acerca de
-                ParentsSettingsRow(
-                    title = AppStrings.helpAndAboutRowLabel,
-                    valueText = "›",
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        showAboutDialog = true
-                    }
-                )
-            }
+            HintChip(useDpadArrows = true, text = if (AppStrings.isEnglish) "Navigate" else "Moverse")
+            Spacer(modifier = Modifier.width(28.dp))
+            HintChip(label = "OK", text = if (AppStrings.isEnglish) "Open" else "Abrir")
+            Spacer(modifier = Modifier.width(28.dp))
+            HintChip(label = "↩", text = if (AppStrings.isEnglish) "Back" else "Volver")
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
     }
 
     // =============================================================
@@ -483,32 +638,32 @@ fun ParentsZoneScreen(
                 border = BorderStroke(1.5.dp, ParentsCardBorder),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .width(480.dp)
+                    .padding(horizontal = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 24.dp),
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(58.dp)
                             .clip(CircleShape)
                             .background(ParentsGoldSoft),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "🌍", fontSize = 30.sp)
+                        Text(text = "🌍", fontSize = 28.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = AppStrings.storyLanguageRowLabel,
                         fontFamily = TitleFont(),
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         color = ParentsInkDark,
                         textAlign = TextAlign.Center
                     )
@@ -529,48 +684,59 @@ fun ParentsZoneScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         options.forEach { (code, label) ->
                             val isSelected = code == AppStrings.language
-                            Row(
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) ParentsCoralSoft else ParentsCreamBg,
+                                border = BorderStroke(
+                                    width = if (isSelected) 2.dp else 1.5.dp,
+                                    color = if (isSelected) ParentsCoral else ParentsCardBorder
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(if (isSelected) ParentsCoralSoft else ParentsCreamBg)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.5.dp,
-                                        color = if (isSelected) ParentsCoral else ParentsCardBorder,
-                                        shape = RoundedCornerShape(16.dp)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(16.dp),
+                                        focusedScale = 1.04f,
+                                        onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            AppStrings.setAppLanguage(code)
+                                            showLanguageDialog = false
+                                        }
                                     )
-                                    .clickable {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        AppStrings.setAppLanguage(code)
-                                        showLanguageDialog = false
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = label,
-                                    fontFamily = TitleFont(),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = ParentsInkDark
-                                )
-                                if (isSelected) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(
-                                        text = "✓",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = ParentsCoral
+                                        text = label,
+                                        fontFamily = TitleFont(),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ParentsInkDark
                                     )
+                                    if (isSelected) {
+                                        Text(
+                                            text = "✓",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = ParentsCoral
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedButton(
-                        onClick = { showLanguageDialog = false },
+                        onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            showLanguageDialog = false
+                        },
                         shape = RoundedCornerShape(50.dp),
                         border = BorderStroke(1.5.dp, ParentsCardBorder),
                         colors = ButtonDefaults.outlinedButtonColors(
@@ -579,7 +745,15 @@ fun ParentsZoneScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.04f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    showLanguageDialog = false
+                                }
+                            )
                     ) {
                         Text(
                             text = AppStrings.close,
@@ -608,32 +782,32 @@ fun ParentsZoneScreen(
                 border = BorderStroke(1.5.dp, ParentsCardBorder),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .width(520.dp)
+                    .padding(horizontal = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 24.dp),
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(58.dp)
                             .clip(CircleShape)
                             .background(ParentsCoralSoft),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "🎙️", fontSize = 30.sp)
+                        Text(text = "🎙️", fontSize = 28.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = AppStrings.readingVoiceRowLabel,
                         fontFamily = TitleFont(),
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         color = ParentsInkDark,
                         textAlign = TextAlign.Center
                     )
@@ -660,60 +834,71 @@ fun ParentsZoneScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         voiceOptions.forEach { (code, title, subtitle) ->
                             val isSelected = voiceStyle == code
-                            Row(
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) ParentsCoralSoft else ParentsCreamBg,
+                                border = BorderStroke(
+                                    width = if (isSelected) 2.dp else 1.5.dp,
+                                    color = if (isSelected) ParentsCoral else ParentsCardBorder
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(if (isSelected) ParentsCoralSoft else ParentsCreamBg)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.5.dp,
-                                        color = if (isSelected) ParentsCoral else ParentsCardBorder,
-                                        shape = RoundedCornerShape(16.dp)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(16.dp),
+                                        focusedScale = 1.04f,
+                                        onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            voiceStyle = code
+                                            PlatformAudioService.setVoiceStyle(code)
+                                            showVoiceDialog = false
+                                        }
                                     )
-                                    .clickable {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        voiceStyle = code
-                                        PlatformAudioService.setVoiceStyle(code)
-                                        showVoiceDialog = false
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = title,
-                                        fontFamily = TitleFont(),
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ParentsInkDark
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = subtitle,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ParentsInkMuted,
-                                        lineHeight = 15.sp
-                                    )
-                                }
-                                if (isSelected) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "✓",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = ParentsCoral
-                                    )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = title,
+                                            fontFamily = TitleFont(),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ParentsInkDark
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = subtitle,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = ParentsInkMuted,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "✓",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = ParentsCoral
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedButton(
-                        onClick = { showVoiceDialog = false },
+                        onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            showVoiceDialog = false
+                        },
                         shape = RoundedCornerShape(50.dp),
                         border = BorderStroke(1.5.dp, ParentsCardBorder),
                         colors = ButtonDefaults.outlinedButtonColors(
@@ -722,7 +907,15 @@ fun ParentsZoneScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.04f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    showVoiceDialog = false
+                                }
+                            )
                     ) {
                         Text(
                             text = AppStrings.close,
@@ -751,32 +944,32 @@ fun ParentsZoneScreen(
                 border = BorderStroke(1.5.dp, ParentsCardBorder),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .width(520.dp)
+                    .padding(horizontal = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 24.dp),
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(58.dp)
                             .clip(CircleShape)
                             .background(ParentsCoralSoft),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "🎨", fontSize = 30.sp)
+                        Text(text = "🎨", fontSize = 28.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = if (AppStrings.isEnglish) "Illustration style" else "Estilo de ilustración",
                         fontFamily = TitleFont(),
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         color = ParentsInkDark,
                         textAlign = TextAlign.Center
                     )
@@ -816,60 +1009,71 @@ fun ParentsZoneScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         artStyleOptions.forEach { (code, title, subtitle) ->
                             val isSelected = artStyle == code
-                            Row(
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) ParentsCoralSoft else ParentsCreamBg,
+                                border = BorderStroke(
+                                    width = if (isSelected) 2.dp else 1.5.dp,
+                                    color = if (isSelected) ParentsCoral else ParentsCardBorder
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(if (isSelected) ParentsCoralSoft else ParentsCreamBg)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.5.dp,
-                                        color = if (isSelected) ParentsCoral else ParentsCardBorder,
-                                        shape = RoundedCornerShape(16.dp)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(16.dp),
+                                        focusedScale = 1.04f,
+                                        onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            artStyle = code
+                                            ProfileRepository.setPreferredArtStyle(code)
+                                            showArtStyleDialog = false
+                                        }
                                     )
-                                    .clickable {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        artStyle = code
-                                        ProfileRepository.setPreferredArtStyle(code)
-                                        showArtStyleDialog = false
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = title,
-                                        fontFamily = TitleFont(),
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ParentsInkDark
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = subtitle,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ParentsInkMuted,
-                                        lineHeight = 15.sp
-                                    )
-                                }
-                                if (isSelected) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "✓",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = ParentsCoral
-                                    )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = title,
+                                            fontFamily = TitleFont(),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ParentsInkDark
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = subtitle,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = ParentsInkMuted,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "✓",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = ParentsCoral
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedButton(
-                        onClick = { showArtStyleDialog = false },
+                        onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            showArtStyleDialog = false
+                        },
                         shape = RoundedCornerShape(50.dp),
                         border = BorderStroke(1.5.dp, ParentsCardBorder),
                         colors = ButtonDefaults.outlinedButtonColors(
@@ -878,7 +1082,15 @@ fun ParentsZoneScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.04f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    showArtStyleDialog = false
+                                }
+                            )
                     ) {
                         Text(
                             text = AppStrings.close,
@@ -908,51 +1120,51 @@ fun ParentsZoneScreen(
                 border = BorderStroke(1.5.dp, ParentsCardBorder),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .width(520.dp)
+                    .padding(horizontal = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 24.dp),
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(58.dp)
                             .clip(CircleShape)
                             .background(ParentsGoldSoft),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "🌙", fontSize = 30.sp)
+                        Text(text = "🌙", fontSize = 28.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = if (AppStrings.isEnglish) "Daily creation limit" else "Límite diario de creación",
                         fontFamily = TitleFont(),
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         color = ParentsInkDark,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
                         text = if (AppStrings.isEnglish)
                             "Encourages calm drawing on paper and healthy screen time. Reading saved stories is always unlimited."
                         else
-                            "Fomenta que el peque dibuje con calma en papel y evita el uso excesivo del móvil. Leer cuentos guardados es siempre ilimitado.",
-                        fontSize = 12.5.sp,
+                            "Fomenta que el peque dibuje con calma en papel y evita el uso excesivo. Leer cuentos guardados es siempre ilimitado.",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = ParentsInkMuted,
                         textAlign = TextAlign.Center,
-                        lineHeight = 17.sp
+                        lineHeight = 16.sp
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     val activeName = ProfileRepository.activeProfile?.name ?: ""
                     Surface(
@@ -968,20 +1180,20 @@ fun ParentsZoneScreen(
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = ParentsMint,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     val limitOptions = listOf(
                         Triple(
                             2,
                             if (AppStrings.isEnglish) "🌙  2 stories per day" else "🌙  2 cuentos al día",
                             if (AppStrings.isEnglish)
-                                "Recommended · Create a hero and complete their drawing mission"
+                                "Recommended · Create a hero and complete their mission"
                             else
-                                "Recomendado · Ideal para crear un héroe y completar su reto en papel"
+                                "Recomendado · Ideal para crear un héroe y completar su reto"
                         ),
                         Triple(
                             3,
@@ -1003,59 +1215,70 @@ fun ParentsZoneScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         limitOptions.forEach { (limitVal, title, subtitle) ->
                             val isSelected = dailyLimit == limitVal
-                            Row(
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) ParentsCoralSoft else ParentsCreamBg,
+                                border = BorderStroke(
+                                    width = if (isSelected) 2.dp else 1.5.dp,
+                                    color = if (isSelected) ParentsCoral else ParentsCardBorder
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(if (isSelected) ParentsCoralSoft else ParentsCreamBg)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.5.dp,
-                                        color = if (isSelected) ParentsCoral else ParentsCardBorder,
-                                        shape = RoundedCornerShape(16.dp)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(16.dp),
+                                        focusedScale = 1.04f,
+                                        onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            SubscriptionManager.setDailyLimit(limitVal)
+                                            showDailyLimitDialog = false
+                                        }
                                     )
-                                    .clickable {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        SubscriptionManager.setDailyLimit(limitVal)
-                                        showDailyLimitDialog = false
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = title,
-                                        fontFamily = TitleFont(),
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ParentsInkDark
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = subtitle,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ParentsInkMuted,
-                                        lineHeight = 15.sp
-                                    )
-                                }
-                                if (isSelected) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "✓",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = ParentsCoral
-                                    )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = title,
+                                            fontFamily = TitleFont(),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ParentsInkDark
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = subtitle,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = ParentsInkMuted,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "✓",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = ParentsCoral
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedButton(
-                        onClick = { showDailyLimitDialog = false },
+                        onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            showDailyLimitDialog = false
+                        },
                         shape = RoundedCornerShape(50.dp),
                         border = BorderStroke(1.5.dp, ParentsCardBorder),
                         colors = ButtonDefaults.outlinedButtonColors(
@@ -1064,7 +1287,15 @@ fun ParentsZoneScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.04f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    showDailyLimitDialog = false
+                                }
+                            )
                     ) {
                         Text(
                             text = AppStrings.close,
@@ -1093,37 +1324,37 @@ fun ParentsZoneScreen(
                 border = BorderStroke(1.5.dp, ParentsCardBorder),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .width(520.dp)
+                    .padding(horizontal = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 24.dp),
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(58.dp)
                             .clip(CircleShape)
                             .background(ParentsMintSoft),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "🛡️", fontSize = 30.sp)
+                        Text(text = "🛡️", fontSize = 28.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = AppStrings.privacyAndDataRowLabel,
                         fontFamily = TitleFont(),
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         color = ParentsInkDark,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Surface(
                         shape = RoundedCornerShape(16.dp),
@@ -1133,11 +1364,11 @@ fun ParentsZoneScreen(
                     ) {
                         Text(
                             text = AppStrings.privacyBadge,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ParentsMint,
                             textAlign = TextAlign.Center,
-                            lineHeight = 18.sp,
+                            lineHeight = 17.sp,
                             modifier = Modifier.padding(12.dp)
                         )
                     }
@@ -1149,35 +1380,45 @@ fun ParentsZoneScreen(
                             "All child profiles, names, and saved stories are stored locally on this device (Local-First architecture) for maximum family privacy."
                         else
                             "Todos los perfiles, nombres y cuentos guardados se almacenan localmente en este dispositivo (arquitectura Local-First) para máxima privacidad familiar.",
-                        fontSize = 13.sp,
+                        fontSize = 12.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = ParentsInkMuted,
                         textAlign = TextAlign.Center,
-                        lineHeight = 19.sp
+                        lineHeight = 18.sp
                     )
 
                     if (StoryRepository.savedStories.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         OutlinedButton(
                             onClick = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
                                 showPrivacyDialog = false
                                 showConfirmClearStories = true
                             },
                             shape = RoundedCornerShape(50.dp),
                             border = BorderStroke(1.5.dp, ParentsCoralBorder),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = ParentsCoralSoft.copy(alpha = 0.6f),
                                 contentColor = ParentsCoral
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 48.dp)
+                                .height(44.dp)
+                                .tvFocusable(
+                                    shape = RoundedCornerShape(50.dp),
+                                    focusedScale = 1.04f,
+                                    onClick = {
+                                        PlatformAudioService.playSfx(SoundEffect.POP)
+                                        showPrivacyDialog = false
+                                        showConfirmClearStories = true
+                                    }
+                                )
                         ) {
                             Text(
                                 text = if (AppStrings.isEnglish) "🗑️ Clear saved stories" else "🗑️ Borrar cuentos guardados",
                                 fontFamily = TitleFont(),
-                                fontSize = 14.sp,
+                                fontSize = 13.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ParentsCoral,
                                 textAlign = TextAlign.Center,
@@ -1189,7 +1430,10 @@ fun ParentsZoneScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
-                        onClick = { showPrivacyDialog = false },
+                        onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            showPrivacyDialog = false
+                        },
                         shape = RoundedCornerShape(50.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ParentsCoral,
@@ -1197,12 +1441,20 @@ fun ParentsZoneScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.04f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    showPrivacyDialog = false
+                                }
+                            )
                     ) {
                         Text(
                             text = AppStrings.close,
                             fontFamily = TitleFont(),
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
                         )
@@ -1226,32 +1478,32 @@ fun ParentsZoneScreen(
                 border = BorderStroke(1.5.dp, ParentsCardBorder),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .width(480.dp)
+                    .padding(horizontal = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 26.dp),
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(68.dp)
+                            .size(62.dp)
                             .clip(CircleShape)
                             .background(ParentsCoralSoft),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "🗑️", fontSize = 32.sp)
+                        Text(text = "🗑️", fontSize = 30.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = if (AppStrings.isEnglish) "Delete all saved stories?" else "¿Borrar todos los cuentos?",
                         fontFamily = TitleFont(),
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         color = ParentsInkDark,
                         textAlign = TextAlign.Center
                     )
@@ -1260,20 +1512,21 @@ fun ParentsZoneScreen(
 
                     Text(
                         text = if (AppStrings.isEnglish)
-                            "This will remove all stories stored on this phone. Profiles will remain intact."
+                            "This will remove all stories stored on this device. Profiles will remain intact."
                         else
-                            "Se eliminarán todos los cuentos guardados en este teléfono. Los perfiles de los niños se mantendrán intactos.",
-                        fontSize = 14.sp,
+                            "Se eliminarán todos los cuentos guardados en este dispositivo. Los perfiles de los niños se mantendrán intactos.",
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = ParentsInkMuted,
                         textAlign = TextAlign.Center,
-                        lineHeight = 20.sp
+                        lineHeight = 18.sp
                     )
 
-                    Spacer(modifier = Modifier.height(22.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     Button(
                         onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
                             val allIds = StoryRepository.savedStories.map { it.storyId }
                             allIds.forEach { StoryRepository.deleteStory(it) }
                             showConfirmClearStories = false
@@ -1286,12 +1539,22 @@ fun ParentsZoneScreen(
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp)
+                            .height(46.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.04f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    val allIds = StoryRepository.savedStories.map { it.storyId }
+                                    allIds.forEach { StoryRepository.deleteStory(it) }
+                                    showConfirmClearStories = false
+                                }
+                            )
                     ) {
                         Text(
                             text = AppStrings.confirmDelete,
                             fontFamily = TitleFont(),
-                            fontSize = 15.sp,
+                            fontSize = 14.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
                         )
@@ -1300,7 +1563,10 @@ fun ParentsZoneScreen(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     OutlinedButton(
-                        onClick = { showConfirmClearStories = false },
+                        onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            showConfirmClearStories = false
+                        },
                         shape = RoundedCornerShape(50.dp),
                         border = BorderStroke(1.5.dp, ParentsCardBorder),
                         colors = ButtonDefaults.outlinedButtonColors(
@@ -1309,7 +1575,15 @@ fun ParentsZoneScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.04f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    showConfirmClearStories = false
+                                }
+                            )
                     ) {
                         Text(
                             text = AppStrings.cancel,
@@ -1338,32 +1612,32 @@ fun ParentsZoneScreen(
                 border = BorderStroke(1.5.dp, ParentsCardBorder),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .width(480.dp)
+                    .padding(horizontal = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 24.dp),
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(58.dp)
                             .clip(CircleShape)
                             .background(ParentsGoldSoft),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "✨", fontSize = 30.sp)
+                        Text(text = "✨", fontSize = 28.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = "WonderLoop",
                         fontFamily = TitleFont(),
                         fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         color = ParentsInkDark
                     )
 
@@ -1386,17 +1660,20 @@ fun ParentsZoneScreen(
 
                     Text(
                         text = AppStrings.appDescriptionInfo,
-                        fontSize = 13.5.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = ParentsInkMuted,
                         textAlign = TextAlign.Center,
-                        lineHeight = 20.sp
+                        lineHeight = 19.sp
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     Button(
-                        onClick = { showAboutDialog = false },
+                        onClick = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            showAboutDialog = false
+                        },
                         shape = RoundedCornerShape(50.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ParentsCoral,
@@ -1404,12 +1681,20 @@ fun ParentsZoneScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.04f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    showAboutDialog = false
+                                }
+                            )
                     ) {
                         Text(
                             text = AppStrings.close,
                             fontFamily = TitleFont(),
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
                         )
@@ -1422,6 +1707,8 @@ fun ParentsZoneScreen(
 
 @Composable
 private fun ParentsSettingsRow(
+    iconEmoji: String,
+    iconBg: Color,
     title: String,
     valueText: String,
     onClick: () -> Unit
@@ -1429,30 +1716,98 @@ private fun ParentsSettingsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 18.dp, vertical = 16.dp),
+            .tvFocusable(
+                shape = RoundedCornerShape(14.dp),
+                focusedScale = 1.02f,
+                focusedContainerColor = Color(0xFFFFF8EE),
+                focusedElevation = 0.dp,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f, fill = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = iconEmoji, fontSize = 16.sp)
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = title,
+                fontFamily = TitleFont(),
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = ParentsInkDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (valueText.isNotBlank()) {
+                Text(
+                    text = valueText,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ParentsInkMuted
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = "›",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = ParentsInkMuted
+            )
+        }
+    }
+}
+
+@Composable
+private fun HintChip(
+    text: String,
+    useDpadArrows: Boolean = false,
+    label: String = ""
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = Color.White,
+            border = BorderStroke(1.dp, ParentsCardBorder)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                if (useDpadArrows) {
+                    DPadArrows(color = ParentsInkDark)
+                } else {
+                    Text(
+                        text = label,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = ParentsInkDark
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.width(6.dp))
         Text(
-            text = title,
-            fontSize = 15.5.sp,
-            fontWeight = FontWeight.Bold,
-            color = ParentsInkDark,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f, fill = false)
-                .padding(end = 10.dp)
-        )
-        Text(
-            text = valueText,
-            fontSize = 14.sp,
+            text = text,
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = ParentsInkMuted,
-            maxLines = 1,
-            softWrap = false,
-            textAlign = TextAlign.End
+            color = ParentsInkMuted
         )
     }
 }

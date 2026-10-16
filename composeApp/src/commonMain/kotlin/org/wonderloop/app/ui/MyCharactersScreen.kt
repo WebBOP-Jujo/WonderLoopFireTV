@@ -36,6 +36,7 @@ import org.wonderloop.app.platform.PlatformAudioService
 import org.wonderloop.app.platform.SoundEffect
 import org.wonderloop.app.platform.WonderLoopImage
 import org.wonderloop.app.theme.*
+import org.wonderloop.app.ui.components.tvFocusable
 
 // New Design System Tokens
 private val BoardCreamBg = Color(0xFFFFFBF5)
@@ -150,16 +151,19 @@ fun MyCharactersScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
+                val onBack = {
+                    PlatformAudioService.playSfx(SoundEffect.POP)
+                    onBackClick()
+                }
                 Surface(
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        onBackClick()
-                    },
+                    onClick = onBack,
                     shape = CircleShape,
                     color = Color.White,
                     border = BorderStroke(1.5.dp, BoardCardBorder),
                     shadowElevation = 2.dp,
-                    modifier = Modifier.size(42.dp)
+                    modifier = Modifier
+                        .size(42.dp)
+                        .tvFocusable(shape = CircleShape, focusedScale = 1.08f, onClick = onBack)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
@@ -321,11 +325,12 @@ fun MyCharactersScreen(
 
                             Spacer(modifier = Modifier.height(20.dp))
 
+                            val onPinFirst = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                onNewAdventureClick()
+                            }
                             Button(
-                                onClick = {
-                                    PlatformAudioService.playSfx(SoundEffect.POP)
-                                    onNewAdventureClick()
-                                },
+                                onClick = onPinFirst,
                                 shape = RoundedCornerShape(50.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = BoardCoral,
@@ -336,6 +341,7 @@ fun MyCharactersScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 50.dp)
+                                    .tvFocusable(shape = RoundedCornerShape(50.dp), onClick = onPinFirst)
                             ) {
                                 Text(
                                     text = AppStrings.pinFirstDrawing,
@@ -622,11 +628,12 @@ private fun PinnedDrawingSheet(
                 // Action: Read Story Pill Button
                 val firstStory = stories.firstOrNull()
                 if (firstStory != null) {
+                    val onReadFirstStory = {
+                        PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
+                        onOpenStory(firstStory)
+                    }
                     Button(
-                        onClick = {
-                            PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
-                            onOpenStory(firstStory)
-                        },
+                        onClick = onReadFirstStory,
                         shape = RoundedCornerShape(50.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = BoardCoral,
@@ -636,7 +643,8 @@ private fun PinnedDrawingSheet(
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(32.dp)
+                            .height(34.dp)
+                            .tvFocusable(shape = RoundedCornerShape(50.dp), onClick = onReadFirstStory)
                     ) {
                         Text(
                             text = AppStrings.readStoryButton(stories.size),
@@ -684,7 +692,11 @@ private fun AddCharacterPolaroidSlot(
             border = BorderStroke(1.5.dp, BoardCardBorder),
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onClick() }
+                .tvFocusable(
+                    shape = RoundedCornerShape(16.dp),
+                    focusedScale = 1.06f,
+                    onClick = onClick
+                )
         ) {
             Column(
                 modifier = Modifier

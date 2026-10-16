@@ -1,14 +1,13 @@
 package org.wonderloop.app.ui
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -27,10 +26,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.*
 import kotlinx.coroutines.launch
 import org.wonderloop.app.platform.PlatformAudioService
+import org.wonderloop.app.platform.PlatformBackHandler
 import org.wonderloop.app.platform.SoundEffect
 import org.wonderloop.app.theme.*
+import org.wonderloop.app.ui.components.DPadArrows
+import org.wonderloop.app.ui.components.tvFocusable
 
 private data class TutorialSlide(
     val stepIndex: Int,
@@ -90,110 +95,259 @@ fun OnboardingScreen(
         )
     }
 
-    val pagerState = rememberPagerState(pageCount = { slides.size })
-    val currentPage = pagerState.currentPage
+    var currentPage by remember { mutableStateOf(0) }
     val isLastPage = currentPage == slides.size - 1
+
+    val nextBtnFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(currentPage) {
+        kotlinx.coroutines.delay(120)
+        try {
+            nextBtnFocusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
+
+    PlatformBackHandler(enabled = true) {
+        if (currentPage > 0) {
+            currentPage -= 1
+        } else {
+            onFinish()
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFFFFBF5))
-    ) {
-        // Full-Screen HorizontalPager (Stage on top + Bottom Sheet below)
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize()
-        ) { pageIndex ->
-            val slide = slides[pageIndex]
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = slide.gradientColors,
-                            radius = 1100f
-                        )
-                    )
-            ) {
-                // ---------------------------------------------------------
-                // 1. STAGE AREA (Top 50% of screen — Animated Illustration)
-                // ---------------------------------------------------------
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(top = 42.dp)
-                ) {
-                    when (pageIndex) {
-                        0 -> StageStep1DrawOnPaper()
-                        1 -> StageStep2SnapPhoto(BrandRed)
-                        2 -> StageStep3Storybook(BrandMint)
-                        3 -> StageStep4Bilingual(BrandRed, BrandMint, MutedInk)
-                        4 -> StageStep5CreativityLoop(BrandRed, BrandMint)
+            .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV 5% Safe Zone
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyUp) {
+                    when (it.key) {
+                        Key.DirectionLeft -> {
+                            if (currentPage > 0) {
+                                currentPage -= 1
+                                true
+                            } else false
+                        }
+                        Key.DirectionRight -> {
+                            if (currentPage < slides.size - 1) {
+                                currentPage += 1
+                                true
+                            } else false
+                        }
+                        else -> false
                     }
-                }
-
-                // ---------------------------------------------------------
-                // 2. BOTTOM SHEET (Bottom 50% of screen — Fixed uniform height across all 5 steps)
-                // ---------------------------------------------------------
-                Surface(
-                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                    color = Color.White,
-                    shadowElevation = 12.dp,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) {
-                    Column(
+                } else false
+            }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // =================================================================
+            // 1. TOP BAR: [ ← Anterior ]   Badge   [ Saltar tutorial ✕ ]
+            // =================================================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left: Previous button (or spacer)
+                if (currentPage > 0) {
+                    val onGoPrev = {
+                        currentPage -= 1
+                    }
+                    Surface(
+                        onClick = { onGoPrev() },
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
+                        shadowElevation = 2.dp,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 26.dp, vertical = 28.dp)
+                            .height(42.dp)
+                            .tvFocusable(shape = RoundedCornerShape(24.dp), focusedScale = 1.06f, onClick = { onGoPrev() })
                     ) {
-                        // Step Chip (.chip)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0xFFFCEAE7))
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp)
                         ) {
+                            Text(text = "←", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = DeepInk)
                             Text(
-                                text = slide.chipText,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = BrandRed,
-                                letterSpacing = 0.4.sp
+                                text = if (AppStrings.isEnglish) "Previous" else "Anterior",
+                                fontFamily = TitleFont(),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = DeepInk
                             )
                         }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(100.dp))
+                }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                // Center: Welcome Tutorial Badge
+                Surface(
+                    shape = RoundedCornerShape(50.dp),
+                    color = Color(0xFFFFF1CF),
+                    border = BorderStroke(1.dp, Color(0xFFF3DC9B))
+                ) {
+                    Text(
+                        text = if (AppStrings.isEnglish) "✨ WELCOME TUTORIAL ✨" else "✨ TUTORIAL DE BIENVENIDA ✨",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF8A5A00),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
+                }
 
-                        // Headline (h2)
-                        Text(
-                            text = slide.title,
-                            fontFamily = TitleFont(),
-                            fontSize = 23.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = DeepInk,
-                            lineHeight = 29.sp
-                        )
+                // Right: Skip button (hidden on last page)
+                if (!isLastPage) {
+                    Surface(
+                        onClick = onFinish,
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
+                        shadowElevation = 2.dp,
+                        modifier = Modifier
+                            .height(42.dp)
+                            .tvFocusable(shape = RoundedCornerShape(24.dp), focusedScale = 1.06f, onClick = onFinish)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        ) {
+                            Text(
+                                text = if (AppStrings.isEnglish) "Skip tutorial" else "Saltar tutorial",
+                                fontFamily = TitleFont(),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MutedInk
+                            )
+                            Text(text = "✕", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MutedInk)
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(100.dp))
+                }
+            }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-                        // Description (p)
-                        Text(
-                            text = slide.description,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MutedInk,
-                            lineHeight = 22.5.sp
-                        )
+            // =================================================================
+            // 2. MAIN WIDESCREEN CAROUSEL (Left Stage · Right Narrative Card)
+            // =================================================================
+            AnimatedContent(
+                targetState = currentPage,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (slideInHorizontally { width -> (width * 0.2f).toInt() } + fadeIn(tween(220)))
+                            .togetherWith(slideOutHorizontally { width -> (-width * 0.2f).toInt() } + fadeOut(tween(180)))
+                    } else {
+                        (slideInHorizontally { width -> (-width * 0.2f).toInt() } + fadeIn(tween(220)))
+                            .togetherWith(slideOutHorizontally { width -> (width * 0.2f).toInt() } + fadeOut(tween(180)))
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) { pageIndex ->
+                val slide = slides[pageIndex]
 
-                        Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // LEFT COLUMN (44% width): Animated Illustration Stage
+                    Card(
+                        shape = RoundedCornerShape(28.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                        modifier = Modifier
+                            .weight(0.44f)
+                            .fillMaxHeight()
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = Brush.radialGradient(
+                                        colors = slide.gradientColors,
+                                        radius = 900f
+                                    )
+                                )
+                                .padding(16.dp)
+                        ) {
+                            when (pageIndex) {
+                                0 -> StageStep1DrawOnPaper()
+                                1 -> StageStep2SnapPhoto(BrandRed)
+                                2 -> StageStep3Storybook(BrandMint)
+                                3 -> StageStep4Bilingual(BrandRed, BrandMint, MutedInk)
+                                4 -> StageStep5CreativityLoop(BrandRed, BrandMint)
+                            }
+                        }
+                    }
 
-                        if (pageIndex < slides.size - 1) {
-                            // Slides 1..4: Dots on the left + Circular Next button on the right (.obfx)
+                    // RIGHT COLUMN (56% width): Information & Interactive Controls
+                    Card(
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                        modifier = Modifier
+                            .weight(0.56f)
+                            .fillMaxHeight()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(32.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                // Step Chip (.chip)
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color(0xFFFCEAE7)
+                                ) {
+                                    Text(
+                                        text = slide.chipText,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = BrandRed,
+                                        letterSpacing = 0.5.sp,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(18.dp))
+
+                                // Headline (h2)
+                                Text(
+                                    text = slide.title,
+                                    fontFamily = TitleFont(),
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = DeepInk,
+                                    lineHeight = 33.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                // Description (p)
+                                Text(
+                                    text = slide.description,
+                                    fontSize = 15.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MutedInk,
+                                    lineHeight = 24.sp
+                                )
+                            }
+
+                            // Footer: Dots Indicator + Next / Finish Button
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -205,159 +359,149 @@ fun OnboardingScreen(
                                     activeColor = BrandRed
                                 )
 
-                                // Circular Next Button (.nxt)
-                                Surface(
-                                    shape = CircleShape,
-                                    color = BrandRed,
-                                    shadowElevation = 6.dp,
-                                    modifier = Modifier
-                                        .size(54.dp)
-                                        .clickable {
-                                            PlatformAudioService.playSfx(SoundEffect.POP)
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(pageIndex + 1)
-                                            }
+                                if (pageIndex < slides.size - 1) {
+                                    // Siguiente paso
+                                    Surface(
+                                        onClick = {
+                                            currentPage += 1
+                                        },
+                                        shape = RoundedCornerShape(50.dp),
+                                        color = BrandRed,
+                                        shadowElevation = 4.dp,
+                                        modifier = Modifier
+                                            .height(48.dp)
+                                            .tvFocusable(
+                                                shape = RoundedCornerShape(50.dp),
+                                                focusedScale = 1.05f,
+                                                focusRequester = nextBtnFocusRequester,
+                                                onClick = {
+                                                    currentPage += 1
+                                                }
+                                            )
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.padding(horizontal = 24.dp)
+                                        ) {
+                                            Text(
+                                                 text = if (AppStrings.isEnglish) "Next step" else "Siguiente paso",
+                                                 fontFamily = TitleFont(),
+                                                 fontSize = 15.sp,
+                                                 fontWeight = FontWeight.SemiBold,
+                                                 color = Color.White
+                                             )
+                                            Text(text = "→", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                                         }
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Canvas(modifier = Modifier.size(18.dp)) {
-                                            val w = size.width
-                                            val h = size.height
-                                            val path = Path().apply {
-                                                moveTo(w * 0.32f, h * 0.18f)
-                                                lineTo(w * 0.68f, h * 0.50f)
-                                                lineTo(w * 0.32f, h * 0.82f)
-                                            }
-                                            drawPath(
-                                                path = path,
-                                                color = Color.White,
-                                                style = Stroke(
-                                                    width = 2.6.dp.toPx(),
-                                                    cap = StrokeCap.Round,
-                                                    join = StrokeJoin.Round
-                                                )
+                                    }
+                                } else {
+                                    // Último paso: ¡Empezar mi aventura!
+                                    Surface(
+                                        onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                                            onFinish()
+                                        },
+                                        shape = RoundedCornerShape(50.dp),
+                                        color = BrandRed,
+                                        shadowElevation = 4.dp,
+                                        modifier = Modifier
+                                            .height(48.dp)
+                                            .tvFocusable(
+                                                shape = RoundedCornerShape(50.dp),
+                                                focusedScale = 1.05f,
+                                                focusRequester = nextBtnFocusRequester,
+                                                onClick = {
+                                                    PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                                                    onFinish()
+                                                }
+                                            )
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 26.dp)
+                                        ) {
+                                            Text(
+                                                text = "${AppStrings.startMyAdventure} ✨",
+                                                fontFamily = TitleFont(),
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color.White
                                             )
                                         }
                                     }
                                 }
                             }
-                        } else {
-                            // Slide 5: Centered Dots + Full-Width CTA Button (.cta2)
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                TutorialDotsIndicator(
-                                    totalDots = slides.size,
-                                    currentIndex = pageIndex,
-                                    activeColor = BrandRed
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            Button(
-                                onClick = {
-                                    PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                    onFinish()
-                                },
-                                shape = RoundedCornerShape(28.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = BrandRed),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp)
-                            ) {
-                                Text(
-                                    text = AppStrings.startMyAdventure,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                            }
                         }
                     }
                 }
             }
-        }
 
-        // -----------------------------------------------------------------
-        // 3. FLOATING TOP BAR (.otop: Back Circle on left + Skip Pill on right)
-        // -----------------------------------------------------------------
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Back Button (.bk2) — hidden on first slide (currentPage == 0)
-            if (currentPage > 0) {
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // =================================================================
+            // 3. BOTTOM HINT BAR: Symmetrical D-Pad arrows
+            // =================================================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Surface(
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(20.dp),
                     color = Color.White.copy(alpha = 0.85f),
-                    shadowElevation = 2.dp,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clickable {
-                            PlatformAudioService.playSfx(SoundEffect.POP)
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(currentPage - 1)
-                            }
-                        }
+                    border = BorderStroke(1.dp, Color(0xFFEDE8E1))
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Canvas(modifier = Modifier.size(16.dp)) {
-                            val w = size.width
-                            val h = size.height
-                            val path = Path().apply {
-                                moveTo(w * 0.65f, h * 0.18f)
-                                lineTo(w * 0.30f, h * 0.50f)
-                                lineTo(w * 0.65f, h * 0.82f)
-                            }
-                            drawPath(
-                                path = path,
-                                color = DeepInk,
-                                style = Stroke(
-                                    width = 2.4.dp.toPx(),
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
-                                )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            DPadArrows(color = DeepInk, width = 16.dp, height = 11.dp)
+                            Text(
+                                text = if (AppStrings.isEnglish) "Change step" else "Cambiar paso",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DeepInk
+                            )
+                        }
+
+                        Text(text = "·", color = Color(0xFFEDE8E1), fontWeight = FontWeight.Bold)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(text = "OK", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = BrandRed)
+                            Text(
+                                text = if (AppStrings.isEnglish) "Continue" else "Continuar",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DeepInk
+                            )
+                        }
+
+                        Text(text = "·", color = Color(0xFFEDE8E1), fontWeight = FontWeight.Bold)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(text = "↩", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MutedInk)
+                            Text(
+                                text = if (AppStrings.isEnglish) "Back / Exit" else "Volver / Salir",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DeepInk
                             )
                         }
                     }
                 }
-            } else {
-                Spacer(modifier = Modifier.size(40.dp))
-            }
-
-            // Skip Button (.skip) — hidden on last slide (isLastPage)
-            if (!isLastPage) {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color.White.copy(alpha = 0.85f),
-                    shadowElevation = 2.dp,
-                    modifier = Modifier
-                        .height(36.dp)
-                        .clickable {
-                            PlatformAudioService.playSfx(SoundEffect.POP)
-                            onFinish()
-                        }
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.padding(horizontal = 14.dp)
-                    ) {
-                        Text(
-                            text = AppStrings.skip,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MutedInk
-                        )
-                    }
-                }
-            } else {
-                Spacer(modifier = Modifier.height(36.dp))
             }
         }
     }

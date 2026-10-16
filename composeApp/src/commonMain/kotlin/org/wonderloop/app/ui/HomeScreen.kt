@@ -1,76 +1,82 @@
 package org.wonderloop.app.ui
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
-import kotlinx.coroutines.delay
 import org.wonderloop.app.data.CharacterProfile
 import org.wonderloop.app.data.FullStoryResponse
-import org.wonderloop.app.data.SagaBook
 import org.wonderloop.app.data.StoryRepository
 import org.wonderloop.app.data.SubscriptionManager
 import org.wonderloop.app.platform.PlatformAudioService
 import org.wonderloop.app.platform.SoundEffect
 import org.wonderloop.app.platform.WonderLoopImage
 import org.wonderloop.app.theme.*
+import org.wonderloop.app.ui.components.*
 
-private val HomeCreamBg = Color(0xFFFFFBF5)
-private val HomeInkDark = Color(0xFF2B2340)
-private val HomeInkMuted = Color(0xFF6B6480)
-private val HomeCoral = Color(0xFFD9384A)
-private val HomeCoralWarm = Color(0xFFE64C5E)
-private val HomeCoralSoft = Color(0xFFFDECE9)
-private val HomeCoralBorder = Color(0xFFF9D0CA)
-private val HomeMint = Color(0xFF0E7F64)
-private val HomeMintSoft = Color(0xFFE4F6F0)
-private val HomeMintBorder = Color(0xFFB8E6D6)
-private val HomeGoldSoft = Color(0xFFFFF1CF)
-private val HomeGoldBorder = Color(0xFFF3DC9B)
-private val HomeGoldText = Color(0xFF9E6700)
-private val HomeCardBorder = Color(0xFFEDE8E1)
+// Design System Colors from wonderloop-firetv.html
+private val TvCreamBg = Color(0xFFFFFBF5)
+private val TvIvoryGlow = Color(0xFFFFF6E3)
+private val TvInkDark = Color(0xFF2B2340)
+private val TvInkMuted = Color(0xFF6B6480)
+private val TvCoral = Color(0xFFD9384A)
+private val TvCoralGradientEnd = Color(0xFFE5566A)
+private val TvCoralSoft = Color(0xFFFCEAE7)
+private val TvCoralBorder = Color(0xFFE8A0A8)
+private val TvTeal = Color(0xFF0E7F64)
+private val TvTealSoft = Color(0xFFDDF5EE)
+private val TvTealBorder = Color(0xFF8FD3C0)
+private val TvGoldSoft = Color(0xFFFFF1CF)
+private val TvGoldText = Color(0xFF6B4A00)
+private val TvTagText = Color(0xFF8A6200)
 
-private val HomePinColors = listOf(
-    Color(0xFFD9384A), // Coral Hero
-    Color(0xFFFFB830), // Sunny Gold
-    Color(0xFF0E7F64), // Mint Accent
-    Color(0xFF3B82F6), // Sky Blue
-    Color(0xFF9B59B6)  // Lavender Purple
-)
+/**
+ * Helper extension to draw clean dashed borders matching Fire TV HTML specs
+ */
+private fun Modifier.tvDashedBorder(
+    width: Dp,
+    color: Color,
+    cornerRadius: Dp,
+    dashLength: Float = 14f,
+    gapLength: Float = 8f
+): Modifier = this.drawBehind {
+    val stroke = Stroke(
+        width = width.toPx(),
+        pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
+    )
+    drawRoundRect(
+        color = color,
+        size = size,
+        cornerRadius = CornerRadius(cornerRadius.toPx()),
+        style = stroke
+    )
+}
 
 @Composable
 fun HomeScreen(
@@ -87,20 +93,20 @@ fun HomeScreen(
     onOpenStory: (FullStoryResponse) -> Unit = {}
 ) {
     val profileStories = StoryRepository.getStoriesForProfile()
-    val bookshelfSagas = StoryRepository.getBookshelfSagas()
     val lastReadStory = StoryRepository.getLastReadStoryForProfile()
     val availableStories by SubscriptionManager.availableStories
-    var openingSaga by remember { mutableStateOf<SagaBook?>(null) }
+    val mainCtaFocusRequester = remember { FocusRequester() }
 
-    // Trigger navigation once the 3D book-opening animation finishes
-    LaunchedEffect(openingSaga) {
-        val target = openingSaga ?: return@LaunchedEffect
-        delay(540)
-        onOpenStory(target.rootStory)
-        delay(120)
-        openingSaga = null
+    LaunchedEffect(Unit) {
+        try {
+            mainCtaFocusRequester.requestFocus()
+        } catch (_: Exception) {}
     }
 
+    // Determine current display story (real last read, first story, or fallback)
+    val displayStory = lastReadStory ?: profileStories.firstOrNull()
+
+    // Determine current display character (or Grisin fallback)
     val uniqueCharacters = remember(profileStories) {
         buildList {
             profileStories.forEach { story ->
@@ -111,1488 +117,1008 @@ fun HomeScreen(
             .filter { it.name.isNotBlank() }
             .distinctBy { it.name.trim().lowercase() }
     }
+    val displayCharacter = uniqueCharacters.firstOrNull()
 
-    Scaffold(
-        containerColor = HomeCreamBg
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            HomeGoldSoft.copy(alpha = 0.4f),
-                            HomeCoralSoft.copy(alpha = 0.18f),
-                            Color.Transparent
-                        ),
-                        radius = 900f
-                    )
+    // Pulse animation for scan line in Step 2 icon and stroke animation for Step 1 drawing
+    val infiniteTransition = rememberInfiniteTransition(label = "hero_anim")
+    val scanLineOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scan_line"
+    )
+    val drawingProgress by infiniteTransition.animateFloat(
+        initialValue = 0.05f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "drawing_progress"
+    )
+
+    // 100% WIDESCREEN 16:9 CANVAS (1920x1080) - NO VERTICAL SCROLL
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(TvCreamBg)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(TvIvoryGlow, TvCreamBg),
+                    center = Offset(1300f, 250f),
+                    radius = 900f
                 )
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+            )
+            .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV 5% Safe Zone
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // -------------------------------------------------------------
-            // 1. TOP BAR: Profile Pill · Available Stories / Status · Child Profile · Parental Lock
-            // -------------------------------------------------------------
+            // =================================================================
+            // 1. TOP BAR (.top)
+            // =================================================================
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .height(48.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Profile Pill [🚀 Leo ▾] -> Switches profile
-                Surface(
-                    shape = RoundedCornerShape(50.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.5.dp, HomeCardBorder),
-                    shadowElevation = 2.dp,
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .padding(end = 8.dp)
-                        .clickable {
-                            PlatformAudioService.playSfx(SoundEffect.POP)
-                            onSwitchProfileClick()
-                        }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 5.dp, bottom = 5.dp)
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(HomeCoralSoft)
-                        ) {
-                            Text(text = childAvatar, fontSize = 18.sp)
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Text(
-                            text = childName,
-                            fontFamily = TitleFont(),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = HomeInkDark,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        Text(
-                            text = "▾",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = HomeInkMuted
-                        )
-                    }
-                }
-
-                // Right controls: Offline Pill + Child Profile Button + Parental Lock Button
+                // LOGO: WonderLoop with dual-ring infinity mark
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (backendOnline == false) {
-                        Surface(
-                            shape = RoundedCornerShape(50.dp),
-                            color = HomeCoralSoft,
-                            border = BorderStroke(1.dp, HomeCoralBorder),
-                            modifier = Modifier.clickable { onRetryConnection() }
-                        ) {
-                            Text(
-                                text = "🔴 Sin IA",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = HomeCoral,
-                                maxLines = 1,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-
-                    // Child Profile Button ("Mi Perfil")
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
-                        border = BorderStroke(1.5.dp, HomeCardBorder),
-                        shadowElevation = 2.dp,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clickable {
-                                PlatformAudioService.playSfx(SoundEffect.POP)
-                                onEditProfileClick()
-                            }
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Canvas(modifier = Modifier.size(24.dp)) {
-                                val w = size.width
-                                val h = size.height
-                                drawCircle(
-                                    color = HomeCoralSoft,
-                                    radius = w * 0.52f,
-                                    center = Offset(w * 0.5f, h * 0.5f)
-                                )
-                                drawCircle(
-                                    color = HomeCoral,
-                                    radius = w * 0.19f,
-                                    center = Offset(w * 0.5f, h * 0.35f)
-                                )
-                                val shouldersPath = Path().apply {
-                                    moveTo(w * 0.22f, h * 0.78f)
-                                    cubicTo(
-                                        w * 0.22f, h * 0.56f,
-                                        w * 0.78f, h * 0.56f,
-                                        w * 0.78f, h * 0.78f
-                                    )
-                                    close()
-                                }
-                                drawPath(
-                                    path = shouldersPath,
-                                    color = HomeCoral
-                                )
-                            }
-                        }
-                    }
-
-                    // Parental Lock Button ("Zona de padres") -> Vector padlock matching ParentalGateDialog
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
-                        border = BorderStroke(1.5.dp, HomeCardBorder),
-                        shadowElevation = 2.dp,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clickable {
-                                PlatformAudioService.playSfx(SoundEffect.POP)
-                                onParentsClick()
-                            }
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Canvas(modifier = Modifier.size(24.dp)) {
-                                val w = size.width
-                                val h = size.height
-                                drawCircle(
-                                    color = HomeCoralSoft,
-                                    radius = w * 0.52f,
-                                    center = Offset(w * 0.5f, h * 0.5f)
-                                )
-
-                                val iconSize = w * 0.68f
-                                val ox = (w - iconSize) / 2f
-                                val oy = (h - iconSize) / 2f
-                                val sx = iconSize / 24f
-                                val sy = iconSize / 24f
-                                val strokeW = 2.1.dp.toPx()
-
-                                drawRoundRect(
-                                    color = HomeCoral,
-                                    topLeft = Offset(ox + 5f * sx, oy + 11f * sy),
-                                    size = androidx.compose.ui.geometry.Size(14f * sx, 10f * sy),
-                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.4f * sx, 2.4f * sy),
-                                    style = Stroke(
-                                        width = strokeW,
-                                        cap = StrokeCap.Round,
-                                        join = StrokeJoin.Round
-                                    )
-                                )
-
-                                val shacklePath = Path().apply {
-                                    moveTo(ox + 8f * sx, oy + 11f * sy)
-                                    lineTo(ox + 8f * sx, oy + 8f * sy)
-                                    arcTo(
-                                        rect = androidx.compose.ui.geometry.Rect(
-                                            left = ox + 8f * sx,
-                                            top = oy + 4f * sy,
-                                            right = ox + 16f * sx,
-                                            bottom = oy + 12f * sy
-                                        ),
-                                        startAngleDegrees = 180f,
-                                        sweepAngleDegrees = 180f,
-                                        forceMoveTo = false
-                                    )
-                                    lineTo(ox + 16f * sx, oy + 11f * sy)
-                                }
-                                drawPath(
-                                    path = shacklePath,
-                                    color = HomeCoral,
-                                    style = Stroke(
-                                        width = strokeW,
-                                        cap = StrokeCap.Round,
-                                        join = StrokeJoin.Round
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // -------------------------------------------------------------
-            // 2. HERO CARD: "Crea tu cuento" (Coral Gradient #D9384A)
-            // -------------------------------------------------------------
-            Card(
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = HomeCoral),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(HomeCoral, HomeCoralWarm)
-                            )
+                    Canvas(modifier = Modifier.size(width = 46.dp, height = 30.dp)) {
+                        val strokeW = 5.dp.toPx()
+                        val r = 11.dp.toPx()
+                        // Left Coral Ring
+                        drawCircle(
+                            color = Color(0xFFFF6B6B),
+                            radius = r,
+                            center = Offset(14.dp.toPx(), 15.dp.toPx()),
+                            style = Stroke(width = strokeW)
                         )
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        // Header: Title + Speaker Read-Aloud
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = AppStrings.createStoryTitle,
-                                fontFamily = TitleFont(),
-                                fontSize = 23.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
+                        // Right Teal Ring
+                        drawCircle(
+                            color = Color(0xFF1FBE9C),
+                            radius = r,
+                            center = Offset(32.dp.toPx(), 15.dp.toPx()),
+                            style = Stroke(width = strokeW)
+                        )
+                    }
 
-                            Surface(
-                                onClick = {
-                                    PlatformAudioService.speak(AppStrings.audioCreateStory)
-                                },
-                                shape = CircleShape,
-                                color = Color.White.copy(alpha = 0.22f),
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    Canvas(modifier = Modifier.size(20.dp)) {
-                                        val sx = size.width / 24f
-                                        val sy = size.height / 24f
-                                        val strokeW = 2.1.dp.toPx()
-                                        val strokeStyle = Stroke(
-                                            width = strokeW,
-                                            cap = StrokeCap.Round,
-                                            join = StrokeJoin.Round
-                                        )
-
-                                        // Speaker body & cone outline matching padlock vector style
-                                        val conePath = Path().apply {
-                                            moveTo(11f * sx, 5f * sy)
-                                            lineTo(6f * sx, 9f * sy)
-                                            lineTo(2f * sx, 9f * sy)
-                                            lineTo(2f * sx, 15f * sy)
-                                            lineTo(6f * sx, 15f * sy)
-                                            lineTo(11f * sx, 19f * sy)
-                                            close()
-                                        }
-                                        drawPath(
-                                            path = conePath,
-                                            color = Color.White,
-                                            style = strokeStyle
-                                        )
-
-                                        // Inner sound wave arc
-                                        drawArc(
-                                            color = Color.White,
-                                            startAngle = -45f,
-                                            sweepAngle = 90f,
-                                            useCenter = false,
-                                            topLeft = Offset(7f * sx, 7f * sy),
-                                            size = androidx.compose.ui.geometry.Size(10f * sx, 10f * sy),
-                                            style = strokeStyle
-                                        )
-
-                                        // Outer sound wave arc
-                                        drawArc(
-                                            color = Color.White,
-                                            startAngle = -45f,
-                                            sweepAngle = 90f,
-                                            useCenter = false,
-                                            topLeft = Offset(2f * sx, 2f * sy),
-                                            size = androidx.compose.ui.geometry.Size(20f * sx, 20f * sy),
-                                            style = strokeStyle
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
+                    Row {
                         Text(
-                            text = AppStrings.createStorySubtitle,
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.94f)
+                            text = "Wonder",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFFE5484D)
                         )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Step Pills: 1 Dibuja · 2 Foto · 3 Magia
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(50.dp),
-                                color = Color.White
-                            ) {
-                                Text(
-                                    text = AppStrings.stepDrawShort,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = HomeCoral,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                                )
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(50.dp),
-                                color = Color.White.copy(alpha = 0.22f)
-                            ) {
-                                Text(
-                                    text = AppStrings.stepPhotoShort,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                                )
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(50.dp),
-                                color = Color.White.copy(alpha = 0.22f)
-                            ) {
-                                Text(
-                                    text = AppStrings.stepMagicShort,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Full-width White Pill CTA Button
-                        Button(
-                            onClick = {
-                                PlatformAudioService.playSfx(SoundEffect.POP)
-                                onNewAdventureClick()
-                            },
-                            shape = RoundedCornerShape(50.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = HomeCoral
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Text(text = "📷", fontSize = 18.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "${AppStrings.scanDrawingShort} ($availableStories)",
-                                    fontFamily = TitleFont(),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = HomeCoral
-                                )
-                            }
-                        }
+                        Text(
+                            text = "Loop",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF12A58A)
+                        )
                     }
                 }
-            }
 
-            // If the child has not created/read any story yet, show "Idea de hoy" right under "Crea tu cuento"
-            // to spark their imagination for their very first drawing.
-            if (lastReadStory == null) {
-                Spacer(modifier = Modifier.height(14.dp))
-                DailySparkCard()
-            }
-
-            // -------------------------------------------------------------
-            // 3. CONTINUE READING CARD: "Continuar leyendo" (Last read story)
-            // -------------------------------------------------------------
-            if (lastReadStory != null) {
-                Spacer(modifier = Modifier.height(18.dp))
-
+                // RIGHT CHIPS: [🚀 Leo ∨], [👤 Mi Perfil] and [MinimalistLock Padres]
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = AppStrings.continueReadingTitle,
-                        fontFamily = TitleFont(),
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = HomeInkDark
-                    )
-
+                    // 1. Profile Switcher Chip (.chip2)
                     Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = HomeGoldSoft,
-                        border = BorderStroke(1.dp, HomeGoldBorder)
-                    ) {
-                        Text(
-                            text = AppStrings.continueReadingBadge,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = HomeGoldText,
-                            letterSpacing = 0.4.sp,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Card(
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.5.dp, HomeCardBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
-                        .clickable {
-                            PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
-                            onOpenStory(lastReadStory)
-                        }
-                ) {
-                    Row(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White,
+                        shadowElevation = 3.dp,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Mini Hardcover Book Cover Thumbnail
-                        val miniBookShape = RoundedCornerShape(
-                            topStart = 4.dp,
-                            bottomStart = 4.dp,
-                            topEnd = 12.dp,
-                            bottomEnd = 12.dp
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(60.dp)
-                                .height(80.dp)
-                                .shadow(
-                                    elevation = 4.dp,
-                                    shape = miniBookShape,
-                                    ambientColor = Color.Black.copy(alpha = 0.25f),
-                                    spotColor = Color.Black.copy(alpha = 0.35f)
-                                )
-                                .clip(miniBookShape)
-                                .background(HomeCoralSoft)
-                                .border(1.dp, Color.White.copy(alpha = 0.85f), miniBookShape)
-                        ) {
-                            val coverUrl = lastReadStory.character.reinterpretedImageUrl
-                                ?: lastReadStory.character.originalDrawingBase64
-                                ?: lastReadStory.scenes.firstOrNull()?.illustrationUrl
-                            if (!coverUrl.isNullOrBlank()) {
-                                WonderLoopImage(
-                                    model = coverUrl,
-                                    contentDescription = lastReadStory.title,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    Text(text = "📖", fontSize = 26.sp)
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(24.dp),
+                                focusedScale = 1.05f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    onSwitchProfileClick()
                                 }
-                            }
-
-                            // Mini Book Left Spine Crease
+                            )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(start = 6.dp, end = 14.dp)
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxHeight()
-                                    .width(8.dp)
-                                    .align(Alignment.CenterStart)
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = listOf(
-                                                Color.Black.copy(alpha = 0.40f),
-                                                Color.White.copy(alpha = 0.25f),
-                                                Color.Black.copy(alpha = 0.15f),
-                                                Color.Transparent
-                                            )
-                                        )
-                                    )
-                            )
-
-                            val chIdx = lastReadStory.chapterIndex ?: 1
-                            if (lastReadStory.isMultiChapter || chIdx > 1) {
-                                Surface(
-                                    shape = RoundedCornerShape(50.dp),
-                                    color = HomeGoldSoft.copy(alpha = 0.95f),
-                                    border = BorderStroke(1.dp, HomeGoldBorder),
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .padding(bottom = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "Cap. $chIdx",
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = HomeGoldText,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                    )
-                                }
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFFE3E0)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (childAvatar.isNotBlank()) childAvatar else "🚀",
+                                    fontSize = 18.sp
+                                )
                             }
-                        }
 
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        // Story Title + Hero & Pages Subtitle
-                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = lastReadStory.title,
-                                fontFamily = TitleFont(),
-                                fontSize = 15.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = HomeInkDark,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                lineHeight = 19.sp
+                                text = if (childName.isNotBlank()) childName else "Leo",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = TvInkDark
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = AppStrings.heroAndPagesSubtitle(
-                                    heroName = lastReadStory.character.name,
-                                    pages = lastReadStory.scenes.size
-                                ),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = HomeInkMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
 
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        // Coral Pill CTA
-                        Surface(
-                            shape = RoundedCornerShape(50.dp),
-                            color = HomeCoral,
-                            shadowElevation = 2.dp
-                        ) {
                             Text(
-                                text = AppStrings.continueReadingCta,
-                                fontFamily = TitleFont(),
+                                text = "∨",
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                                fontWeight = FontWeight.Bold,
+                                color = TvInkDark
                             )
                         }
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // -------------------------------------------------------------
-            // 4. CAROUSEL: "Mis cuentos" (Hardcover Storybooks without Shelf Planks)
-            // -------------------------------------------------------------
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = AppStrings.myStories,
-                    fontFamily = TitleFont(),
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = HomeInkDark
-                )
-
-                Surface(
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        onNavigateToStories()
-                    },
-                    shape = RoundedCornerShape(50.dp),
-                    color = HomeCoralSoft
-                ) {
-                    Text(
-                        text = AppStrings.seeAll,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = HomeCoral,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            val displayedSagas = remember(bookshelfSagas) { bookshelfSagas.take(8) }
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                // Existing Storybooks (grouped by saga just like MyStoriesScreen)
-                items(
-                    items = displayedSagas,
-                    key = { it.sagaId }
-                ) { saga ->
-                    val isThisBookOpening = openingSaga?.sagaId == saga.sagaId
-                    HomeBookCoverItem(
-                        saga = saga,
-                        isOpening = isThisBookOpening,
-                        onClick = {
-                            if (openingSaga == null) {
-                                PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
-                                openingSaga = saga
-                            }
-                        },
+                    // 2. Child Profile Button ("Mi Perfil")
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White,
+                        shadowElevation = 3.dp,
                         modifier = Modifier
-                            .width(114.dp)
-                            .zIndex(if (isThisBookOpening) 10f else 0f)
-                    )
-                }
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(24.dp),
+                                focusedScale = 1.05f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    onEditProfileClick()
+                                }
+                            )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp)
+                        ) {
+                            Text(text = "👤", fontSize = 16.sp)
+                            Text(
+                                text = if (AppStrings.isEnglish) "Profile" else "Mi Perfil",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = TvInkDark
+                            )
+                        }
+                    }
 
-                // "+ Nuevo" Book-Shaped Card
-                item(key = "home_new_book_placeholder") {
-                    HomeNewBookPlaceholder(
-                        onClick = {
-                            if (openingSaga == null) {
-                                PlatformAudioService.playSfx(SoundEffect.POP)
-                                onNewAdventureClick()
-                            }
-                        },
-                        modifier = Modifier.width(114.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(22.dp))
-
-            // -------------------------------------------------------------
-            // 5. CAROUSEL: "Mis amigos"
-            // -------------------------------------------------------------
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = AppStrings.myFriends,
-                    fontFamily = TitleFont(),
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = HomeInkDark
-                )
-
-                Surface(
-                    onClick = {
-                        PlatformAudioService.playSfx(SoundEffect.POP)
-                        onNavigateToCharacters()
-                    },
-                    shape = RoundedCornerShape(50.dp),
-                    color = HomeMintSoft
-                ) {
-                    Text(
-                        text = AppStrings.seeAll,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = HomeMint,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
+                    // 3. Parents Chip with Minimalist Lock (.chip2.pd)
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White,
+                        shadowElevation = 3.dp,
+                        modifier = Modifier
+                            .height(44.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(24.dp),
+                                focusedScale = 1.05f,
+                                onClick = {
+                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                    onParentsClick()
+                                }
+                            )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        ) {
+                            MinimalistLockIcon(tint = TvInkDark, size = 18.dp)
+                            Text(
+                                text = if (AppStrings.isEnglish) "Parents" else "Padres",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = TvInkDark
+                            )
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            val displayedCharacters = remember(uniqueCharacters) { uniqueCharacters.take(8) }
-            LazyRow(
+            // =================================================================
+            // 2. HERO BANNER (.hero)
+            // =================================================================
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                // Unique Friends / Characters as Mini-Polaroids with 3D Pushpin (no corkboard)
-                itemsIndexed(
-                    items = displayedCharacters,
-                    key = { index, character -> "friend_${character.name}_$index" }
-                ) { index, character ->
-                    val rotation = when (index % 4) {
-                        0 -> -1.4f
-                        1 -> 1.5f
-                        2 -> -1.0f
-                        else -> 1.3f
-                    }
-                    val pinColor = HomePinColors[index % HomePinColors.size]
-                    val characterImage = character.reinterpretedImageUrl?.takeIf { it.isNotBlank() }
-                        ?: character.originalDrawingBase64?.takeIf { it.isNotBlank() }
-                        ?: profileStories.firstOrNull {
-                            it.character.name.trim().equals(character.name.trim(), ignoreCase = true)
-                        }?.scenes?.firstOrNull()?.illustrationUrl
-
-                    HomeFriendPolaroidItem(
-                        character = character,
-                        imageUrl = characterImage,
-                        pinColor = pinColor,
-                        rotation = rotation,
-                        onClick = {
-                            PlatformAudioService.playSfx(SoundEffect.POP)
-                            onNavigateToCharacters()
-                        },
-                        modifier = Modifier.width(96.dp)
-                    )
-                }
-
-                // "+ Nuevo" Friend Mini-Polaroid Card
-                item(key = "home_new_friend_placeholder") {
-                    val newIndex = displayedCharacters.size
-                    val newPinColor = HomePinColors[newIndex % HomePinColors.size]
-                    val newRotation = if (newIndex % 2 == 0) -1.2f else 1.3f
-
-                    HomeNewFriendPolaroidPlaceholder(
-                        pinColor = newPinColor,
-                        rotation = newRotation,
-                        onClick = {
-                            PlatformAudioService.playSfx(SoundEffect.POP)
-                            onNewAdventureClick()
-                        },
-                        modifier = Modifier.width(96.dp)
-                    )
-                }
-            }
-
-            // -------------------------------------------------------------
-            // 6. DAILY SPARK CARD: "Idea de hoy" (at the bottom when user has stories)
-            // -------------------------------------------------------------
-            if (lastReadStory != null) {
-                Spacer(modifier = Modifier.height(22.dp))
-                DailySparkCard()
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-    }
-}
-
-/**
- * Daily Spark Card ("💡 Idea de hoy") — Creative drawing prompt banner
- */
-@Composable
-private fun DailySparkCard() {
-    val sparkIndex = remember { kotlin.random.Random.nextInt(12) }
-    val ideas = AppStrings.todaySparkIdeas
-    val currentSpark = ideas[sparkIndex % ideas.size]
-
-    Card(
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = HomeGoldSoft),
-        border = BorderStroke(1.5.dp, HomeGoldBorder),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.75f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = "💡", fontSize = 21.sp)
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = AppStrings.todaySparkTitle.uppercase(),
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = HomeGoldText,
-                    letterSpacing = 0.4.sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = currentSpark,
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = HomeInkDark,
-                    lineHeight = 16.sp
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Surface(
-                shape = RoundedCornerShape(50.dp),
-                color = Color.White.copy(alpha = 0.88f),
-                border = BorderStroke(1.dp, HomeGoldBorder)
-            ) {
-                Text(
-                    text = AppStrings.drawNowAction,
-                    fontFamily = TitleFont(),
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = HomeGoldText,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                )
-            }
-        }
-    }
-}
-
-/**
- * Hardcover Storybook Item for the HomeScreen "Mis cuentos" Carousel (no wooden shelf plank)
- */
-@Composable
-private fun HomeBookCoverItem(
-    saga: SagaBook,
-    isOpening: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val story = saga.rootStory
-    val coverImageUrl = story.character.reinterpretedImageUrl
-        ?: story.character.originalDrawingBase64
-        ?: story.scenes.firstOrNull()?.illustrationUrl
-    val firstPageIllustration = story.scenes.firstOrNull()?.illustrationUrl ?: coverImageUrl
-
-    val bookShape = RoundedCornerShape(
-        topStart = 5.dp,
-        bottomStart = 5.dp,
-        topEnd = 16.dp,
-        bottomEnd = 16.dp
-    )
-
-    val coverRotationY by animateFloatAsState(
-        targetValue = if (isOpening) -135f else 0f,
-        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
-        label = "home_book_cover_swing_y"
-    )
-
-    val bookScale by animateFloatAsState(
-        targetValue = if (isOpening) 1.05f else 1f,
-        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
-        label = "home_book_lift_scale"
-    )
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.graphicsLayer {
-            scaleX = bookScale
-            scaleY = bookScale
-        }
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.72f)
-                .clickable { onClick() }
-        ) {
-            // LAYER 1 (UNDERNEATH): First Inside Page revealed on 3D cover swing
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .shadow(
-                        elevation = 5.dp,
-                        shape = bookShape,
-                        ambientColor = Color.Black.copy(alpha = 0.24f),
-                        spotColor = Color.Black.copy(alpha = 0.35f)
-                    )
-                    .clip(bookShape)
-                    .background(HomeCreamBg)
-                    .border(1.5.dp, HomeCardBorder, bookShape)
-            ) {
-                // Right page-block paper edges effect
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(4.dp)
-                        .align(Alignment.CenterEnd)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color(0xFFE5DEC9),
-                                    Color.White
-                                )
-                            )
+                    .weight(1.15f)
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(TvCoral, TvCoralGradientEnd),
+                            start = Offset(0f, 0f),
+                            end = Offset(1200f, 400f)
                         )
-                )
+                    )
+            ) {
+                // Background subtle decorative circle
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.08f),
+                        radius = 180.dp.toPx(),
+                        center = Offset(size.width + 40.dp.toPx(), -20.dp.toPx())
+                    )
+                }
 
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .padding(horizontal = 34.dp, vertical = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = HomeCoralSoft
+                    // LEFT COLUMN (.hl): Title, subtitle, CTA Button
+                    Column(
+                        modifier = Modifier
+                            .weight(1.1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "✨ PÁG. 1",
-                            fontSize = 8.sp,
+                            text = "Crea tu cuento",
+                            fontSize = 34.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = HomeCoral,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            color = Color.White,
+                            lineHeight = 38.sp
                         )
-                    }
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(vertical = 5.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(HomeGoldSoft)
-                    ) {
-                        if ((isOpening || coverRotationY < -1f) && !firstPageIllustration.isNullOrBlank()) {
-                            WonderLoopImage(
-                                model = firstPageIllustration,
-                                contentDescription = story.title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    }
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                    Text(
-                        text = story.title,
-                        fontFamily = TitleFont(),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = HomeInkDark,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 12.sp
-                    )
-                }
-
-                // Inner spine shadow on left edge
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(8.dp)
-                        .align(Alignment.CenterStart)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.22f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-            }
-
-            // LAYER 2 (ON TOP): 3D Swinging Hardcover Front Cover
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        transformOrigin = TransformOrigin(0f, 0.5f)
-                        cameraDistance = 16f * density
-                        rotationY = coverRotationY
-                    }
-                    .shadow(
-                        elevation = if (isOpening) 10.dp else 6.dp,
-                        shape = bookShape,
-                        ambientColor = Color.Black.copy(alpha = 0.28f),
-                        spotColor = Color.Black.copy(alpha = 0.40f)
-                    )
-                    .clip(bookShape)
-                    .background(Color.White)
-                    .border(1.5.dp, Color.White.copy(alpha = 0.85f), bookShape)
-            ) {
-                if (coverRotationY > -90f) {
-                    if (!coverImageUrl.isNullOrBlank()) {
-                        WonderLoopImage(
-                            model = coverImageUrl,
-                            contentDescription = story.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(HomeGoldSoft, HomeCoralSoft)
-                                    )
-                                )
-                        ) {
-                            Text(text = "📖", fontSize = 36.sp)
-                        }
-                    }
-
-                    // Realistic Book Spine Effect on Left Edge
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(11.dp)
-                            .align(Alignment.CenterStart)
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color.Black.copy(alpha = 0.42f),
-                                        Color.White.copy(alpha = 0.28f),
-                                        Color.Black.copy(alpha = 0.18f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
-
-                    // Bottom Scrim & Title on the Book Cover
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.BottomCenter)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.Transparent,
-                                        Color(0xFF2B2340).copy(alpha = 0.78f),
-                                        Color(0xFF2B2340).copy(alpha = 0.95f)
-                                    )
-                                )
-                            )
-                            .padding(start = 11.dp, end = 7.dp, top = 10.dp, bottom = 7.dp)
-                    ) {
-                        Column {
-                            Text(
-                                text = story.title,
-                                fontFamily = TitleFont(),
-                                color = Color.White,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                lineHeight = 13.5.sp
-                            )
-                            Spacer(modifier = Modifier.height(1.dp))
-                            Text(
-                                text = if (saga.isMultiChapter) "🌟 Saga · ${story.character.name}" else "✨ ${story.character.name}",
-                                color = HomeGoldSoft,
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                } else {
-                    // Inside lining of the front cover when swung past -90°
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(HomeGoldSoft, HomeCreamBg)
-                                )
-                            )
-                            .padding(10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.8f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(text = "✨", fontSize = 18.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Soft floating shadow underneath the book (no shelf plank)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.86f)
-                .height(4.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.18f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-    }
-}
-
-/**
- * Book-Shaped "+ Nuevo" Card in the HomeScreen "Mis cuentos" Carousel
- */
-@Composable
-private fun HomeNewBookPlaceholder(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val bookShape = RoundedCornerShape(
-        topStart = 5.dp,
-        bottomStart = 5.dp,
-        topEnd = 16.dp,
-        bottomEnd = 16.dp
-    )
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-    ) {
-        Surface(
-            onClick = onClick,
-            shape = bookShape,
-            color = Color.White,
-            border = BorderStroke(1.8.dp, HomeCoralBorder),
-            shadowElevation = 3.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.72f)
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                // Subtle left book spine tint
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(10.dp)
-                        .align(Alignment.CenterStart)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    HomeCoralSoft,
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 4.dp, vertical = 10.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(HomeCoralSoft)
-                    ) {
                         Text(
-                            text = "+",
-                            fontFamily = TitleFont(),
-                            fontSize = 24.sp,
-                            color = HomeCoral,
-                            fontWeight = FontWeight.SemiBold
+                            text = "Dibuja un personaje en un folio y hazle una foto con el móvil",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.95f),
+                            lineHeight = 22.sp
                         )
-                    }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
 
-                    Text(
-                        text = AppStrings.newStoryBookstand,
-                        fontFamily = TitleFont(),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = HomeInkDark,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 13.sp
-                    )
-
-                    val availableStories = SubscriptionManager.availableStories.value
-                    val hasStories = availableStories > 0
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = if (hasStories) HomeMintSoft else HomeCoralSoft,
-                        border = BorderStroke(1.dp, if (hasStories) HomeMintBorder else HomeCoralBorder)
-                    ) {
-                        val badgeText = if (AppStrings.isEnglish) {
-                            if (hasStories) "✨ $availableStories left" else "⚠️ 0 left"
-                        } else {
-                            if (hasStories) {
-                                if (availableStories == 1) "✨ 1 restante" else "✨ $availableStories restantes"
-                            } else {
-                                "⚠️ 0 restantes"
+                        // CTA Button (.cta) with D-Pad focus halo
+                        Surface(
+                            shape = RoundedCornerShape(26.dp),
+                            color = Color.White,
+                            shadowElevation = 6.dp,
+                            modifier = Modifier
+                                .height(52.dp)
+                                .focusRequester(mainCtaFocusRequester)
+                                .tvFocusable(
+                                    shape = RoundedCornerShape(26.dp),
+                                    focusedScale = 1.05f,
+                                    onClick = {
+                                        PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                                        onNewAdventureClick()
+                                    }
+                                )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.padding(horizontal = 26.dp)
+                            ) {
+                                Text(text = "📱", fontSize = 22.sp)
+                                Text(
+                                    text = "Escanear dibujo con el móvil",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TvCoral
+                                )
                             }
                         }
-                        Text(
-                            text = badgeText,
-                            fontSize = 9.sp,
-                            color = if (hasStories) HomeMint else HomeCoral,
-                            fontWeight = FontWeight.ExtraBold,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
-                        )
                     }
-                }
-            }
-        }
 
-        // Matching soft ground shadow
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.86f)
-                .height(4.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.14f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-    }
-}
+                    Spacer(modifier = Modifier.width(20.dp))
 
-/**
- * Mini-Polaroid with 3D Pushpin for the HomeScreen "Mis amigos" Carousel (no corkboard behind)
- */
-@Composable
-private fun HomeFriendPolaroidItem(
-    character: CharacterProfile,
-    imageUrl: String?,
-    pinColor: Color,
-    rotation: Float,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .graphicsLayer { rotationZ = rotation }
-            .padding(top = 7.dp)
-    ) {
-        Card(
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-            border = BorderStroke(1.5.dp, HomeCardBorder),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { onClick() }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Polaroid Square Photo Area
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(HomeMintSoft, HomeGoldSoft.copy(alpha = 0.55f))
-                            )
-                        )
-                        .border(1.dp, HomeCardBorder, RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!imageUrl.isNullOrBlank()) {
-                        WonderLoopImage(
-                            model = imageUrl,
-                            contentDescription = character.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Text(text = "🧸", fontSize = 30.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Polaroid White Bottom Strip Caption
-                Text(
-                    text = character.name,
-                    fontFamily = TitleFont(),
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = HomeInkDark,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-
-        // 3D Colorful Pushpin at the top center of the Mini-Polaroid
-        HomePushpin3D(
-            pinColor = pinColor,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = (-4).dp)
-        )
-    }
-}
-
-/**
- * Mini-Polaroid "+ Nuevo" Slot for the HomeScreen "Mis amigos" Carousel
- */
-@Composable
-private fun HomeNewFriendPolaroidPlaceholder(
-    pinColor: Color,
-    rotation: Float,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .graphicsLayer { rotationZ = rotation }
-            .padding(top = 7.dp)
-    ) {
-        Card(
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-            border = BorderStroke(1.5.dp, HomeMintBorder),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { onClick() }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    HomeMintSoft.copy(alpha = 0.75f),
-                                    HomeGoldSoft.copy(alpha = 0.45f)
-                                )
-                            )
-                        )
-                        .border(1.2.dp, HomeMintBorder, RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
+                    // RIGHT COLUMN (.hr): 3 Steps + Idea de hoy pill
+                    Column(
                         modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(Color.White)
-                            .border(1.dp, HomeMintBorder, CircleShape),
-                        contentAlignment = Alignment.Center
+                            .weight(1.15f)
+                            .fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // 3 Visual Step Boxes - Mathematically Aligned
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // Step 1: Dibuja (Animated Stroke)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 76.dp, height = 66.dp)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(Color.White),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Canvas(modifier = Modifier.size(46.dp, 36.dp)) {
+                                        val fullPath = Path().apply {
+                                            moveTo(size.width * 0.15f, size.height * 0.75f)
+                                            cubicTo(
+                                                size.width * 0.25f, size.height * 0.15f,
+                                                size.width * 0.55f, size.height * 0.05f,
+                                                size.width * 0.65f, size.height * 0.45f
+                                            )
+                                            cubicTo(
+                                                size.width * 0.75f, size.height * 0.85f,
+                                                size.width * 0.50f, size.height * 0.95f,
+                                                size.width * 0.85f, size.height * 0.45f
+                                            )
+                                        }
+
+                                        // 1. Faint guideline
+                                        drawPath(
+                                            fullPath,
+                                            color = TvCoral.copy(alpha = 0.2f),
+                                            style = Stroke(
+                                                width = 3.dp.toPx(),
+                                                cap = StrokeCap.Round,
+                                                join = StrokeJoin.Round
+                                            )
+                                        )
+
+                                        // 2. Animated active drawing trace
+                                        val pm = PathMeasure()
+                                        pm.setPath(fullPath, false)
+                                        val animPath = Path()
+                                        val curLen = pm.length * drawingProgress
+                                        pm.getSegment(0f, curLen, animPath, true)
+
+                                        drawPath(
+                                            animPath,
+                                            color = TvCoral,
+                                            style = Stroke(
+                                                width = 3.5.dp.toPx(),
+                                                cap = StrokeCap.Round,
+                                                join = StrokeJoin.Round
+                                            )
+                                        )
+
+                                        // 3. Glowing drawing tip moving along path
+                                        val tip = pm.getPosition(curLen)
+                                        drawCircle(
+                                            color = Color(0xFFFFD166),
+                                            radius = 3.5.dp.toPx(),
+                                            center = tip
+                                        )
+                                        drawCircle(
+                                            color = TvCoral,
+                                            radius = 2.dp.toPx(),
+                                            center = tip
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .width(96.dp)
+                                        .height(38.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Text(
+                                        text = "1 · Dibuja",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+
+                            // Dotted Connector 1
+                            Box(
+                                modifier = Modifier.height(66.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "· · ·",
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+
+                            // Step 2: Foto con el móvil (Phone + Lion + Scan beam)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 76.dp, height = 66.dp)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(Color.White),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // Mini phone frame with 🦁
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 32.dp, height = 48.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFFFCEAE7))
+                                            .border(2.5.dp, TvInkDark, RoundedCornerShape(8.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(text = "🦁", fontSize = 16.sp)
+                                        // Red animated scan line
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(2.dp)
+                                                .offset(y = (-14 + (28 * scanLineOffset)).dp)
+                                                .background(TvCoral)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .width(96.dp)
+                                        .height(38.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Text(
+                                        text = "2 · Foto con el móvil",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 16.sp,
+                                        maxLines = 2
+                                    )
+                                }
+                            }
+
+                            // Dotted Connector 2
+                            Box(
+                                modifier = Modifier.height(66.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "· · ·",
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+
+                            // Step 3: ¡Magia en la tele!
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 76.dp, height = 66.dp)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(Color.White),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = "📖✨", fontSize = 24.sp)
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .width(96.dp)
+                                        .height(38.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Text(
+                                        text = "3 · ¡Magia en la tele!",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 16.sp,
+                                        maxLines = 2
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Idea de hoy pill (.idea)
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = TvGoldSoft
+                        ) {
+                            Text(
+                                text = "💡 Idea de hoy: un león con una gran melena amarilla",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = TvGoldText,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // =================================================================
+            // 3. BOTTOM BAND (.band): Mis Cuentos & Mis Amigos (Side-by-Side)
+            // =================================================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1.05f),
+                horizontalArrangement = Arrangement.spacedBy(28.dp)
+            ) {
+                // -------------------------------------------------------------
+                // LEFT GROUP: Mis cuentos (.grp)
+                // -------------------------------------------------------------
+                Column(
+                    modifier = Modifier
+                        .weight(1.35f)
+                        .fillMaxHeight()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "+",
-                            fontFamily = TitleFont(),
+                            text = if (AppStrings.isEnglish) "My Stories" else "Mis cuentos",
                             fontSize = 22.sp,
-                            color = HomeMint,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TvInkDark
                         )
+
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, Color(0xFFEDE8E1)),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier
+                                .tvFocusable(
+                                    shape = RoundedCornerShape(16.dp),
+                                    focusedScale = 1.06f,
+                                    onClick = {
+                                        PlatformAudioService.playSfx(SoundEffect.POP)
+                                        onNavigateToStories()
+                                    }
+                                )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            ) {
+                                Text(text = "📚", fontSize = 13.sp)
+                                Text(
+                                    text = if (AppStrings.isEnglish) {
+                                        "View library (${profileStories.size}) →"
+                                    } else {
+                                        "Ver biblioteca (${profileStories.size}) →"
+                                    },
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TvCoral
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Card 1: Seguir leyendo (.cont)
+                        Surface(
+                            shape = RoundedCornerShape(26.dp),
+                            color = Color.White,
+                            shadowElevation = 3.dp,
+                            modifier = Modifier
+                                .weight(1.4f)
+                                .fillMaxHeight()
+                                .tvFocusable(
+                                    shape = RoundedCornerShape(26.dp),
+                                    focusedScale = 1.04f,
+                                    onClick = {
+                                        PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                                        if (displayStory != null) {
+                                            onOpenStory(displayStory)
+                                        } else {
+                                            onNewAdventureClick()
+                                        }
+                                    }
+                                )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Cover Image (.cv)
+                                Box(
+                                    modifier = Modifier
+                                        .width(96.dp)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color(0xFFFCEAE7))
+                                        .shadow(3.dp, RoundedCornerShape(16.dp))
+                                ) {
+                                    val coverUri = displayStory?.scenes?.firstOrNull()?.illustrationUrl
+                                        ?: displayStory?.character?.reinterpretedImageUrl
+                                        ?: DemoGrisinAssets.COVER_BASE64
+
+                                    WonderLoopImage(
+                                        model = coverUri,
+                                        contentDescription = "Portada",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+
+                                // Story Meta & Seguir Button (.tx)
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    verticalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    // Yellow Tag (.tag)
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = TvGoldSoft
+                                    ) {
+                                        Text(
+                                            text = "SEGUIR LEYENDO",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = TvTagText,
+                                            letterSpacing = 0.5.sp,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+
+                                    // Title
+                                    Text(
+                                        text = displayStory?.title ?: "Grisín y el gran rescate del peluche flotante",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = TvInkDark,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        lineHeight = 19.sp
+                                    )
+
+                                    // Meta info
+                                    val pageText = if (displayStory != null && displayStory.scenes.isNotEmpty()) {
+                                        "Página 2 de ${displayStory.scenes.size}"
+                                    } else {
+                                        "Página 2 de 5"
+                                    }
+                                    val heroName = displayStory?.character?.name?.ifBlank { "Grisín" } ?: "Grisín"
+                                    Text(
+                                        text = "✨ $heroName · $pageText",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TvInkMuted
+                                    )
+
+                                    // Single Clean Coral progress bar (.prog)
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(Color(0xFFF1E3E0))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth(0.4f)
+                                                .fillMaxHeight()
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(TvCoral)
+                                        )
+                                    }
+
+                                    // Button: Seguir (.btn)
+                                    Surface(
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = TvCoral,
+                                        modifier = Modifier
+                                            .height(34.dp)
+                                            .tvFocusable(
+                                                shape = RoundedCornerShape(18.dp),
+                                                focusedScale = 1.08f,
+                                                onClick = {
+                                                    PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                                                    if (displayStory != null) {
+                                                        onOpenStory(displayStory)
+                                                    } else {
+                                                        onNewAdventureClick()
+                                                    }
+                                                }
+                                            )
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier.padding(horizontal = 16.dp)
+                                        ) {
+                                            Text(text = "▶", fontSize = 11.sp, color = Color.White)
+                                            Text(
+                                                text = "Seguir",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Card 2: Nuevo cuento (.new)
+                        Surface(
+                            shape = RoundedCornerShape(26.dp),
+                            color = Color.White,
+                            modifier = Modifier
+                                .weight(0.85f)
+                                .fillMaxHeight()
+                                .tvDashedBorder(2.5.dp, TvCoralBorder, 26.dp)
+                                .tvFocusable(
+                                    shape = RoundedCornerShape(26.dp),
+                                    focusedScale = 1.04f,
+                                    onClick = {
+                                        PlatformAudioService.playSfx(SoundEffect.POP)
+                                        onNewAdventureClick()
+                                    }
+                                )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(CircleShape)
+                                        .background(TvCoralSoft),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "+",
+                                        fontSize = 28.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = TvCoral
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    text = "Nuevo cuento",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TvInkDark
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = TvTealSoft
+                                ) {
+                                    Text(
+                                        text = "✨ $availableStories disponibles",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = TvTeal,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                // -------------------------------------------------------------
+                // RIGHT GROUP: Mis amigos (.grp)
+                // -------------------------------------------------------------
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (AppStrings.isEnglish) "My Friends" else "Mis amigos",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TvInkDark
+                        )
 
-                Text(
-                    text = AppStrings.newCard,
-                    fontFamily = TitleFont(),
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = HomeMint,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, Color(0xFFEDE8E1)),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier
+                                .tvFocusable(
+                                    shape = RoundedCornerShape(16.dp),
+                                    focusedScale = 1.06f,
+                                    onClick = {
+                                        PlatformAudioService.playSfx(SoundEffect.POP)
+                                        onNavigateToCharacters()
+                                    }
+                                )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            ) {
+                                Text(text = "🎨", fontSize = 13.sp)
+                                Text(
+                                    text = if (AppStrings.isEnglish) {
+                                        "View all (${uniqueCharacters.size}) →"
+                                    } else {
+                                        "Ver todos (${uniqueCharacters.size}) →"
+                                    },
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TvTeal
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Card 1: Polaroid Amigo (.pol)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .graphicsLayer { rotationZ = -1.5f }
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(22.dp),
+                                color = Color.White,
+                                shadowElevation = 3.dp,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(22.dp),
+                                        focusedScale = 1.04f,
+                                        onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            onNavigateToCharacters()
+                                        }
+                                    )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    // Character photo
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(Color(0xFFFFF6E3))
+                                    ) {
+                                        val characterUri = displayCharacter?.reinterpretedImageUrl
+                                            ?: displayCharacter?.originalDrawingBase64
+                                            ?: DemoGrisinAssets.POLAROID_BASE64
+
+                                        WonderLoopImage(
+                                            model = characterUri,
+                                            contentDescription = displayCharacter?.name ?: "Grisín",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Text(
+                                        text = displayCharacter?.name?.ifBlank { "Grisín" } ?: "Grisín",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = TvInkDark
+                                    )
+                                }
+                            }
+
+                            // Red pin circle on top center of Polaroid
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .offset(y = (-5).dp)
+                                    .size(13.dp)
+                                    .shadow(2.dp, CircleShape)
+                                    .background(TvCoral, CircleShape)
+                            )
+                        }
+
+                        // Card 2: Nuevo amigo (.newf)
+                        Surface(
+                            shape = RoundedCornerShape(26.dp),
+                            color = Color.White,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .tvDashedBorder(2.5.dp, TvTealBorder, 26.dp)
+                                .tvFocusable(
+                                    shape = RoundedCornerShape(26.dp),
+                                    focusedScale = 1.04f,
+                                    onClick = {
+                                        PlatformAudioService.playSfx(SoundEffect.POP)
+                                        onNewAdventureClick()
+                                    }
+                                )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(CircleShape)
+                                        .background(TvTealSoft),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "+",
+                                        fontSize = 28.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = TvTeal
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Text(
+                                    text = "Nuevo amigo",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TvTeal
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
-
-        HomePushpin3D(
-            pinColor = pinColor,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = (-4).dp)
-        )
     }
 }
-
-@Composable
-private fun HomePushpin3D(
-    pinColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .size(15.dp)
-            .shadow(3.dp, CircleShape)
-            .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.92f),
-                        pinColor,
-                        pinColor.copy(alpha = 0.82f)
-                    )
-                )
-            )
-            .border(1.dp, Color.Black.copy(alpha = 0.16f), CircleShape)
-    )
-}
-
-

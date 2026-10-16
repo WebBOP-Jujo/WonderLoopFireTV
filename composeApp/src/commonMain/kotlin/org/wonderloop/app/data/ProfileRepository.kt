@@ -51,6 +51,20 @@ object ProfileRepository {
                 }
             }
 
+            // If still empty (first run), provide default starter profile for instant TV experience
+            if (profiles.isEmpty()) {
+                val defaultProfile = ChildProfile(
+                    id = "profile_default",
+                    name = "Leo",
+                    age = 6,
+                    avatar = "🧒",
+                    createdAt = PlatformStorage.currentTimeMillis()
+                )
+                profiles.add(defaultProfile)
+                persistProfiles()
+                println("👤 [ProfileRepository] Created default profile '${defaultProfile.name}' (id: ${defaultProfile.id})")
+            }
+
             // Restore active profile
             val savedActiveId = PlatformStorage.getString(KEY_ACTIVE_PROFILE_ID, "")
             val found = profiles.find { it.id == savedActiveId } ?: profiles.firstOrNull()

@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -41,6 +43,7 @@ import org.wonderloop.app.platform.PlatformAudioService
 import org.wonderloop.app.platform.SoundEffect
 import org.wonderloop.app.platform.WonderLoopImage
 import org.wonderloop.app.theme.*
+import org.wonderloop.app.ui.components.tvFocusable
 
 // New Design System Tokens
 private val ShelfCreamBg = Color(0xFFFFFBF5)
@@ -89,130 +92,148 @@ fun MyStoriesScreen(
             onDismissRequest = { sagaToDelete = null },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            Card(
-                shape = RoundedCornerShape(30.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.5.dp, ShelfCardBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 26.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Top Circular Blush Icon Badge
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .background(ShelfCoralSoft),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "🗑️", fontSize = 34.sp)
+                    val cancelFocusRequester = remember { FocusRequester() }
+                    LaunchedEffect(Unit) {
+                        try { cancelFocusRequester.requestFocus() } catch (_: Exception) {}
                     }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Story Title Pill
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = ShelfGoldSoft,
-                        border = BorderStroke(1.dp, ShelfGoldBorder)
-                    ) {
-                        Text(
-                            text = "📖 ${saga.rootStory.title}",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = ShelfGoldText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = if (isMulti) AppStrings.deleteSagaQuestion else AppStrings.deleteStoryQuestion,
-                        fontFamily = TitleFont(),
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ShelfInkDark,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = if (isMulti) {
-                            AppStrings.deleteSagaWarning(saga.rootStory.title, saga.chapterCount)
-                        } else {
-                            AppStrings.deleteStoryWarning(saga.rootStory.title)
-                        },
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ShelfInkMuted,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 20.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(22.dp))
-
-                    // Primary: Confirm Delete
-                    Button(
-                        onClick = {
-                            PlatformAudioService.playSfx(SoundEffect.POP)
-                            StoryRepository.deleteSaga(saga.sagaId)
-                            sagaToDelete = null
-                        },
-                        shape = RoundedCornerShape(50.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ShelfCoral,
-                            contentColor = Color.White
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Text(
-                            text = AppStrings.confirmDelete,
-                            fontFamily = TitleFont(),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Secondary: Cancel
-                    OutlinedButton(
-                        onClick = { sagaToDelete = null },
-                        shape = RoundedCornerShape(50.dp),
+                    Card(
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         border = BorderStroke(1.5.dp, ShelfCardBorder),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color.White,
-                            contentColor = ShelfInkMuted
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
+                        modifier = Modifier.width(480.dp)
                     ) {
-                        Text(
-                            text = AppStrings.cancel,
-                            fontFamily = TitleFont(),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ShelfInkMuted
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 28.dp, vertical = 26.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // Top Circular Blush Icon Badge
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(CircleShape)
+                                    .background(ShelfCoralSoft),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = "🗑️", fontSize = 34.sp)
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // Story Title Pill
+                            Surface(
+                                shape = RoundedCornerShape(50.dp),
+                                color = ShelfGoldSoft,
+                                border = BorderStroke(1.dp, ShelfGoldBorder)
+                            ) {
+                                Text(
+                                    text = "📖 ${saga.rootStory.title}",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = ShelfGoldText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = if (isMulti) AppStrings.deleteSagaQuestion else AppStrings.deleteStoryQuestion,
+                                fontFamily = TitleFont(),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ShelfInkDark,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = if (isMulti) {
+                                    AppStrings.deleteSagaWarning(saga.rootStory.title, saga.chapterCount)
+                                } else {
+                                    AppStrings.deleteStoryWarning(saga.rootStory.title)
+                                },
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ShelfInkMuted,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 20.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(22.dp))
+
+                            // Primary: Cancel (Safer for TV remote)
+                            Surface(
+                                onClick = { sagaToDelete = null },
+                                shape = RoundedCornerShape(50.dp),
+                                color = Color.White,
+                                border = BorderStroke(1.5.dp, ShelfCardBorder),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .focusRequester(cancelFocusRequester)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(50.dp),
+                                        focusedScale = 1.05f,
+                                        onClick = { sagaToDelete = null }
+                                    )
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = AppStrings.cancel,
+                                        fontFamily = TitleFont(),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ShelfInkDark
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Secondary: Confirm Delete
+                            val onDeleteConfirmed = {
+                                PlatformAudioService.playSfx(SoundEffect.POP)
+                                StoryRepository.deleteSaga(saga.sagaId)
+                                sagaToDelete = null
+                            }
+                            Surface(
+                                onClick = onDeleteConfirmed,
+                                shape = RoundedCornerShape(50.dp),
+                                color = ShelfCoral,
+                                shadowElevation = 3.dp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(50.dp),
+                                        focusedScale = 1.05f,
+                                        onClick = onDeleteConfirmed
+                                    )
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = AppStrings.confirmDelete,
+                                        fontFamily = TitleFont(),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
                     }
-                }
-            }
         }
     }
 
@@ -263,16 +284,19 @@ fun MyStoriesScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
+                        val onBack = {
+                            PlatformAudioService.playSfx(SoundEffect.POP)
+                            onBackClick()
+                        }
                         Surface(
-                            onClick = {
-                                PlatformAudioService.playSfx(SoundEffect.POP)
-                                onBackClick()
-                            },
+                            onClick = onBack,
                             shape = CircleShape,
                             color = Color.White,
                             border = BorderStroke(1.5.dp, ShelfCardBorder),
                             shadowElevation = 2.dp,
-                            modifier = Modifier.size(42.dp)
+                            modifier = Modifier
+                                .size(42.dp)
+                                .tvFocusable(shape = CircleShape, focusedScale = 1.08f, onClick = onBack)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
@@ -568,7 +592,11 @@ private fun BookCoverItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.72f)
-                .clickable { onClick() }
+                .tvFocusable(
+                    shape = bookShape,
+                    focusedScale = 1.06f,
+                    onClick = onClick
+                )
         ) {
             // =================================================================
             // LAYER 1 (UNDERNEATH): First Inside Page of the Story
@@ -885,6 +913,11 @@ private fun AddBookPlaceholder(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.72f)
+                .tvFocusable(
+                    shape = bookShape,
+                    focusedScale = 1.06f,
+                    onClick = onClick
+                )
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

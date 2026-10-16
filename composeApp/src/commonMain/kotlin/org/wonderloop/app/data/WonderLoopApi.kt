@@ -21,8 +21,8 @@ import org.wonderloop.app.platform.PlatformStorage
 class BackendOfflineException(message: String) : Exception(message)
 
 class WonderLoopApi(
-    // Default to LAN IP or localhost
-    var baseUrl: String = "http://localhost:3000"
+    // Default to local Wi-Fi LAN IP for physical Fire TV Stick 4K or emulator fallback
+    var baseUrl: String = "http://192.168.0.35:3000"
 ) {
     var appUserId: String = getOrCreateAppUserId()
     private val appSecretKey: String = "change-me-to-a-long-random-secret"
@@ -32,6 +32,21 @@ class WonderLoopApi(
 
     fun resetOnlineStateForCheck() {
         isOnline = null
+    }
+
+    fun updateCustomBackendUrl(newUrl: String) {
+        val normalized = newUrl.trim().trimEnd('/').let {
+            if (it.isNotBlank() && !it.startsWith("http://") && !it.startsWith("https://")) {
+                if (it.contains(":")) "http://$it" else "http://$it:3000"
+            } else {
+                it
+            }
+        }
+        if (normalized.isNotBlank()) {
+            PlatformStorage.saveString("remote_backend_url", normalized)
+            baseUrl = normalized
+            isOnline = null
+        }
     }
 
     private val client = HttpClient {
@@ -87,9 +102,9 @@ class WonderLoopApi(
         val candidates = buildList {
             if (savedRemote.isNotBlank()) add(savedRemote.trimEnd('/'))
             if (baseUrl.isNotBlank()) add(baseUrl.trimEnd('/'))
-            add("http://localhost:3000")
             add("http://192.168.0.35:3000")
             add("http://10.0.2.2:3000")
+            add("http://localhost:3000")
         }.distinct()
 
         for (candidate in candidates) {
@@ -208,6 +223,46 @@ class WonderLoopApi(
             header("X-WonderLoop-Key", appSecretKey)
             header("X-User-Id", userId)
             setBody(RedeemCodeRequest(userId, code))
+        }.body()
+    }
+
+    /**
+     * Creates a new QR pairing session on the backend for Fire TV -> Mobile drawing upload.
+     */
+    suspend fun createTvSession(language: String = "es"): TvSessionResponse {
+        if (isOnline != true) {
+            val reconnected = checkHealth()
+            if (!reconnected) {
+                throw BackendOfflineException("Backend unreachable across all candidate URLs")
+            }
+        }
+        val response: TvSessionResponse = client.post("$baseUrl/api/tv-session") {
+            contentType(ContentType.Application.Json)
+            header("X-WonderLoop-Key", appSecretKey)
+            header("X-User-Id", appUserId)
+            timeout {
+                connectTimeoutMillis = 3000
+                requestTimeoutMillis = 6000
+            }
+            setBody(CreateTvSessionRequest(language = language))
+        }.body()
+        if (response.success) {
+            isOnline = true
+        }
+        return response
+    }
+
+    /**
+     * Polls the status of an active QR pairing session every ~1.2s from the Fire TV screen.
+     */
+    suspend fun pollTvSession(sessionId: String): TvSessionStatusResponse {
+        return client.get("$baseUrl/api/tv-session/$sessionId") {
+            header("X-WonderLoop-Key", appSecretKey)
+            header("X-User-Id", appUserId)
+            timeout {
+                connectTimeoutMillis = 2500
+                requestTimeoutMillis = 6000
+            }
         }.body()
     }
 }

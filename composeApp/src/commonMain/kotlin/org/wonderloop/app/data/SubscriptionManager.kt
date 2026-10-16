@@ -30,20 +30,21 @@ object SubscriptionManager {
     private const val KEY_LAST_GRANT_MS = "sub_last_grant_ms"
     private const val KEY_DAILY_LIMIT = "daily_story_limit"
     private const val THIRTY_DAYS_MS = 30L * 24 * 60 * 60 * 1000
-    val ALLOWED_DAILY_LIMITS = listOf(2, 3, 5)
+    val ALLOWED_DAILY_LIMITS = listOf(2, 3, 5, 99)
 
-    private val _availableStories = mutableIntStateOf(3)
+    // Amazon Fire TV Hackathon Mode: Unlimited stories & full access unlocked by default
+    private val _availableStories = mutableIntStateOf(999)
     val availableStories: State<Int> get() = _availableStories
 
-    private val _dailyLimit = mutableIntStateOf(2)
+    private val _dailyLimit = mutableIntStateOf(99)
     val dailyLimit: State<Int> get() = _dailyLimit
 
     private val _dailyUsageRevision = mutableIntStateOf(0)
 
-    private val _activePlan = mutableStateOf(SubscriptionPlan.FREE)
+    private val _activePlan = mutableStateOf(SubscriptionPlan.STAR_ANNUAL)
     val activePlan: State<SubscriptionPlan> get() = _activePlan
 
-    val isPremium: Boolean get() = _activePlan.value != SubscriptionPlan.FREE
+    val isPremium: Boolean get() = true
 
     private var isInitialized = false
 
@@ -51,37 +52,15 @@ object SubscriptionManager {
         if (isInitialized) return
         isInitialized = true
 
-        val savedDaily = PlatformStorage.getInt(KEY_DAILY_LIMIT, 2)
-        _dailyLimit.intValue = if (savedDaily in ALLOWED_DAILY_LIMITS) savedDaily else 2
-
-        val wasInitialized = PlatformStorage.getBoolean(KEY_INITIALIZED, false)
-
-        if (!wasInitialized) {
-            // First time installation: grant 3 welcome stories
-            val legacyPremium = PlatformStorage.getBoolean("is_premium", false)
-            if (legacyPremium) {
-                _activePlan.value = SubscriptionPlan.STAR_ANNUAL
-                _availableStories.intValue = 15
-                PlatformStorage.saveString(KEY_ACTIVE_PLAN_ID, SubscriptionPlan.STAR_ANNUAL.id)
-            } else {
-                _activePlan.value = SubscriptionPlan.FREE
-                _availableStories.intValue = 3
-                PlatformStorage.saveString(KEY_ACTIVE_PLAN_ID, SubscriptionPlan.FREE.id)
-            }
-            PlatformStorage.saveInt(KEY_AVAILABLE_STORIES, _availableStories.intValue)
-            PlatformStorage.saveLong(KEY_LAST_GRANT_MS, PlatformStorage.currentTimeMillis())
-            PlatformStorage.saveBoolean(KEY_INITIALIZED, true)
-            println("🌟 [SubscriptionManager] First-time setup complete: ${_availableStories.intValue} stories granted. Plan: ${_activePlan.value}")
-        } else {
-            // Load saved subscription state
-            val planId = PlatformStorage.getString(KEY_ACTIVE_PLAN_ID, SubscriptionPlan.FREE.id)
-            _activePlan.value = SubscriptionPlan.fromId(planId)
-            _availableStories.intValue = PlatformStorage.getInt(KEY_AVAILABLE_STORIES, 3)
-
-            // Check 30-day renewal / rollover cycle
-            checkMonthlyRolloverGrant()
-            println("🌟 [SubscriptionManager] Loaded active plan: ${_activePlan.value}, balance: ${_availableStories.intValue} stories, dailyLimit: ${_dailyLimit.intValue}")
-        }
+        // Ensure unlimited access on Fire TV Stick 4K and emulator for Amazon Hackathon evaluation
+        _activePlan.value = SubscriptionPlan.STAR_ANNUAL
+        _availableStories.intValue = maxOf(PlatformStorage.getInt(KEY_AVAILABLE_STORIES, 999), 999)
+        _dailyLimit.intValue = 99
+        PlatformStorage.saveString(KEY_ACTIVE_PLAN_ID, SubscriptionPlan.STAR_ANNUAL.id)
+        PlatformStorage.saveInt(KEY_AVAILABLE_STORIES, _availableStories.intValue)
+        PlatformStorage.saveBoolean("is_premium", true)
+        PlatformStorage.saveBoolean(KEY_INITIALIZED, true)
+        println("🌟 [SubscriptionManager] WonderLoop TV Hackathon Mode active: ${_availableStories.intValue} stories unlocked. Plan: ${_activePlan.value}")
     }
 
     private fun checkMonthlyRolloverGrant() {
