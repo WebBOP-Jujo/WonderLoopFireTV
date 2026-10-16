@@ -161,9 +161,7 @@ fun MyCharactersScreen(
                     color = Color.White,
                     border = BorderStroke(1.5.dp, BoardCardBorder),
                     shadowElevation = 2.dp,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .tvFocusable(shape = CircleShape, focusedScale = 1.08f, onClick = onBack)
+                    modifier = Modifier.size(42.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
@@ -632,29 +630,29 @@ private fun PinnedDrawingSheet(
                         PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
                         onOpenStory(firstStory)
                     }
-                    Button(
-                        onClick = onReadFirstStory,
+                    Surface(
                         shape = RoundedCornerShape(50.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = BoardCoral,
-                            contentColor = Color.White
-                        ),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+                        color = BoardCoral,
+                        shadowElevation = 2.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(34.dp)
                             .tvFocusable(shape = RoundedCornerShape(50.dp), onClick = onReadFirstStory)
                     ) {
-                        Text(
-                            text = AppStrings.readStoryButton(stories.size),
-                            fontFamily = TitleFont(),
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = AppStrings.readStoryButton(stories.size),
+                                fontFamily = TitleFont(),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }

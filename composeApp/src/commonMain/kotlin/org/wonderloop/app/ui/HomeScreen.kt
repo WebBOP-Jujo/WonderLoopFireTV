@@ -807,7 +807,7 @@ fun HomeScreen(
                                     val heroName = displayStory?.character?.name?.ifBlank { "Grisín" } ?: "Grisín"
                                     Text(
                                         text = "✨ $heroName · $pageText",
-                                        fontSize = 12.sp,
+                                        fontSize = 13.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = TvInkMuted
                                     )
@@ -829,34 +829,21 @@ fun HomeScreen(
                                         )
                                     }
 
-                                    // Button: Seguir (.btn)
+                                    // Visual affordance: Seguir (.btn) - Non-focusable inside focusable card
                                     Surface(
                                         shape = RoundedCornerShape(18.dp),
                                         color = TvCoral,
-                                        modifier = Modifier
-                                            .height(34.dp)
-                                            .tvFocusable(
-                                                shape = RoundedCornerShape(18.dp),
-                                                focusedScale = 1.08f,
-                                                onClick = {
-                                                    PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                                    if (displayStory != null) {
-                                                        onOpenStory(displayStory)
-                                                    } else {
-                                                        onNewAdventureClick()
-                                                    }
-                                                }
-                                            )
+                                        modifier = Modifier.height(34.dp)
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                                             modifier = Modifier.padding(horizontal = 16.dp)
                                         ) {
-                                            Text(text = "▶", fontSize = 11.sp, color = Color.White)
+                                            Text(text = "▶", fontSize = 12.sp, color = Color.White)
                                             Text(
                                                 text = "Seguir",
-                                                fontSize = 13.sp,
+                                                fontSize = 13.5.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = Color.White
                                             )

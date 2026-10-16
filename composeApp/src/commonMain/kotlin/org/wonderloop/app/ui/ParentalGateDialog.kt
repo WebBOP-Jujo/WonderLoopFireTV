@@ -239,7 +239,6 @@ fun ParentalGateDialog(
 
                     options.forEachIndexed { index, option ->
                         Surface(
-                            onClick = { selectAnswer(option) },
                             shape = RoundedCornerShape(18.dp),
                             color = Color(0xFFFFFBF9),
                             border = BorderStroke(1.5.dp, Color(0xFFE2DCEB)),

@@ -169,7 +169,6 @@ fun MyStoriesScreen(
 
                             // Primary: Cancel (Safer for TV remote)
                             Surface(
-                                onClick = { sagaToDelete = null },
                                 shape = RoundedCornerShape(50.dp),
                                 color = Color.White,
                                 border = BorderStroke(1.5.dp, ShelfCardBorder),
@@ -206,7 +205,6 @@ fun MyStoriesScreen(
                                 sagaToDelete = null
                             }
                             Surface(
-                                onClick = onDeleteConfirmed,
                                 shape = RoundedCornerShape(50.dp),
                                 color = ShelfCoral,
                                 shadowElevation = 3.dp,
@@ -294,9 +292,7 @@ fun MyStoriesScreen(
                             color = Color.White,
                             border = BorderStroke(1.5.dp, ShelfCardBorder),
                             shadowElevation = 2.dp,
-                            modifier = Modifier
-                                .size(42.dp)
-                                .tvFocusable(shape = CircleShape, focusedScale = 1.08f, onClick = onBack)
+                            modifier = Modifier.size(42.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(

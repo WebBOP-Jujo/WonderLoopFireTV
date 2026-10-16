@@ -90,7 +90,6 @@ fun App(
             var parentalGateOnSuccess by remember { mutableStateOf<(() -> Unit)?>(null) }
             var showDailyLimitDialog by remember { mutableStateOf(false) }
             var dailyLimitHeroName by remember { mutableStateOf<String?>(null) }
-            var showExitConfirmDialog by remember { mutableStateOf(false) }
 
             fun tryStartAdventure(sagaHeroName: String? = null, onProceed: () -> Unit) {
                 if (!SubscriptionManager.canCreateStory()) {
@@ -106,10 +105,6 @@ fun App(
             }
 
             fun navigateBack() {
-                if (showExitConfirmDialog) {
-                    showExitConfirmDialog = false
-                    return
-                }
                 if (showDailyLimitDialog) {
                     showDailyLimitDialog = false
                     dailyLimitHeroName = null
@@ -121,8 +116,9 @@ fun App(
                     parentalGateOnSuccess = null
                     return
                 }
+                // Fire TV Guideline: BACK from root destinations must exit the app to TV launcher directly without a confirmation dialog
                 if (currentScreen is Screen.Home || currentScreen is Screen.Splash || (currentScreen is Screen.ProfilePicker && !currentScreen.canGoBack) || screenStack.size <= 1) {
-                    showExitConfirmDialog = true
+                    onExitApp()
                 } else {
                     isBackNav = true
                     screenStack = screenStack.dropLast(1)
@@ -132,134 +128,6 @@ fun App(
             // Global Android Back Button Interception
             PlatformBackHandler(enabled = true) {
                 navigateBack()
-            }
-
-            // Exit Confirmation Dialog (New Design)
-            if (showExitConfirmDialog) {
-                Dialog(
-                    onDismissRequest = { showExitConfirmDialog = false },
-                    properties = DialogProperties(usePlatformDefaultWidth = false)
-                ) {
-                    val stayFocusRequester = remember { FocusRequester() }
-                    LaunchedEffect(Unit) {
-                        try { stayFocusRequester.requestFocus() } catch (_: Exception) {}
-                    }
-                    Card(
-                        shape = RoundedCornerShape(28.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
-                        modifier = Modifier.width(480.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 28.dp, vertical = 26.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFFFF1CF)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = "👋", fontSize = 34.sp)
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            Text(
-                                text = AppStrings.exitDialogTitle,
-                                fontFamily = TitleFont(),
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF2B2340),
-                                textAlign = TextAlign.Center
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Text(
-                                text = AppStrings.exitDialogMessage,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF6B6480),
-                                textAlign = TextAlign.Center,
-                                lineHeight = 20.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(22.dp))
-
-                            // Primary: Stay in the app
-                            Surface(
-                                onClick = { showExitConfirmDialog = false },
-                                shape = RoundedCornerShape(50.dp),
-                                color = Color(0xFFD9384A),
-                                shadowElevation = 4.dp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .focusRequester(stayFocusRequester)
-                                    .tvFocusable(
-                                        shape = RoundedCornerShape(50.dp),
-                                        focusedScale = 1.05f,
-                                        onClick = { showExitConfirmDialog = false }
-                                    )
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "${AppStrings.exitDialogStay} ✨",
-                                        fontFamily = TitleFont(),
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Secondary: Confirm Exit
-                            Surface(
-                                onClick = {
-                                    showExitConfirmDialog = false
-                                    onExitApp()
-                                },
-                                shape = RoundedCornerShape(50.dp),
-                                color = Color.White,
-                                border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                                    .tvFocusable(
-                                        shape = RoundedCornerShape(50.dp),
-                                        focusedScale = 1.05f,
-                                        onClick = {
-                                            showExitConfirmDialog = false
-                                            onExitApp()
-                                        }
-                                    )
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = AppStrings.exitDialogConfirm,
-                                        fontFamily = TitleFont(),
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF6B6480)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             // Load saved state and check backend health on launch without blocking UI animations

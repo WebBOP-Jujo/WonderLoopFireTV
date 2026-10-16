@@ -300,7 +300,11 @@ fun StoryReaderScreen(
     }
 
     DisposableEffect(Unit) {
+        PlatformAudioService.setOnAudioCompletedListener {
+            isPlayingAudio = false
+        }
         onDispose {
+            PlatformAudioService.setOnAudioCompletedListener(null)
             PlatformAudioService.stop()
         }
     }
@@ -329,19 +333,6 @@ fun StoryReaderScreen(
                     PlatformAudioService.stop()
                     isPlayingAudio = false
                 }
-            }
-        }
-    }
-
-    LaunchedEffect(isPlayingAudio, pagerState.currentPage) {
-        if (isPlayingAudio) {
-            delay(750)
-            while (isPlayingAudio) {
-                if (!PlatformAudioService.isSpeaking()) {
-                    isPlayingAudio = false
-                    break
-                }
-                delay(350)
             }
         }
     }

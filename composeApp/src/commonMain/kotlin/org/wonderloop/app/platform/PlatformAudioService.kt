@@ -17,4 +17,5 @@ expect object PlatformAudioService {
     fun setSfxEnabled(enabled: Boolean)
     fun getVoiceStyle(): String
     fun setVoiceStyle(style: String)
+    fun setOnAudioCompletedListener(listener: (() -> Unit)?)
 }

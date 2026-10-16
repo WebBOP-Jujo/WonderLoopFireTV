@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.onesignal.OneSignal
 import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.PurchasesConfiguration
 
@@ -22,13 +21,8 @@ class MainActivity : ComponentActivity() {
             App(onExitApp = { finish() })
         }
 
-        // Initialize 3rd-party SDKs off the critical first-frame path
+        // Initialize billing off the critical first-frame path
         window.decorView.post {
-            try {
-                OneSignal.initWithContext(this, "onesignal_app_id_placeholder")
-            } catch (e: Exception) {
-                println("⚠️ OneSignal init skipped in development: ${e.message}")
-            }
             org.wonderloop.app.platform.PlatformBillingService.configureIfNeeded(this)
         }
     }

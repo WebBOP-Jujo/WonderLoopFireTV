@@ -16,6 +16,19 @@ actual object PlatformAudioService {
     private var tts: TextToSpeech? = null
     private var mediaPlayer: android.media.MediaPlayer? = null
     private var isInitialized = false
+    @Volatile
+    private var isTtsSpeaking = false
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var onAudioCompletedListener: (() -> Unit)? = null
+
+    actual fun setOnAudioCompletedListener(listener: (() -> Unit)?) {
+        onAudioCompletedListener = listener
+    }
+
+    private val staticTracks = java.util.concurrent.ConcurrentHashMap<SoundEffect, AudioTrack>()
+    private val sfxExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "WonderLoop-SfxWorker").apply { isDaemon = true }
+    }
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -30,10 +43,61 @@ actual object PlatformAudioService {
                     }
                     tts?.setPitch(1.05f) // Slightly warmer, friendlier pitch for children
                     tts?.setSpeechRate(0.92f) // Slightly slower pacing for comfortable storybook reading
+                    tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {
+                            isTtsSpeaking = true
+                        }
+                        override fun onDone(utteranceId: String?) {
+                            isTtsSpeaking = false
+                            mainHandler.post { onAudioCompletedListener?.invoke() }
+                        }
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) {
+                            isTtsSpeaking = false
+                            mainHandler.post { onAudioCompletedListener?.invoke() }
+                        }
+                    })
                     isInitialized = true
                     println("🔊 [PlatformAudioService] Native Spanish Text-to-Speech initialized successfully")
                 } else {
                     println("⚠️ [PlatformAudioService] TTS initialization failed with status: $status")
+                }
+            }
+
+            // Warm up static SFX AudioTracks in background worker to eliminate all runtime thread churn
+            sfxExecutor.execute {
+                try {
+                    val sampleRate = 22050
+                    for (effect in SoundEffect.values()) {
+                        val pcmData = when (effect) {
+                            SoundEffect.POP -> generatePopPcm(sampleRate)
+                            SoundEffect.MAGIC_CHIME -> generateMagicChimePcm(sampleRate)
+                            SoundEffect.PAGE_TURN -> generatePageTurnPcm(sampleRate)
+                            SoundEffect.CELEBRATION -> generateCelebrationPcm(sampleRate)
+                        }
+                        val track = AudioTrack.Builder()
+                            .setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                    .build()
+                            )
+                            .setAudioFormat(
+                                AudioFormat.Builder()
+                                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                    .setSampleRate(sampleRate)
+                                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                    .build()
+                            )
+                            .setBufferSizeInBytes(pcmData.size * 2)
+                            .setTransferMode(AudioTrack.MODE_STATIC)
+                            .build()
+                        track.write(pcmData, 0, pcmData.size)
+                        staticTracks[effect] = track
+                    }
+                    android.util.Log.d("WonderLoopAudio", "✨ Pre-cached ${staticTracks.size} zero-allocation static SFX tracks")
+                } catch (e: Throwable) {
+                    android.util.Log.w("WonderLoopAudio", "Could not pre-cache static SFX tracks: ${e.message}")
                 }
             }
         } catch (e: Exception) {
@@ -69,6 +133,9 @@ actual object PlatformAudioService {
                     mediaPlayer = android.media.MediaPlayer().apply {
                         setDataSource(fis.fd)
                         prepare()
+                        setOnCompletionListener {
+                            mainHandler.post { onAudioCompletedListener?.invoke() }
+                        }
                         start()
                     }
                 }
@@ -96,6 +163,7 @@ actual object PlatformAudioService {
                         try {
                             tempFile.delete()
                         } catch (_: Exception) {}
+                        mainHandler.post { onAudioCompletedListener?.invoke() }
                     }
                     start()
                 }
@@ -174,7 +242,7 @@ actual object PlatformAudioService {
 
     actual fun isSpeaking(): Boolean {
         return try {
-            (mediaPlayer?.isPlaying == true) || (tts?.isSpeaking == true)
+            (mediaPlayer?.isPlaying == true) || isTtsSpeaking || (tts?.isSpeaking == true)
         } catch (_: Exception) {
             false
         }
@@ -182,52 +250,53 @@ actual object PlatformAudioService {
 
     actual fun playSfx(effect: SoundEffect) {
         if (!isSfxEnabled()) return
-        thread(isDaemon = true, name = "SfxPlayerThread") {
-            try {
-                val sampleRate = 22050
-                val pcmData: ShortArray = when (effect) {
-                    SoundEffect.POP -> generatePopPcm(sampleRate)
-                    SoundEffect.MAGIC_CHIME -> generateMagicChimePcm(sampleRate)
-                    SoundEffect.PAGE_TURN -> generatePageTurnPcm(sampleRate)
-                    SoundEffect.CELEBRATION -> generateCelebrationPcm(sampleRate)
+        val staticTrack = staticTracks[effect]
+        if (staticTrack != null) {
+            sfxExecutor.execute {
+                try {
+                    synchronized(staticTrack) {
+                        staticTrack.stop()
+                        staticTrack.reloadStaticData()
+                        staticTrack.play()
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.w("WonderLoopAudio", "Error replaying static SFX $effect: ${e.message}")
                 }
-
-                val minBuf = AudioTrack.getMinBufferSize(
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                )
-                val bufferSize = maxOf(pcmData.size * 2, if (minBuf > 0) minBuf * 2 else 4096)
-
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(sampleRate)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                            .build()
-                    )
-                    .setBufferSizeInBytes(bufferSize)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .build()
-
-                track.play()
-                val written = track.write(pcmData, 0, pcmData.size)
-                android.util.Log.d("WonderLoopAudio", "SFX $effect: played $written / ${pcmData.size} samples on USAGE_MEDIA")
-
-                // Wait for playback and release track
-                val durationMs = (pcmData.size * 1000L) / sampleRate
-                Thread.sleep(durationMs + 60L)
-                track.stop()
-                track.release()
-            } catch (e: Exception) {
-                android.util.Log.e("WonderLoopAudio", "Error playing SFX $effect: ${e.message}", e)
+            }
+        } else {
+            // Immediate background fallback if called before pre-cache completes
+            sfxExecutor.execute {
+                try {
+                    val sampleRate = 22050
+                    val pcmData: ShortArray = when (effect) {
+                        SoundEffect.POP -> generatePopPcm(sampleRate)
+                        SoundEffect.MAGIC_CHIME -> generateMagicChimePcm(sampleRate)
+                        SoundEffect.PAGE_TURN -> generatePageTurnPcm(sampleRate)
+                        SoundEffect.CELEBRATION -> generateCelebrationPcm(sampleRate)
+                    }
+                    val track = AudioTrack.Builder()
+                        .setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build()
+                        )
+                        .setAudioFormat(
+                            AudioFormat.Builder()
+                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                .setSampleRate(sampleRate)
+                                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                .build()
+                        )
+                        .setBufferSizeInBytes(pcmData.size * 2)
+                        .setTransferMode(AudioTrack.MODE_STATIC)
+                        .build()
+                    track.write(pcmData, 0, pcmData.size)
+                    staticTracks[effect] = track
+                    track.play()
+                } catch (e: Throwable) {
+                    android.util.Log.e("WonderLoopAudio", "Fallback error playing SFX $effect: ${e.message}")
+                }
             }
         }
     }
@@ -311,6 +380,18 @@ actual object PlatformAudioService {
 
     fun shutdown() {
         stop()
+        try {
+            staticTracks.values.forEach { track ->
+                try {
+                    track.stop()
+                    track.release()
+                } catch (_: Throwable) {}
+            }
+            staticTracks.clear()
+        } catch (_: Throwable) {}
+        try {
+            sfxExecutor.shutdown()
+        } catch (_: Throwable) {}
         try {
             tts?.shutdown()
             tts = null

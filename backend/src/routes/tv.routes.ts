@@ -17,6 +17,7 @@ export interface TvSession {
 }
 
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_SESSIONS = 500; // Cap concurrent memory footprint
 const sessions = new Map<string, TvSession>();
 
 // Periodic cleanup of expired sessions every 2 minutes
@@ -142,6 +143,20 @@ export function createTvSessionApiRouter(): Router {
 
     const { sessionId, shortCode } = generateSessionCodes();
     const now = Date.now();
+
+    // Enforce max capacity and evict expired or oldest session if map is full
+    if (sessions.size >= MAX_SESSIONS) {
+      for (const [id, s] of sessions.entries()) {
+        if (s.expiresAt <= now || s.status === 'ready') {
+          sessions.delete(id);
+        }
+      }
+      if (sessions.size >= MAX_SESSIONS) {
+        const oldestKey = sessions.keys().next().value;
+        if (oldestKey) sessions.delete(oldestKey);
+      }
+    }
+
     const session: TvSession = {
       sessionId,
       shortCode,

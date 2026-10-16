@@ -36,7 +36,6 @@ kotlin {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.revenuecat.purchases)
-            implementation(libs.onesignal)
             implementation("com.google.zxing:core:3.5.3")
         }
     }

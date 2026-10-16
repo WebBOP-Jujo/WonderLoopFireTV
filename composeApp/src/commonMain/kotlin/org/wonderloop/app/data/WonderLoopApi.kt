@@ -52,7 +52,7 @@ class WonderLoopApi(
     private val client = HttpClient {
         install(HttpTimeout) {
             requestTimeoutMillis = 180000
-            connectTimeoutMillis = 3000
+            connectTimeoutMillis = 10000
             socketTimeoutMillis = 180000
         }
         install(ContentNegotiation) {

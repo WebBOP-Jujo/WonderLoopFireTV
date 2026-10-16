@@ -1,7 +1,9 @@
 package org.wonderloop.app.data
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 data class CharacterProfile(
     val name: String,
@@ -13,6 +15,7 @@ data class CharacterProfile(
     val reinterpretedImageUrl: String? = null
 )
 
+@Immutable
 @Serializable
 data class StoryScene(
     val pageNumber: Int,
@@ -22,6 +25,7 @@ data class StoryScene(
     val audioBase64: String? = null
 )
 
+@Immutable
 @Serializable
 data class CreativeChallenge(
     val prompt: String,
@@ -29,6 +33,7 @@ data class CreativeChallenge(
     val encouragement: String = ""
 )
 
+@Immutable
 @Serializable
 data class StoryContinuationContext(
     val previousStoryId: String,
@@ -46,6 +51,7 @@ data class StoryContinuationContext(
     val previousHeroName: String get() = effectiveHero.name
 }
 
+@Immutable
 @Serializable
 data class ChildProfile(
     val id: String,
@@ -58,6 +64,7 @@ data class ChildProfile(
     val preferredLanguage: String? = null
 )
 
+@Immutable
 @Serializable
 data class FullStoryResponse(
     val storyId: String,
@@ -83,6 +90,7 @@ data class FullStoryResponse(
     val sagaHero: CharacterProfile get() = continuation?.originalHero ?: continuation?.previousCharacter ?: character
 }
 
+@Immutable
 @Serializable
 data class QuotaResponse(
     val success: Boolean,
@@ -142,6 +150,7 @@ data class CreateTvSessionRequest(
     val language: String = "es"
 )
 
+@Immutable
 @Serializable
 data class TvSessionResponse(
     val success: Boolean = true,
@@ -152,6 +161,7 @@ data class TvSessionResponse(
     val expiresInSeconds: Int = 900
 )
 
+@Immutable
 @Serializable
 data class TvSessionStatusResponse(
     val success: Boolean = true,
