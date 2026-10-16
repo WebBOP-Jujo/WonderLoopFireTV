@@ -396,7 +396,6 @@ fun StoryReaderScreen(
                                 try { keepReadingFocusRequester.requestFocus() } catch (_: Exception) {}
                             }
                             Surface(
-                                onClick = { showExitDialog = false },
                                 shape = RoundedCornerShape(50.dp),
                                 color = ReaderCoral,
                                 shadowElevation = 4.dp,
@@ -427,12 +426,12 @@ fun StoryReaderScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             // Secondary: Exit to Home / Bookshelf
+                            val onExitReader = {
+                                showExitDialog = false
+                                PlatformAudioService.stop()
+                                onCloseClick()
+                            }
                             Surface(
-                                onClick = {
-                                    showExitDialog = false
-                                    PlatformAudioService.stop()
-                                    onCloseClick()
-                                },
                                 shape = RoundedCornerShape(50.dp),
                                 color = Color.White,
                                 border = BorderStroke(1.5.dp, ReaderCardBorder),
@@ -442,11 +441,7 @@ fun StoryReaderScreen(
                                     .tvFocusable(
                                         shape = RoundedCornerShape(50.dp),
                                         focusedScale = 1.05f,
-                                        onClick = {
-                                            showExitDialog = false
-                                            PlatformAudioService.stop()
-                                            onCloseClick()
-                                        }
+                                        onClick = onExitReader
                                     )
                             ) {
                                 Box(
@@ -546,7 +541,6 @@ fun StoryReaderScreen(
             ) {
                 // Close button: [✕ Salir]
                 Surface(
-                    onClick = { showExitDialog = true },
                     shape = RoundedCornerShape(50.dp),
                     color = Color.White,
                     border = BorderStroke(1.5.dp, ReaderCardBorder),
@@ -789,8 +783,6 @@ fun StoryReaderScreen(
                         }
                     }
                     Surface(
-                        onClick = onGoPrev,
-                        enabled = canGoPrev,
                         shape = RoundedCornerShape(50.dp),
                         color = if (canGoPrev) Color.White else Color.White.copy(alpha = 0.4f),
                         border = BorderStroke(1.5.dp, if (canGoPrev) ReaderCardBorder else ReaderCardBorder.copy(alpha = 0.4f)),
@@ -846,7 +838,6 @@ fun StoryReaderScreen(
                             }
                         }
                         Surface(
-                            onClick = toggleAudio,
                             shape = RoundedCornerShape(50.dp),
                             color = if (isPlayingAudio) ReaderMintSoft else Color.White,
                             border = BorderStroke(
@@ -988,7 +979,6 @@ fun StoryReaderScreen(
                         (pages[pagerState.currentPage + 1] is SagaPage.ChallengePromptPage || pages[pagerState.currentPage + 1] is SagaPage.RetoSuperadoPage)
 
                     Surface(
-                        onClick = onGoNext,
                         shape = RoundedCornerShape(50.dp),
                         color = ReaderCoral,
                         shadowElevation = 3.dp,
