@@ -98,12 +98,12 @@ fun TvTopNavBar(
                     ) {
                         Text(
                             text = if (backendOnline == false) "🔴" else "🟢",
-                            fontSize = 10.sp
+                            fontSize = 13.sp
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = if (backendOnline == false) "Sin IA" else serverAddress.replace("http://", "").replace(":3000", ""),
-                            fontSize = 11.5.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = if (backendOnline == false) NavCoral else NavMint
                         )
@@ -176,7 +176,7 @@ fun TvTopNavBar(
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "▾", fontSize = 11.sp, color = NavInkMuted)
+                        Text(text = "▾", fontSize = 13.sp, color = NavInkMuted)
                     }
                 }
 

@@ -72,6 +72,27 @@ fun QrScanScreen(
     var showIpDialog by remember { mutableStateOf(false) }
     var customIpInput by remember { mutableStateOf(api.baseUrl.replace("http://", "").replace(":3000", "")) }
 
+    val retryFocusRequester = remember { FocusRequester() }
+    val dialogConfirmRequester = remember { FocusRequester() }
+
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            delay(120)
+            try {
+                retryFocusRequester.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
+
+    LaunchedEffect(showIpDialog) {
+        if (showIpDialog) {
+            delay(120)
+            try {
+                dialogConfirmRequester.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
+
     val coroutineScope = rememberCoroutineScope()
 
     // Pulse animation for live indicators
@@ -121,11 +142,14 @@ fun QrScanScreen(
         startSession()
     }
 
-    // Active polling loop while session is open
+    // Active polling loop while session is open (with timeout & expiry detection)
     LaunchedEffect(session?.sessionId) {
         val sId = session?.sessionId ?: return@LaunchedEffect
-        while (true) {
+        var pollCount = 0
+        val maxPolls = 400 // ~8 minutes of polling before automatic timeout
+        while (pollCount < maxPolls) {
             delay(1200)
+            pollCount++
             try {
                 val pollResult = api.pollTvSession(sId)
                 sessionStatus = pollResult.status
@@ -134,9 +158,24 @@ fun QrScanScreen(
                     onPhotoCaptured(pollResult.imageBase64, selectedArtStyle)
                     break
                 }
-            } catch (_: Exception) {
+                if (pollResult.expiresInSeconds <= 0) {
+                    sessionStatus = "expired"
+                    errorMessage = if (AppStrings.isEnglish) "QR session expired. Click Retry to generate a new code." else "La sesión QR ha caducado. Pulsa Reintentar para generar un nuevo código."
+                    break
+                }
+            } catch (e: Exception) {
+                val msg = e.message ?: ""
+                if (msg.contains("404") || msg.contains("SESSION_NOT_FOUND")) {
+                    sessionStatus = "expired"
+                    errorMessage = if (AppStrings.isEnglish) "QR session expired. Click Retry to generate a new code." else "La sesión QR ha caducado. Pulsa Reintentar para generar un nuevo código."
+                    break
+                }
                 // Ignore transient network poll blips
             }
+        }
+        if (pollCount >= maxPolls && sessionStatus != "ready") {
+            sessionStatus = "expired"
+            errorMessage = if (AppStrings.isEnglish) "Session timed out. Click Retry for a new QR." else "Tiempo de espera agotado. Pulsa Reintentar para generar un nuevo QR."
         }
     }
 
@@ -174,21 +213,43 @@ fun QrScanScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        showIpDialog = false
-                        api.updateCustomBackendUrl(customIpInput)
-                        startSession()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = QrCoral),
-                    shape = RoundedCornerShape(20.dp)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = QrCoral,
+                    modifier = Modifier
+                        .focusRequester(dialogConfirmRequester)
+                        .tvFocusable(
+                            shape = RoundedCornerShape(20.dp),
+                            focusBorderColor = TvFocusGold,
+                            onClick = {
+                                showIpDialog = false
+                                api.updateCustomBackendUrl(customIpInput)
+                                startSession()
+                            }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    Text(text = if (AppStrings.isEnglish) "Connect & Refresh" else "Conectar y Actualizar")
+                    Text(
+                        text = if (AppStrings.isEnglish) "Connect & Refresh" else "Conectar y Actualizar",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showIpDialog = false }) {
-                    Text(text = AppStrings.cancel, color = QrInkMuted)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Transparent,
+                    modifier = Modifier
+                        .tvFocusable(
+                            shape = RoundedCornerShape(20.dp),
+                            focusBorderColor = QrCoral,
+                            onClick = { showIpDialog = false }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Text(text = AppStrings.cancel, color = QrInkMuted, fontSize = 14.sp)
                 }
             },
             containerColor = Color.White,
@@ -332,17 +393,30 @@ fun QrScanScreen(
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         text = errorMessage ?: "No se pudo crear la sesión QR",
-                                        fontSize = 12.sp,
+                                        fontSize = 14.sp,
                                         color = QrCoral,
                                         textAlign = TextAlign.Center
                                     )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Button(
-                                        onClick = { startSession() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = QrCoral),
-                                        shape = RoundedCornerShape(50.dp)
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(50.dp),
+                                        color = QrCoral,
+                                        modifier = Modifier
+                                            .focusRequester(retryFocusRequester)
+                                            .tvFocusable(
+                                                shape = RoundedCornerShape(50.dp),
+                                                focusBorderColor = TvFocusGold,
+                                                focusedScale = 1.08f,
+                                                onClick = { startSession() }
+                                            )
+                                            .padding(horizontal = 24.dp, vertical = 10.dp)
                                     ) {
-                                        Text("Reintentar", fontSize = 12.sp)
+                                        Text(
+                                            text = "Reintentar",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
                                     }
                                 }
                             }

@@ -9,7 +9,15 @@ declare global {
   }
 }
 
-const EXPECTED_SECRET_KEY = process.env.APP_SECRET_KEY || 'change-me-to-a-long-random-secret';
+const CONFIGURED_SECRET = process.env.APP_SECRET_KEY?.trim();
+if (!CONFIGURED_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('🚨 [Security CRITICAL] APP_SECRET_KEY is not defined in production environment!');
+  } else {
+    console.warn('⚠️ [Security Notice] APP_SECRET_KEY is not set in .env. Using fallback development key.');
+  }
+}
+const EXPECTED_SECRET_KEY = CONFIGURED_SECRET || 'change-me-to-a-long-random-secret';
 
 /**
  * Middleware that authenticates incoming requests from the WonderLoop mobile application.

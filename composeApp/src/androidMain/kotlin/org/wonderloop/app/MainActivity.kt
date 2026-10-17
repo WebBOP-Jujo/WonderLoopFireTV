@@ -37,4 +37,9 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         org.wonderloop.app.platform.PlatformAudioService.stop()
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        org.wonderloop.app.platform.PlatformAudioService.shutdown()
+    }
 }

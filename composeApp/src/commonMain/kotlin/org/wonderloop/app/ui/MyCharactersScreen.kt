@@ -141,7 +141,7 @@ fun MyCharactersScreen(
                     )
                 )
             }
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(horizontal = 48.dp, vertical = 20.dp) // Fire TV 5% Safe Zone
     ) {
         // =================================================================
         // 1. TOP BAR: Circular Back · Fredoka Title · Mint Count Pill

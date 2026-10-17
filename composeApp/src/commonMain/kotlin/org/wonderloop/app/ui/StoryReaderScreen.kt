@@ -591,7 +591,7 @@ fun StoryReaderScreen(
                         ) {
                             Text(
                                 text = "🌟 ${AppStrings.sagaBadge(currentChapterNum).uppercase()}",
-                                fontSize = 11.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = ReaderCoral,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -938,7 +938,7 @@ fun StoryReaderScreen(
                             ) {
                                 Text(
                                     text = "★",
-                                    fontSize = 8.sp,
+                                    fontSize = 12.sp,
                                     color = if (isChallengeActive) Color.White else ReaderGoldText,
                                     fontWeight = FontWeight.ExtraBold
                                 )
@@ -961,7 +961,7 @@ fun StoryReaderScreen(
 
                     Text(
                         text = progressLabel,
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = ReaderInkMuted
                     )
@@ -1208,7 +1208,7 @@ private fun ScenePageContent(
                     ) {
                         Text(
                             text = "✨ ${page.sceneIndex + 1} / ${page.totalScenesInChapter}",
-                            fontSize = 11.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = ReaderInkDark,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -1336,7 +1336,7 @@ private fun RetoSuperadoPageContent(
                         ) {
                             Text(
                                 text = "🎉 ${AppStrings.challengeAlreadyCompletedTitle.uppercase()}",
-                                fontSize = 11.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = ReaderMint,
                                 letterSpacing = 0.5.sp,
@@ -1428,7 +1428,7 @@ private fun RetoSuperadoPageContent(
                                 Column {
                                     Text(
                                         text = if (AppStrings.isEnglish) "NEXT CHAPTER READY" else "SIGUIENTE CAPÍTULO LISTO",
-                                        fontSize = 10.sp,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = ReaderGoldText,
                                         letterSpacing = 0.5.sp
@@ -1527,7 +1527,7 @@ private fun RetoSuperadoPageContent(
                     ) {
                         Text(
                             text = "🎉 ${AppStrings.challengeAlreadyCompletedTitle.uppercase()}",
-                            fontSize = 11.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = ReaderMint,
                             letterSpacing = 0.5.sp,
@@ -1602,7 +1602,7 @@ private fun RetoSuperadoPageContent(
                             Column {
                                 Text(
                                     text = if (AppStrings.isEnglish) "NEXT CHAPTER READY" else "SIGUIENTE CAPÍTULO LISTO",
-                                    fontSize = 10.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = ReaderGoldText,
                                     letterSpacing = 0.5.sp
@@ -1738,7 +1738,7 @@ private fun ChallengePromptPageContent(
                         ) {
                             Text(
                                 text = if (AppStrings.isEnglish) "🎨 DRAWING MISSION · CH. $nextChapterNumber" else "🎨 MISIÓN DE DIBUJO · CAP. $nextChapterNumber",
-                                fontSize = 10.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = ReaderGoldText,
                                 letterSpacing = 0.5.sp,
@@ -1824,10 +1824,10 @@ private fun ChallengePromptPageContent(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = page.chapter.creativeChallenge.encouragement,
-                                        fontSize = 11.sp,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ReaderInkDark,
-                                        lineHeight = 15.sp,
+                                        lineHeight = 17.sp,
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
@@ -1881,7 +1881,7 @@ private fun ChallengePromptPageContent(
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = if (AppStrings.isEnglish) "1. Draw on paper" else "1. Dibuja en papel",
-                                        fontSize = 12.sp,
+                                        fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ReaderInkDark,
                                         textAlign = TextAlign.Center
@@ -1903,7 +1903,7 @@ private fun ChallengePromptPageContent(
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = if (AppStrings.isEnglish) "2. Scan with phone" else "2. Escanea con móvil",
-                                        fontSize = 12.sp,
+                                        fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ReaderInkDark,
                                         textAlign = TextAlign.Center
@@ -2099,7 +2099,7 @@ private fun ChallengePromptPageContent(
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = page.chapter.creativeChallenge.encouragement,
-                                            fontSize = 12.sp,
+                                            fontSize = 13.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = ReaderInkDark,
                                             lineHeight = 17.sp,
@@ -2132,7 +2132,7 @@ private fun ChallengePromptPageContent(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (AppStrings.isEnglish) "1. Draw on paper" else "1. Dibuja en papel",
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = ReaderInkDark,
                                     maxLines = 1,
@@ -2156,7 +2156,7 @@ private fun ChallengePromptPageContent(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (AppStrings.isEnglish) "2. Scan QR with phone" else "2. Escanea QR con móvil",
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = ReaderInkDark,
                                     maxLines = 1,

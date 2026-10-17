@@ -1,13 +1,42 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import { z } from 'zod';
 import { StoryOrchestratorService } from '../services/story.service.js';
 import { RevenueCatService } from '../services/revenuecat.service.js';
 import { authenticateApp } from '../middleware/auth.middleware.js';
 import { requireQuota } from '../middleware/quota.middleware.js';
 
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max image
-  storage: multer.memoryStorage()
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.has(file.mimetype.toLowerCase())) {
+      cb(null, true);
+    } else {
+      cb(new Error('INVALID_FILE_TYPE: Solo se admiten archivos de imagen (JPEG, PNG o WEBP).'));
+    }
+  }
+});
+
+const GenerateStorySchema = z.object({
+  character: z.object({
+    name: z.string().min(1, 'El personaje debe tener un nombre'),
+    species: z.string().optional().default('personaje mágico'),
+    primaryColors: z.array(z.string()).optional().default([]),
+    distinctiveFeatures: z.array(z.string()).optional().default([]),
+    personality: z.string().optional().default('amigable y curioso'),
+    reinterpretedImageUrl: z.string().optional(),
+    originalDrawingBase64: z.string().optional()
+  }),
+  childName: z.string().min(1, 'Falta el nombre del niño/a'),
+  childAge: z.union([z.number().int().min(1).max(18), z.string()]).transform((v) => Number(v)),
+  theme: z.string().optional(),
+  language: z.enum(['es', 'en']).optional().default('es'),
+  continuation: z.any().optional(),
+  voiceStyle: z.enum(['soft', 'normal', 'lively']).optional().default('soft'),
+  artStyle: z.enum(['watercolor', '3d_animation']).optional()
 });
 
 export function createStoryRouter(
@@ -47,11 +76,18 @@ export function createStoryRouter(
           buffer = req.file.buffer;
           mimeType = req.file.mimetype;
         } else if (req.body.imageBase64) {
-          const base64Data = req.body.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+          const rawBase64 = String(req.body.imageBase64).trim();
+          if (rawBase64.length > 7 * 1024 * 1024) {
+            res.status(400).json({ error: 'IMAGE_TOO_LARGE', message: 'La imagen excede el límite máximo permitido de 5MB.' });
+            return;
+          }
+          const base64Data = rawBase64.replace(/^data:image\/\w+;base64,/, '');
           buffer = Buffer.from(base64Data, 'base64');
-          if (req.body.mimeType) mimeType = req.body.mimeType;
+          if (req.body.mimeType && ALLOWED_MIME_TYPES.has(req.body.mimeType.toLowerCase())) {
+            mimeType = req.body.mimeType.toLowerCase();
+          }
         } else {
-          res.status(400).json({ error: 'Missing drawing image (file or imageBase64 required)' });
+          res.status(400).json({ error: 'MISSING_IMAGE', message: 'No se recibió ninguna imagen (archivo o imageBase64 requerido).' });
           return;
         }
 
@@ -59,8 +95,11 @@ export function createStoryRouter(
         const character = await orchestrator.analyzeDrawing(buffer, mimeType, artStyle);
         res.json({ success: true, character });
       } catch (error: any) {
-        console.error('Error in /analyze-drawing:', error);
-        res.status(500).json({ error: 'Failed to analyze drawing', details: error.message });
+        console.error('❌ [StoryRouter] Error in /analyze-drawing:', error);
+        res.status(500).json({
+          error: 'FAILED_TO_ANALYZE_DRAWING',
+          message: 'No se pudo analizar el dibujo en este momento. Inténtalo de nuevo.'
+        });
       }
     }
   );
@@ -70,36 +109,36 @@ export function createStoryRouter(
    */
   router.post('/generate', quotaGuard, async (req: Request, res: Response): Promise<void> => {
     try {
-      const { character, childName, childAge, theme, language, continuation, voiceStyle, artStyle } = req.body;
-
-      if (!character || !childName || !childAge) {
-        res.status(400).json({ error: 'Missing required parameters (character, childName, childAge)' });
+      const parseResult = GenerateStorySchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({
+          error: 'INVALID_REQUEST',
+          message: 'Parámetros de historia inválidos o incompletos',
+          issues: parseResult.error.errors.map((e) => e.message)
+        });
         return;
       }
 
-      const normalizedVoice = voiceStyle === 'normal' || voiceStyle === 'lively' ? voiceStyle : 'soft';
-      const normalizedArtStyle =
-        artStyle === '3d_animation'
-          ? '3d_animation'
-          : artStyle === 'watercolor'
-            ? 'watercolor'
-            : undefined;
+      const { character, childName, childAge, theme, language, continuation, voiceStyle, artStyle } = parseResult.data;
 
       const story = await orchestrator.createFullStory(
         character,
         childName,
         childAge,
         theme,
-        language === 'en' ? 'en' : 'es',
+        language,
         continuation,
-        normalizedVoice,
-        normalizedArtStyle
+        voiceStyle,
+        artStyle
       );
 
       res.json({ success: true, story });
     } catch (error: any) {
-      console.error('Error in /generate:', error);
-      res.status(500).json({ error: 'Failed to generate story', details: error.message });
+      console.error('❌ [StoryRouter] Error in /generate:', error);
+      res.status(500).json({
+        error: 'FAILED_TO_GENERATE_STORY',
+        message: 'No se pudo generar el cuento en este momento. Inténtalo de nuevo.'
+      });
     }
   });
 
@@ -119,17 +158,24 @@ export function createStoryRouter(
           buffer = req.file.buffer;
           mimeType = req.file.mimetype;
         } else if (req.body.imageBase64) {
-          const base64Data = req.body.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+          const rawBase64 = String(req.body.imageBase64).trim();
+          if (rawBase64.length > 7 * 1024 * 1024) {
+            res.status(400).json({ error: 'IMAGE_TOO_LARGE', message: 'La imagen excede el límite máximo permitido de 5MB.' });
+            return;
+          }
+          const base64Data = rawBase64.replace(/^data:image\/\w+;base64,/, '');
           buffer = Buffer.from(base64Data, 'base64');
-          if (req.body.mimeType) mimeType = req.body.mimeType;
+          if (req.body.mimeType && ALLOWED_MIME_TYPES.has(req.body.mimeType.toLowerCase())) {
+            mimeType = req.body.mimeType.toLowerCase();
+          }
         } else {
-          res.status(400).json({ error: 'Missing drawing image' });
+          res.status(400).json({ error: 'MISSING_IMAGE', message: 'No se recibió la imagen del dibujo.' });
           return;
         }
 
-        const childName = req.body.childName || 'Pequeño Explorador';
+        const childName = String(req.body.childName || 'Pequeño Explorador').trim();
         const childAge = Number(req.body.childAge) || 6;
-        const theme = req.body.theme;
+        const theme = req.body.theme ? String(req.body.theme).trim() : undefined;
         const language = req.body.language === 'en' ? 'en' : 'es';
         const normalizedVoice = req.body.voiceStyle === 'normal' || req.body.voiceStyle === 'lively' ? req.body.voiceStyle : 'soft';
         const normalizedArtStyle =
@@ -147,8 +193,11 @@ export function createStoryRouter(
 
         res.json({ success: true, story });
       } catch (error: any) {
-        console.error('Error in /create-from-drawing:', error);
-        res.status(500).json({ error: 'Failed to create story from drawing', details: error.message });
+        console.error('❌ [StoryRouter] Error in /create-from-drawing:', error);
+        res.status(500).json({
+          error: 'FAILED_TO_CREATE_STORY',
+          message: 'No se pudo crear el cuento a partir del dibujo. Inténtalo de nuevo.'
+        });
       }
     }
   );

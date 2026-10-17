@@ -136,8 +136,10 @@ actual object PlatformBillingService {
 
     actual fun purchasePlan(planId: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         try {
-            if (!Purchases.isConfigured) {
-                println("💳 [RevenueCat] SDK not configured with real key; simulating purchase for plan: $planId")
+            val currentKey = PlatformStorage.getString("revenuecat_api_key", "").trim()
+            val isTestKey = currentKey.isBlank() || currentKey.startsWith("test_")
+            if (!Purchases.isConfigured || isTestKey) {
+                println("💳 [FireTV / Sandbox] RevenueCat running in sandbox mode; simulating purchase for plan: $planId")
                 onSuccess()
                 return
             }

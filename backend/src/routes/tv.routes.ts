@@ -213,6 +213,17 @@ export function createTvSessionApiRouter(): Router {
       mimeType: session.status === 'ready' ? (session.mimeType || 'image/jpeg') : undefined,
       expiresInSeconds
     });
+
+    if (session.status === 'ready' && session.imageBase64) {
+      // Schedule delayed cleanup of multi-MB base64 buffer from RAM to avoid memory bloat
+      if (!(session as any)._cleanupScheduled) {
+        (session as any)._cleanupScheduled = true;
+        setTimeout(() => {
+          session.imageBase64 = undefined;
+          console.log(`🧹 [TvSession] Evicted image buffer for completed session ${session.sessionId} from RAM`);
+        }, 60000).unref();
+      }
+    }
   });
 
   /**
@@ -277,13 +288,32 @@ export function createTvSessionApiRouter(): Router {
 
     try {
       const rawImage = String(req.body?.imageBase64 || '').trim();
-      const rawMime = String(req.body?.mimeType || 'image/jpeg').trim();
+      const rawMime = String(req.body?.mimeType || 'image/jpeg').trim().toLowerCase();
 
       if (!rawImage || rawImage.length < 100) {
         res.status(400).json({
           success: false,
           error: 'INVALID_IMAGE',
           message: 'No se recibió una imagen válida del dibujo.'
+        });
+        return;
+      }
+
+      if (rawImage.length > 7 * 1024 * 1024) {
+        res.status(400).json({
+          success: false,
+          error: 'IMAGE_TOO_LARGE',
+          message: 'La imagen excede el límite máximo permitido (5MB).'
+        });
+        return;
+      }
+
+      const validMimes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+      if (!validMimes.has(rawMime)) {
+        res.status(400).json({
+          success: false,
+          error: 'INVALID_MIME_TYPE',
+          message: 'Formato de imagen no soportado. Usa JPEG, PNG o WebP.'
         });
         return;
       }

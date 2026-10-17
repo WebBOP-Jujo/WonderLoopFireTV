@@ -98,7 +98,7 @@ export class StoryOrchestratorService {
       })(),
       (async () => {
         const tImgStart = Date.now();
-        const res = await Promise.all(
+        const settledResults = await Promise.allSettled(
           generated.scenes.map((s) =>
             this.imageAdapter.generateSceneIllustration(
               s.visualPrompt,
@@ -109,9 +109,18 @@ export class StoryOrchestratorService {
             )
           )
         );
+        const illustrations: (string | undefined)[] = settledResults.map((r, idx) => {
+          if (r.status === 'fulfilled') {
+            return r.value;
+          } else {
+            console.warn(`⚠️ [StoryService] Illustration failed for scene ${idx + 1}: ${r.reason?.message || r.reason}`);
+            return undefined;
+          }
+        });
         const tImg = Date.now() - tImgStart;
-        console.log(`⏱️ [StoryService] All ${res.length} Illustrations completed in ${tImg} ms (${(tImg / 1000).toFixed(1)}s)`);
-        return res;
+        const fulfilledCount = settledResults.filter((r) => r.status === 'fulfilled').length;
+        console.log(`⏱️ [StoryService] ${fulfilledCount}/${settledResults.length} Illustrations completed in ${tImg} ms (${(tImg / 1000).toFixed(1)}s)`);
+        return illustrations;
       })()
     ]);
 
