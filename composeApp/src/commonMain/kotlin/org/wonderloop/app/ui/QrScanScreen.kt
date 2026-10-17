@@ -314,7 +314,7 @@ fun QrScanScreen(
                                     "✨ ${AppStrings.sagaBadge(continuation.chapterIndex)} · RETO DE DIBUJO ✨"
                                 else
                                     "✨ EL PORTAL MÁGICO ✨",
-                                fontSize = 11.5.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFF9E6700),
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
@@ -493,7 +493,7 @@ fun QrScanScreen(
 
                         Text(
                             text = "📶 Móvil y tele en la misma Wi-Fi",
-                            fontSize = 12.5.sp,
+                            fontSize = 13.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = QrInkMuted,
                             textAlign = TextAlign.Center
@@ -560,6 +560,7 @@ fun QrScanScreen(
                 // 2. Illustration Art Style Selector (Primary initial D-Pad focus)
                 val styleFocusRequester = remember { FocusRequester() }
                 LaunchedEffect(Unit) {
+                    delay(120)
                     try { styleFocusRequester.requestFocus() } catch (_: Exception) {}
                 }
                 Column {
@@ -675,7 +676,7 @@ fun QrScanScreen(
                                 )
                                 Text(
                                     text = "Prueba con un dibujo de ejemplo",
-                                    fontSize = 11.5.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = QrInkMuted
                                 )
@@ -687,7 +688,7 @@ fun QrScanScreen(
                             ) {
                                 Text(
                                     text = "OK para elegir",
-                                    fontSize = 11.5.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = QrInkMuted,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -730,7 +731,7 @@ fun QrScanScreen(
                                         Text(
                                             text = demo.name,
                                             fontFamily = TitleFont(),
-                                            fontSize = 11.sp,
+                                            fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = QrInkDark,
                                             maxLines = 1,
@@ -805,13 +806,13 @@ fun QrScanScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Wi-Fi · ${api.baseUrl.replace("http://", "").replace(":3000", "")} · ",
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF5B5470)
                             )
                             Text(
                                 text = "Cambiar",
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = QrCoral
                             )
@@ -883,7 +884,7 @@ private fun QrStepCard(
                     Text(
                         text = number,
                         fontFamily = TitleFont(),
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isActive) Color.White else QrCoral
                     )
@@ -901,10 +902,10 @@ private fun QrStepCard(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = desc,
-                    fontSize = 11.5.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF4A4260),
-                    lineHeight = 15.sp
+                    lineHeight = 17.sp
                 )
             }
         }

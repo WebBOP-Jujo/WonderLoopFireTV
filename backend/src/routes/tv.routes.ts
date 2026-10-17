@@ -98,7 +98,7 @@ export function detectLanIp(): string {
 
 function generateSessionCodes(): { sessionId: string; shortCode: string } {
   const digits = Math.floor(1000 + Math.random() * 9000).toString();
-  const suffix = crypto.randomBytes(2).toString('hex').toUpperCase();
+  const suffix = crypto.randomBytes(4).toString('hex').toUpperCase();
   return {
     sessionId: `WL${digits}${suffix}`,
     shortCode: `WL-${digits}`
@@ -339,7 +339,13 @@ export function createTvSessionApiRouter(): Router {
           finalMime = 'image/jpeg';
         }
       } catch (sharpErr: any) {
-        console.warn(`⚠️ [TvSession] sharp normalization skipped for ${sessionId}: ${sharpErr?.message}`);
+        console.warn(`⚠️ [TvSession] sharp failed to decode drawing for ${sessionId}: ${sharpErr?.message}`);
+        res.status(400).json({
+          success: false,
+          error: 'INVALID_IMAGE_PAYLOAD',
+          message: 'No se pudo decodificar la imagen enviada. Asegúrate de que sea un archivo de imagen válido.'
+        });
+        return;
       }
 
       session.imageBase64 = finalBase64;

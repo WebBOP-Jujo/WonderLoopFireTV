@@ -22,17 +22,20 @@ const upload = multer({
 
 const GenerateStorySchema = z.object({
   character: z.object({
-    name: z.string().min(1, 'El personaje debe tener un nombre'),
-    species: z.string().optional().default('personaje mágico'),
-    primaryColors: z.array(z.string()).optional().default([]),
-    distinctiveFeatures: z.array(z.string()).optional().default([]),
-    personality: z.string().optional().default('amigable y curioso'),
-    reinterpretedImageUrl: z.string().optional(),
-    originalDrawingBase64: z.string().optional()
+    name: z.string().trim().min(1, 'El personaje debe tener un nombre').max(60, 'El nombre del personaje no puede exceder 60 caracteres'),
+    species: z.string().trim().max(100).optional().default('personaje mágico'),
+    primaryColors: z.array(z.string().trim().max(50)).optional().default([]),
+    distinctiveFeatures: z.array(z.string().trim().max(150)).optional().default([]),
+    personality: z.string().trim().max(250).optional().default('amigable y curioso'),
+    reinterpretedImageUrl: z.string().max(2048).optional(),
+    originalDrawingBase64: z.string().max(7 * 1024 * 1024).optional()
   }),
-  childName: z.string().min(1, 'Falta el nombre del niño/a'),
-  childAge: z.union([z.number().int().min(1).max(18), z.string()]).transform((v) => Number(v)),
-  theme: z.string().optional(),
+  childName: z.string().trim().min(1, 'Falta el nombre del niño/a').max(50, 'El nombre no puede exceder 50 caracteres'),
+  childAge: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().int().min(2, 'La edad mínima recomendada es 2 años').max(14, 'La edad máxima recomendada es 14 años')
+  ),
+  theme: z.string().trim().max(300).optional(),
   language: z.enum(['es', 'en']).optional().default('es'),
   continuation: z.any().optional(),
   voiceStyle: z.enum(['soft', 'normal', 'lively']).optional().default('soft'),

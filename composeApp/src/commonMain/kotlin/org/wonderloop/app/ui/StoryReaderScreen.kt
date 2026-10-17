@@ -524,8 +524,8 @@ fun StoryReaderScreen(
             }
     ) {
         val isLandscape = maxWidth > maxHeight
-        val screenHorizontalPadding = if (isLandscape) 36.dp else 16.dp
-        val screenVerticalPadding = if (isLandscape) 14.dp else 10.dp
+        val screenHorizontalPadding = if (isLandscape) 48.dp else 16.dp
+        val screenVerticalPadding = if (isLandscape) 24.dp else 10.dp
 
         Column(
             modifier = Modifier
@@ -1126,10 +1126,6 @@ private fun ScenePageContent(
                                 }
                                 Key.DirectionRight -> {
                                     onGoNext()
-                                    true
-                                }
-                                Key.DirectionCenter, Key.Enter -> {
-                                    onToggleAudio()
                                     true
                                 }
                                 else -> false

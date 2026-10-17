@@ -322,14 +322,6 @@ fun App(
                             Spacer(modifier = Modifier.height(22.dp))
 
                             Surface(
-                                onClick = {
-                                    showDailyLimitDialog = false
-                                    dailyLimitHeroName = null
-                                    if (currentScreen !is Screen.Home) {
-                                        isBackNav = true
-                                        screenStack = listOf(Screen.Home)
-                                    }
-                                },
                                 shape = RoundedCornerShape(50.dp),
                                 color = Color(0xFFD9384A),
                                 shadowElevation = 4.dp,
@@ -367,13 +359,6 @@ fun App(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Surface(
-                                onClick = {
-                                    showDailyLimitDialog = false
-                                    dailyLimitHeroName = null
-                                    parentalGateExplanation = null
-                                    parentalGateOnSuccess = { navigateTo(Screen.ParentsZone) }
-                                    showParentalGate = true
-                                },
                                 shape = RoundedCornerShape(50.dp),
                                 color = Color.Transparent,
                                 modifier = Modifier
@@ -391,7 +376,7 @@ fun App(
                             ) {
                                 Text(
                                     text = if (AppStrings.isEnglish) "🔒 Parents Zone (adjust daily limit)" else "🔒 Zona de padres (ajustar límite)",
-                                    fontSize = 12.5.sp,
+                                    fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF6B6480),
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)

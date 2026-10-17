@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import org.wonderloop.app.data.CharacterProfile
 import org.wonderloop.app.data.StoryContinuationContext
 import org.wonderloop.app.platform.PlatformAudioService
@@ -81,6 +82,7 @@ fun HeroConfirmScreen(
 
     LaunchedEffect(Unit) {
         PlatformAudioService.playSfx(SoundEffect.CELEBRATION)
+        delay(120)
         try {
             startStoryFocusRequester.requestFocus()
         } catch (_: Exception) {}
@@ -287,7 +289,7 @@ fun HeroConfirmScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = quoteText,
-                                    fontSize = 12.5.sp,
+                                    fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = HeroInkDark,
                                     maxLines = 2,

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import org.wonderloop.app.data.CharacterProfile
 import org.wonderloop.app.data.FullStoryResponse
 import org.wonderloop.app.data.StoryRepository
@@ -98,6 +99,7 @@ fun HomeScreen(
     val mainCtaFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
+        delay(120)
         try {
             mainCtaFocusRequester.requestFocus()
         } catch (_: Exception) {}

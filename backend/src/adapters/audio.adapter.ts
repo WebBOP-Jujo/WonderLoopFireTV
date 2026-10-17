@@ -192,6 +192,8 @@ export class GeminiAudioAdapter implements IAudioAdapter {
       const base64Audio = audioPart?.inlineData?.data;
 
       if (base64Audio) {
+        // Yield to event loop to allow concurrent HTTP polling requests to be processed
+        await new Promise((resolve) => setImmediate(resolve));
         const compressed = this.convertWavToMp3Base64(base64Audio, 64);
         const tSec = ((Date.now() - t0) / 1000).toFixed(1);
         const wavKb = Math.round(compressed.wavBytes / 1024);

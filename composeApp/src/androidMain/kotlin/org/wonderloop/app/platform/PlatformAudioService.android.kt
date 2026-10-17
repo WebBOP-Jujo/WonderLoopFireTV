@@ -211,15 +211,29 @@ actual object PlatformAudioService {
     }
 
     actual fun speak(text: String) {
+        if (!isInitialized || tts == null) {
+            println("⚠️ [PlatformAudioService] Native TTS engine is not initialized or unavailable on this Fire OS device")
+            isTtsSpeaking = false
+            mainHandler.post { onAudioCompletedListener?.invoke() }
+            return
+        }
         try {
             stop() // Interrupt any current speech
             val targetLocale = if (org.wonderloop.app.theme.AppStrings.isEnglish) Locale.US else Locale("es", "ES")
             tts?.language = targetLocale
             applyVoiceStyle(getVoiceStyle())
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "story_page_narration")
-            println("🔊 [PlatformAudioService] Speaking native text (${text.length} chars) in ${targetLocale.language}")
+            val res = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "story_page_narration")
+            if (res != TextToSpeech.SUCCESS) {
+                println("⚠️ [PlatformAudioService] TTS speak call returned non-success code ($res)")
+                isTtsSpeaking = false
+                mainHandler.post { onAudioCompletedListener?.invoke() }
+            } else {
+                println("🔊 [PlatformAudioService] Speaking native text (${text.length} chars) in ${targetLocale.language}")
+            }
         } catch (e: Exception) {
             println("⚠️ [PlatformAudioService] Error during speak: ${e.message}")
+            isTtsSpeaking = false
+            mainHandler.post { onAudioCompletedListener?.invoke() }
         }
     }
 

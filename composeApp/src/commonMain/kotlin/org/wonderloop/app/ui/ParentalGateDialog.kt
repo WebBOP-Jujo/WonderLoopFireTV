@@ -195,7 +195,7 @@ fun ParentalGateDialog(
                     ) {
                         Text(
                             text = explanation,
-                            fontSize = 12.5.sp,
+                            fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = brandRed,
                             textAlign = TextAlign.Center,
@@ -279,26 +279,24 @@ fun ParentalGateDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                OutlinedButton(
-                    onClick = onDismiss,
+                Surface(
                     shape = RoundedCornerShape(50.dp),
                     border = BorderStroke(1.5.dp, Color(0xFFE2DCEB)),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.White,
-                        contentColor = deepInk
-                    ),
+                    color = Color.White,
                     modifier = Modifier
                         .fillMaxWidth(0.55f)
                         .height(44.dp)
                         .tvFocusable(shape = RoundedCornerShape(50.dp), onClick = onDismiss)
                 ) {
-                    Text(
-                        text = AppStrings.cancel,
-                        fontFamily = TitleFont(),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = deepInk
-                    )
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = AppStrings.cancel,
+                            fontFamily = TitleFont(),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = deepInk
+                        )
+                    }
                 }
             }
         }
