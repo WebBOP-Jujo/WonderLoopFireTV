@@ -54,9 +54,22 @@ fun HeroConfirmScreen(
     character: CharacterProfile,
     childName: String,
     continuation: StoryContinuationContext? = null,
+    sessionId: String? = null,
+    api: org.wonderloop.app.data.WonderLoopApi? = null,
     onStartStoryClick: (language: String) -> Unit,
-    onRescanClick: () -> Unit
+    onRescanClick: () -> Unit,
+    onNewPhotoReceived: ((imageBase64: String) -> Unit)? = null,
+    onBackToHomeClick: (() -> Unit)? = null
 ) {
+    val isBlankOrInvalid = !character.isValidDrawing ||
+        character.confidence < 0.55f ||
+        character.name.equals("Vacío", ignoreCase = true) ||
+        character.name.equals("Vacio", ignoreCase = true) ||
+        character.species.contains("sin dibujo", ignoreCase = true) ||
+        character.species.contains("superficie", ignoreCase = true) ||
+        character.species.contains("vacía", ignoreCase = true) ||
+        character.species.contains("vacia", ignoreCase = true)
+
     val infiniteTransition = rememberInfiniteTransition(label = "hero_confirm_pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.96f,
@@ -79,13 +92,50 @@ fun HeroConfirmScreen(
     )
 
     val startStoryFocusRequester = remember { FocusRequester() }
+    val retryFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) {
-        PlatformAudioService.playSfx(SoundEffect.CELEBRATION)
-        delay(120)
-        try {
-            startStoryFocusRequester.requestFocus()
-        } catch (_: Exception) {}
+    LaunchedEffect(isBlankOrInvalid) {
+        if (isBlankOrInvalid) {
+            PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+            delay(120)
+            try {
+                retryFocusRequester.requestFocus()
+            } catch (_: Exception) {}
+        } else {
+            PlatformAudioService.playSfx(SoundEffect.CELEBRATION)
+            delay(120)
+            try {
+                startStoryFocusRequester.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Real-time mobile photo listener when drawing is blank/unclear:
+    // If the parent takes another photo on their phone while looking at this screen,
+    // the TV automatically picks it up and advances to MagicLoadingScreen without needing the remote!
+    LaunchedEffect(isBlankOrInvalid, sessionId) {
+        val sId = sessionId
+        val apiClient = api
+        if (isBlankOrInvalid && !sId.isNullOrBlank() && apiClient != null) {
+            // Notify backend that TV is showing the retry screen so the phone displays retry guidance
+            try {
+                apiClient.updateTvSessionStatus(sId, "retry")
+            } catch (_: Exception) {}
+
+            var pollCount = 0
+            while (pollCount < 300) { // Listen for up to 6 minutes
+                delay(1200)
+                pollCount++
+                try {
+                    val pollResult = apiClient.pollTvSession(sId)
+                    if (pollResult.status == "ready" && !pollResult.imageBase64.isNullOrBlank()) {
+                        PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                        onNewPhotoReceived?.invoke(pollResult.imageBase64)
+                        break
+                    }
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     DisposableEffect(Unit) {
@@ -132,11 +182,339 @@ fun HeroConfirmScreen(
             },
         contentAlignment = Alignment.Center
     ) {
-        ConfettiEffect()
+        if (!isBlankOrInvalid) {
+            ConfettiEffect()
+        }
 
         val isLandscape = maxWidth > maxHeight
 
-        if (isLandscape) {
+        if (isBlankOrInvalid) {
+            if (isLandscape) {
+                // =================================================================
+                // 16:9 RETRY WIDESCREEN LAYOUT (BLANK OR UNCLEAR DRAWING)
+                // =================================================================
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 48.dp, vertical = 18.dp), // 5% Safe Zone
+                    horizontalArrangement = Arrangement.spacedBy(32.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // LEFT COLUMN: Captured Camera Photo
+                    Card(
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.5.dp, HeroCardBorder),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                        modifier = Modifier
+                            .weight(0.42f)
+                            .fillMaxHeight()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            val displayImage = character.originalDrawingBase64
+                                ?: character.reinterpretedImageUrl
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(Color(0xFFFFF6DE), Color(0xFFFFE8EC))
+                                        )
+                                    )
+                                    .border(2.dp, Color(0xFFF5E2B8), RoundedCornerShape(22.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (!displayImage.isNullOrBlank()) {
+                                    WonderLoopImage(
+                                        model = displayImage,
+                                        contentDescription = "Foto capturada",
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Text(text = "📄", fontSize = 64.sp)
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(50.dp),
+                                    color = HeroCoralSoft,
+                                    border = BorderStroke(1.dp, HeroCoral.copy(alpha = 0.4f)),
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(10.dp)
+                                ) {
+                                    Text(
+                                        text = if (AppStrings.isEnglish) "📷 Camera Photo" else "📷 Foto Capturada",
+                                        color = HeroCoral,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color(0xFFFBF7F0),
+                                border = BorderStroke(1.dp, HeroCardBorder),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = "🔍", fontSize = 20.sp)
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = if (AppStrings.isEnglish)
+                                            "No clear drawing detected on the paper surface."
+                                        else
+                                            "No se detectaron trazos claros de dibujo en esta foto.",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = HeroInkMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // RIGHT COLUMN: Tips & D-Pad Actions
+                    Column(
+                        modifier = Modifier
+                            .weight(0.58f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(50.dp),
+                            color = HeroCoralSoft,
+                            border = BorderStroke(1.5.dp, HeroCoral.copy(alpha = 0.4f)),
+                            modifier = Modifier.scale(pulseScale)
+                        ) {
+                            Text(
+                                text = AppStrings.retryScanBadge,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = HeroCoral,
+                                letterSpacing = 0.4.sp,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = AppStrings.retryScanTitle,
+                                fontFamily = TitleFont(),
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = HeroInkDark,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = AppStrings.retryScanSubtitle,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = HeroInkMuted,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(0.96f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // Tip 1
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color.White,
+                                border = BorderStroke(1.dp, Color(0xFFE8E2D8)),
+                                shadowElevation = 2.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = "💡", fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = AppStrings.retryTip1Title,
+                                            fontFamily = TitleFont(),
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = HeroInkDark
+                                        )
+                                        Text(
+                                            text = AppStrings.retryTip1Desc,
+                                            fontSize = 11.5.sp,
+                                            color = HeroInkMuted
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Tip 2
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color.White,
+                                border = BorderStroke(1.dp, Color(0xFFE8E2D8)),
+                                shadowElevation = 2.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = "📐", fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = AppStrings.retryTip2Title,
+                                            fontFamily = TitleFont(),
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = HeroInkDark
+                                        )
+                                        Text(
+                                            text = AppStrings.retryTip2Desc,
+                                            fontSize = 11.5.sp,
+                                            color = HeroInkMuted
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Bottom Actions: Live Mobile Notice Card + Single Exit to Home button
+                        Column(
+                            modifier = Modifier.fillMaxWidth(0.96f),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = Color(0xFFFFF9E6),
+                                border = BorderStroke(1.5.dp, Color(0xFFFFD166)),
+                                shadowElevation = 2.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFFFEDBA)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(text = "📱", fontSize = 22.sp, modifier = Modifier.scale(pulseScale))
+                                    }
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Column {
+                                        Text(
+                                            text = AppStrings.retryMobileNoticeTitle,
+                                            fontFamily = TitleFont(),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF8A5A00)
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = AppStrings.retryMobileNoticeSubtitle,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF6B4800)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(50.dp),
+                                color = Color.White,
+                                border = BorderStroke(1.5.dp, HeroCardBorder),
+                                shadowElevation = 3.dp,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.50f)
+                                    .height(42.dp)
+                                    .tvFocusable(
+                                        shape = RoundedCornerShape(50.dp),
+                                        focusedScale = 1.05f,
+                                        focusRequester = retryFocusRequester,
+                                        onClick = {
+                                            if (onBackToHomeClick != null) {
+                                                onBackToHomeClick()
+                                            } else {
+                                                onRescanClick()
+                                            }
+                                        }
+                                    )
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "🏠 " + AppStrings.exitToHome,
+                                        fontFamily = TitleFont(),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = HeroInkDark
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // PORTRAIT RETRY FALLBACK
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = AppStrings.retryScanTitle,
+                        fontFamily = TitleFont(),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HeroInkDark,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = AppStrings.retryScanSubtitle,
+                        fontSize = 14.sp,
+                        color = HeroInkMuted,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = onRescanClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = HeroCoral)
+                    ) {
+                        Text(text = AppStrings.retryScanButton)
+                    }
+                }
+            }
+        } else if (isLandscape) {
             // =================================================================
             // 16:9 WIDESCREEN 2-COLUMN LAYOUT FOR AMAZON FIRE TV (+42")
             // =================================================================

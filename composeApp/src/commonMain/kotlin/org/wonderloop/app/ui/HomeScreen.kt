@@ -678,40 +678,6 @@ fun HomeScreen(
                             fontWeight = FontWeight.ExtraBold,
                             color = TvInkDark
                         )
-
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, Color(0xFFEDE8E1)),
-                            shadowElevation = 2.dp,
-                            modifier = Modifier
-                                .tvFocusable(
-                                    shape = RoundedCornerShape(16.dp),
-                                    focusedScale = 1.06f,
-                                    onClick = {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        onNavigateToStories()
-                                    }
-                                )
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                            ) {
-                                Text(text = "📚", fontSize = 13.sp)
-                                Text(
-                                    text = if (AppStrings.isEnglish) {
-                                        "View library (${profileStories.size}) →"
-                                    } else {
-                                        "Ver biblioteca (${profileStories.size}) →"
-                                    },
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = TvCoral
-                                )
-                            }
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -771,51 +737,58 @@ fun HomeScreen(
                                     )
                                 }
 
-                                // Story Meta & Seguir Button (.tx)
+                                // Story Meta & Seguir (.tx)
                                 Column(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight(),
                                     verticalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    // Yellow Tag (.tag)
+                                    // Single Clean Header Tag
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         color = TvGoldSoft
                                     ) {
-                                        Text(
-                                            text = "SEGUIR LEYENDO",
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = TvTagText,
-                                            letterSpacing = 0.5.sp,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(text = "▶", fontSize = 9.sp, color = TvTagText)
+                                            Text(
+                                                text = if (AppStrings.isEnglish) "CONTINUE READING" else "SEGUIR LEYENDO",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = TvTagText,
+                                                letterSpacing = 0.5.sp
+                                            )
+                                        }
                                     }
 
-                                    // Title
+                                    // Title - 1 line to prevent vertical overflow
                                     Text(
-                                        text = displayStory?.title ?: "Grisín y el gran rescate del peluche flotante",
+                                        text = displayStory?.title ?: (if (AppStrings.isEnglish) "Grisín and the floating toy rescue" else "Grisín y el gran rescate del peluche flotante"),
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = TvInkDark,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        lineHeight = 19.sp
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
 
                                     // Meta info
                                     val pageText = if (displayStory != null && displayStory.scenes.isNotEmpty()) {
-                                        "Página 2 de ${displayStory.scenes.size}"
+                                        if (AppStrings.isEnglish) "Page 2 of ${displayStory.scenes.size}" else "Página 2 de ${displayStory.scenes.size}"
                                     } else {
-                                        "Página 2 de 5"
+                                        if (AppStrings.isEnglish) "Page 2 of 5" else "Página 2 de 5"
                                     }
                                     val heroName = displayStory?.character?.name?.ifBlank { "Grisín" } ?: "Grisín"
                                     Text(
                                         text = "✨ $heroName · $pageText",
-                                        fontSize = 13.5.sp,
+                                        fontSize = 12.5.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = TvInkMuted
+                                        color = TvInkMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
 
                                     // Single Clean Coral progress bar (.prog)
@@ -834,52 +807,32 @@ fun HomeScreen(
                                                 .background(TvCoral)
                                         )
                                     }
-
-                                    // Visual affordance: Seguir (.btn) - Non-focusable inside focusable card
-                                    Surface(
-                                        shape = RoundedCornerShape(18.dp),
-                                        color = TvCoral,
-                                        modifier = Modifier.height(34.dp)
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            modifier = Modifier.padding(horizontal = 16.dp)
-                                        ) {
-                                            Text(text = "▶", fontSize = 12.sp, color = Color.White)
-                                            Text(
-                                                text = "Seguir",
-                                                fontSize = 13.5.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color.White
-                                            )
-                                        }
-                                    }
                                 }
                             }
                         }
 
-                        // Card 2: Nuevo cuento (.new)
+                        // Card 2: Ver Biblioteca
                         Surface(
                             shape = RoundedCornerShape(26.dp),
                             color = Color.White,
+                            border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
+                            shadowElevation = 3.dp,
                             modifier = Modifier
                                 .weight(0.85f)
                                 .fillMaxHeight()
-                                .tvDashedBorder(2.5.dp, TvCoralBorder, 26.dp)
                                 .tvFocusable(
                                     shape = RoundedCornerShape(26.dp),
                                     focusedScale = 1.04f,
                                     onClick = {
                                         PlatformAudioService.playSfx(SoundEffect.POP)
-                                        onNewAdventureClick()
+                                        onNavigateToStories()
                                     }
                                 )
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(8.dp),
+                                    .padding(10.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -887,37 +840,40 @@ fun HomeScreen(
                                     modifier = Modifier
                                         .size(46.dp)
                                         .clip(CircleShape)
-                                        .background(TvCoralSoft),
+                                        .background(Color(0xFFFCEAE7)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "+",
-                                        fontSize = 28.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TvCoral
+                                        text = "📚",
+                                        fontSize = 24.sp
                                     )
                                 }
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 Text(
-                                    text = "Nuevo cuento",
+                                    text = if (AppStrings.isEnglish) "Library" else "Ver Biblioteca",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = TvInkDark
                                 )
 
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
 
                                 Surface(
                                     shape = RoundedCornerShape(14.dp),
-                                    color = TvTealSoft
+                                    color = TvCoralSoft
                                 ) {
+                                    val countText = if (profileStories.size == 1) {
+                                        if (AppStrings.isEnglish) "1 story →" else "1 cuento →"
+                                    } else {
+                                        if (AppStrings.isEnglish) "${profileStories.size} stories →" else "${profileStories.size} cuentos →"
+                                    }
                                     Text(
-                                        text = "✨ $availableStories disponibles",
-                                        fontSize = 11.sp,
+                                        text = countText,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = TvTeal,
+                                        color = TvCoral,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                     )
                                 }
@@ -945,40 +901,6 @@ fun HomeScreen(
                             fontWeight = FontWeight.ExtraBold,
                             color = TvInkDark
                         )
-
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, Color(0xFFEDE8E1)),
-                            shadowElevation = 2.dp,
-                            modifier = Modifier
-                                .tvFocusable(
-                                    shape = RoundedCornerShape(16.dp),
-                                    focusedScale = 1.06f,
-                                    onClick = {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        onNavigateToCharacters()
-                                    }
-                                )
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                            ) {
-                                Text(text = "🎨", fontSize = 13.sp)
-                                Text(
-                                    text = if (AppStrings.isEnglish) {
-                                        "View all (${uniqueCharacters.size}) →"
-                                    } else {
-                                        "Ver todos (${uniqueCharacters.size}) →"
-                                    },
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = TvTeal
-                                )
-                            }
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1060,27 +982,28 @@ fun HomeScreen(
                             )
                         }
 
-                        // Card 2: Nuevo amigo (.newf)
+                        // Card 2: Ver todos (amigos)
                         Surface(
                             shape = RoundedCornerShape(26.dp),
                             color = Color.White,
+                            border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
+                            shadowElevation = 3.dp,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
-                                .tvDashedBorder(2.5.dp, TvTealBorder, 26.dp)
                                 .tvFocusable(
                                     shape = RoundedCornerShape(26.dp),
                                     focusedScale = 1.04f,
                                     onClick = {
                                         PlatformAudioService.playSfx(SoundEffect.POP)
-                                        onNewAdventureClick()
+                                        onNavigateToCharacters()
                                     }
                                 )
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(8.dp),
+                                    .padding(10.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -1088,25 +1011,43 @@ fun HomeScreen(
                                     modifier = Modifier
                                         .size(46.dp)
                                         .clip(CircleShape)
-                                        .background(TvTealSoft),
+                                        .background(Color(0xFFE4F6F0)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "+",
-                                        fontSize = 28.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TvTeal
+                                        text = "🎨",
+                                        fontSize = 24.sp
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
 
                                 Text(
-                                    text = "Nuevo amigo",
+                                    text = if (AppStrings.isEnglish) "All Friends" else "Ver todos",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = TvTeal
+                                    color = TvInkDark
                                 )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = TvTealSoft
+                                ) {
+                                    val countText = if (uniqueCharacters.size == 1) {
+                                        if (AppStrings.isEnglish) "1 friend →" else "1 amigo →"
+                                    } else {
+                                        if (AppStrings.isEnglish) "${uniqueCharacters.size} friends →" else "${uniqueCharacters.size} amigos →"
+                                    }
+                                    Text(
+                                        text = countText,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = TvTeal,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                         }
                     }

@@ -100,11 +100,13 @@ fun Modifier.tvFocusable(
                 event.key == Key.Enter ||
                 event.key == Key.NumPadEnter ||
                 event.key == Key.Spacebar
-            if (isSelectKey && event.type == KeyEventType.KeyUp) {
-                if (playClickSound) {
-                    PlatformAudioService.playSfx(SoundEffect.POP)
+            if (isSelectKey) {
+                if (event.type == KeyEventType.KeyUp) {
+                    if (playClickSound) {
+                        PlatformAudioService.playSfx(SoundEffect.POP)
+                    }
+                    onClick()
                 }
-                onClick()
                 true
             } else {
                 false

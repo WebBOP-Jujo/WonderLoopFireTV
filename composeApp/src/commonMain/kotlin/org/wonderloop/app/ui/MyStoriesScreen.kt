@@ -76,6 +76,14 @@ fun MyStoriesScreen(
     var sagaToDelete by remember { mutableStateOf<SagaBook?>(null) }
     var openingSaga by remember { mutableStateOf<SagaBook?>(null) }
     val sagas = StoryRepository.getBookshelfSagas()
+    val firstBookFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(140)
+        try {
+            firstBookFocusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
 
     // Trigger navigation once the 3D book-opening animation finishes
     LaunchedEffect(openingSaga) {
@@ -291,12 +299,13 @@ fun MyStoriesScreen(
                             onBackClick()
                         }
                         Surface(
-                            onClick = onBack,
                             shape = CircleShape,
                             color = Color.White,
                             border = BorderStroke(1.5.dp, ShelfCardBorder),
                             shadowElevation = 2.dp,
-                            modifier = Modifier.size(42.dp)
+                            modifier = Modifier
+                                .size(42.dp)
+                                .tvFocusable(shape = CircleShape, focusedScale = 1.08f, onClick = onBack)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
@@ -460,11 +469,12 @@ fun MyStoriesScreen(
                             horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.Bottom
                         ) {
-                            shelfSagas.forEach { saga ->
+                            shelfSagas.forEachIndexed { bookIndex, saga ->
                                 val isThisBookOpening = openingSaga?.sagaId == saga.sagaId
                                 BookCoverItem(
                                     saga = saga,
                                     isOpening = isThisBookOpening,
+                                    focusRequester = if (shelfIndex == 0 && bookIndex == 0) firstBookFocusRequester else null,
                                     onClick = {
                                         if (openingSaga == null) {
                                             PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
@@ -485,6 +495,7 @@ fun MyStoriesScreen(
                             val isLastShelf = shelfIndex == chunks.size - 1
                             if (isLastShelf && shelfSagas.size < columns) {
                                 AddBookPlaceholder(
+                                    focusRequester = if (sagas.isEmpty()) firstBookFocusRequester else null,
                                     onClick = {
                                         if (openingSaga == null) {
                                             PlatformAudioService.playSfx(SoundEffect.POP)
@@ -521,6 +532,7 @@ fun MyStoriesScreen(
                                 verticalAlignment = Alignment.Bottom
                             ) {
                                 AddBookPlaceholder(
+                                    focusRequester = if (sagas.isEmpty()) firstBookFocusRequester else null,
                                     onClick = {
                                         if (openingSaga == null) {
                                             PlatformAudioService.playSfx(SoundEffect.POP)
@@ -550,6 +562,7 @@ fun MyStoriesScreen(
 private fun BookCoverItem(
     saga: SagaBook,
     isOpening: Boolean,
+    focusRequester: FocusRequester? = null,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -595,6 +608,7 @@ private fun BookCoverItem(
                 .tvFocusable(
                     shape = bookShape,
                     focusedScale = 1.06f,
+                    focusRequester = focusRequester,
                     onClick = onClick
                 )
         ) {
@@ -890,6 +904,7 @@ private fun BookCoverItem(
  */
 @Composable
 private fun AddBookPlaceholder(
+    focusRequester: FocusRequester? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -905,7 +920,6 @@ private fun AddBookPlaceholder(
         modifier = modifier
     ) {
         Surface(
-            onClick = onClick,
             shape = bookShape,
             color = Color.White.copy(alpha = 0.88f),
             border = BorderStroke(2.dp, ShelfCoralBorder),
@@ -916,6 +930,7 @@ private fun AddBookPlaceholder(
                 .tvFocusable(
                     shape = bookShape,
                     focusedScale = 1.06f,
+                    focusRequester = focusRequester,
                     onClick = onClick
                 )
         ) {

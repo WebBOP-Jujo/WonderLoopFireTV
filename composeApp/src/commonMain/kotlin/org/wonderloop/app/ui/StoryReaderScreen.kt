@@ -42,12 +42,20 @@ import org.wonderloop.app.platform.WonderLoopImage
 import org.wonderloop.app.theme.*
 import org.wonderloop.app.ui.components.ConfettiEffect
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import org.wonderloop.app.ui.components.tvFocusable
 import org.wonderloop.app.ui.components.TvFocusGold
 import kotlin.math.absoluteValue
+
+@OptIn(ExperimentalFoundationApi::class)
+private val NoOpBringIntoViewSpec = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
+}
 
 private val ReaderCreamBg = Color(0xFFFFFBF5)
 private val ReaderInkDark = Color(0xFF2B2340)
@@ -258,10 +266,25 @@ fun StoryReaderScreen(
     var isPlayingAudio by remember { mutableStateOf(false) }
     var autoNarrateSession by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
+    var wasExitDialogOpen by remember { mutableStateOf(false) }
     val exitButtonFocusRequester = remember { FocusRequester() }
     val nextButtonFocusRequester = remember { FocusRequester() }
     val audioButtonFocusRequester = remember { FocusRequester() }
     val prevButtonFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(showExitDialog) {
+        if (wasExitDialogOpen && !showExitDialog) {
+            delay(100)
+            try {
+                if (pagerState.currentPage < pages.size - 1) {
+                    nextButtonFocusRequester.requestFocus()
+                } else {
+                    audioButtonFocusRequester.requestFocus()
+                }
+            } catch (_: Exception) {}
+        }
+        wasExitDialogOpen = showExitDialog
+    }
 
     LaunchedEffect(pagerState.currentPage) {
         delay(120)
@@ -295,7 +318,7 @@ fun StoryReaderScreen(
 
     val pageTurnSpec = remember {
         tween<Float>(
-            durationMillis = 520,
+            durationMillis = 320,
             easing = FastOutSlowInEasing
         )
     }
@@ -484,7 +507,7 @@ fun StoryReaderScreen(
                 if (event.type == KeyEventType.KeyUp && !showExitDialog) {
                     when (event.key) {
                         Key.MediaFastForward, Key.PageDown -> {
-                            if (pagerState.currentPage < pages.size - 1) {
+                            if (!pagerState.isScrollInProgress && pagerState.currentPage < pages.size - 1) {
                                 coroutineScope.launch {
                                     pagerState.animateScrollToPage(
                                         page = pagerState.currentPage + 1,
@@ -495,7 +518,7 @@ fun StoryReaderScreen(
                             } else false
                         }
                         Key.MediaRewind, Key.PageUp -> {
-                            if (pagerState.currentPage > 0) {
+                            if (!pagerState.isScrollInProgress && pagerState.currentPage > 0) {
                                 coroutineScope.launch {
                                     pagerState.animateScrollToPage(
                                         page = pagerState.currentPage - 1,
@@ -553,6 +576,18 @@ fun StoryReaderScreen(
                         .height(44.dp)
                         .focusRequester(exitButtonFocusRequester)
                         .tvFocusable(shape = RoundedCornerShape(50.dp), focusedScale = 1.06f, onClick = { showExitDialog = true })
+                        .onKeyEvent {
+                            if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionDown || it.key == Key.DirectionRight)) {
+                                try {
+                                    if (pagerState.currentPage < pages.size - 1) {
+                                        nextButtonFocusRequester.requestFocus()
+                                    } else {
+                                        audioButtonFocusRequester.requestFocus()
+                                    }
+                                } catch (_: Exception) {}
+                                true
+                            } else false
+                        }
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -625,132 +660,105 @@ fun StoryReaderScreen(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                HorizontalPager(
-                    state = pagerState,
-                    userScrollEnabled = false,
-                    modifier = Modifier.fillMaxSize()
-                ) { pageIndex ->
-                    val page = pages[pageIndex]
-                    val isCurrentPage = pageIndex == pagerState.currentPage
+                @OptIn(ExperimentalFoundationApi::class)
+                CompositionLocalProvider(
+                    LocalBringIntoViewSpec provides NoOpBringIntoViewSpec
+                ) {
+                    HorizontalPager(
+                        state = pagerState,
+                        userScrollEnabled = false,
+                        modifier = Modifier.fillMaxSize()
+                    ) { pageIndex ->
+                        val page = pages[pageIndex]
+                        val isCurrentPage = pageIndex == pagerState.currentPage
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                val pageOffset = ((pagerState.currentPage - pageIndex) + pagerState.currentPageOffsetFraction)
-                                val absOffset = pageOffset.absoluteValue
-                                alpha = (1f - (absOffset * 0.35f)).coerceIn(0.25f, 1f)
-                            }
-                    ) {
-                        when (page) {
-                            is SagaPage.ScenePage -> {
-                                ScenePageContent(
-                                    page = page,
-                                    isLandscape = isLandscape,
-                                    isCurrentPage = isCurrentPage,
-                                    isPlayingAudio = isPlayingAudio,
-                                    onGoPrev = {
-                                        if (pagerState.currentPage > 0) {
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    page = pagerState.currentPage - 1,
-                                                    animationSpec = pageTurnSpec
-                                                )
-                                            }
-                                        }
-                                    },
-                                    onGoNext = {
-                                        if (pagerState.currentPage < pages.size - 1) {
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    page = pagerState.currentPage + 1,
-                                                    animationSpec = pageTurnSpec
-                                                )
-                                            }
-                                        }
-                                    },
-                                    onToggleAudio = {
-                                        if (isPlayingAudio) {
-                                            PlatformAudioService.stop()
-                                            isPlayingAudio = false
-                                            autoNarrateSession = false
-                                        } else {
-                                            autoNarrateSession = true
-                                            isPlayingAudio = true
-                                            PlatformAudioService.playStoryAudio(page.scene.textContent, page.scene.audioBase64)
-                                        }
-                                    },
-                                    onFocusTop = {
-                                        try { exitButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                                    },
-                                    onFocusBottom = {
-                                        try {
-                                            if (pagerState.currentPage < pages.size - 1) {
-                                                nextButtonFocusRequester.requestFocus()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    val pageOffset = ((pagerState.currentPage - pageIndex) + pagerState.currentPageOffsetFraction)
+                                    val absOffset = pageOffset.absoluteValue
+                                    alpha = (1f - (absOffset * 0.35f)).coerceIn(0.25f, 1f)
+                                }
+                        ) {
+                            when (page) {
+                                is SagaPage.ScenePage -> {
+                                    ScenePageContent(
+                                        page = page,
+                                        isLandscape = isLandscape,
+                                        isCurrentPage = isCurrentPage,
+                                        isPlayingAudio = isPlayingAudio,
+                                        onToggleAudio = {
+                                            if (isPlayingAudio) {
+                                                PlatformAudioService.stop()
+                                                isPlayingAudio = false
+                                                autoNarrateSession = false
                                             } else {
-                                                audioButtonFocusRequester.requestFocus()
+                                                autoNarrateSession = true
+                                                isPlayingAudio = true
+                                                PlatformAudioService.playStoryAudio(page.scene.textContent, page.scene.audioBase64)
                                             }
-                                        } catch (_: Exception) {}
-                                    }
-                                )
-                            }
+                                        }
+                                    )
+                                }
 
-                            is SagaPage.RetoSuperadoPage -> {
-                                RetoSuperadoPageContent(
-                                    page = page,
-                                    isLandscape = isLandscape,
-                                    isCurrentPage = isCurrentPage,
-                                    onTurnToNextChapter = {
-                                        if (pagerState.currentPage < pages.size - 1) {
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    page = pagerState.currentPage + 1,
-                                                    animationSpec = pageTurnSpec
-                                                )
+                                is SagaPage.RetoSuperadoPage -> {
+                                    RetoSuperadoPageContent(
+                                        page = page,
+                                        isLandscape = isLandscape,
+                                        isCurrentPage = isCurrentPage,
+                                        onTurnToNextChapter = {
+                                            if (!pagerState.isScrollInProgress && pagerState.currentPage < pages.size - 1) {
+                                                coroutineScope.launch {
+                                                    pagerState.animateScrollToPage(
+                                                        page = pagerState.currentPage + 1,
+                                                        animationSpec = pageTurnSpec
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onGoToBookshelf = {
+                                            PlatformAudioService.stop()
+                                            onGoToBookshelf()
+                                        },
+                                        onGoPrev = {
+                                            if (!pagerState.isScrollInProgress && pagerState.currentPage > 0) {
+                                                coroutineScope.launch {
+                                                    pagerState.animateScrollToPage(
+                                                        page = pagerState.currentPage - 1,
+                                                        animationSpec = pageTurnSpec
+                                                    )
+                                                }
                                             }
                                         }
-                                    },
-                                    onGoToBookshelf = {
-                                        PlatformAudioService.stop()
-                                        onGoToBookshelf()
-                                    },
-                                    onGoPrev = {
-                                        if (pagerState.currentPage > 0) {
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    page = pagerState.currentPage - 1,
-                                                    animationSpec = pageTurnSpec
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
-                            }
+                                    )
+                                }
 
-                            is SagaPage.ChallengePromptPage -> {
-                                ChallengePromptPageContent(
-                                    page = page,
-                                    isLandscape = isLandscape,
-                                    isCurrentPage = isCurrentPage,
-                                    onScanNextDrawing = {
-                                        PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                        onScanNextDrawing(page.chapter)
-                                    },
-                                    onGoToBookshelf = {
-                                        PlatformAudioService.stop()
-                                        onGoToBookshelf()
-                                    },
-                                    onGoPrev = {
-                                        if (pagerState.currentPage > 0) {
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    page = pagerState.currentPage - 1,
-                                                    animationSpec = pageTurnSpec
-                                                )
+                                is SagaPage.ChallengePromptPage -> {
+                                    ChallengePromptPageContent(
+                                        page = page,
+                                        isLandscape = isLandscape,
+                                        isCurrentPage = isCurrentPage,
+                                        onScanNextDrawing = {
+                                            PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                                            onScanNextDrawing(page.chapter)
+                                        },
+                                        onGoToBookshelf = {
+                                            PlatformAudioService.stop()
+                                            onGoToBookshelf()
+                                        },
+                                        onGoPrev = {
+                                            if (!pagerState.isScrollInProgress && pagerState.currentPage > 0) {
+                                                coroutineScope.launch {
+                                                    pagerState.animateScrollToPage(
+                                                        page = pagerState.currentPage - 1,
+                                                        animationSpec = pageTurnSpec
+                                                    )
+                                                }
                                             }
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                     }
@@ -777,7 +785,7 @@ fun StoryReaderScreen(
                 ) {
                     val canGoPrev = pagerState.currentPage > 0
                     val onGoPrev: () -> Unit = {
-                        if (canGoPrev) {
+                        if (!pagerState.isScrollInProgress && canGoPrev) {
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(
                                     page = pagerState.currentPage - 1,
@@ -799,7 +807,13 @@ fun StoryReaderScreen(
                                     Modifier
                                         .tvFocusable(shape = RoundedCornerShape(50.dp), focusedScale = 1.06f, onClick = onGoPrev)
                                         .onKeyEvent {
-                                            if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
+                                            if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) {
+                                                try { exitButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                                                true
+                                            } else if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionRight) {
+                                                try { audioButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                                                true
+                                            } else if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
                                                 onGoPrev()
                                                 true
                                             } else false
@@ -853,6 +867,20 @@ fun StoryReaderScreen(
                                 .height(46.dp)
                                 .focusRequester(audioButtonFocusRequester)
                                 .tvFocusable(shape = RoundedCornerShape(50.dp), focusedScale = 1.06f, onClick = toggleAudio)
+                                .onKeyEvent {
+                                    if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) {
+                                        try { exitButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                                        true
+                                    } else if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionLeft) {
+                                        if (canGoPrev) {
+                                            try { prevButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                                            true
+                                        } else false
+                                    } else if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionRight) {
+                                        try { nextButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                                        true
+                                    } else false
+                                }
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -971,11 +999,13 @@ fun StoryReaderScreen(
                 val canGoNext = pagerState.currentPage < pages.size - 1
                 if (canGoNext) {
                     val onGoNext: () -> Unit = {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(
-                                page = pagerState.currentPage + 1,
-                                animationSpec = pageTurnSpec
-                            )
+                        if (!pagerState.isScrollInProgress && pagerState.currentPage < pages.size - 1) {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(
+                                    page = pagerState.currentPage + 1,
+                                    animationSpec = pageTurnSpec
+                                )
+                            }
                         }
                     }
                     val isLastSceneBeforeChallenge = currentPage is SagaPage.ScenePage &&
@@ -995,7 +1025,13 @@ fun StoryReaderScreen(
                                 onClick = onGoNext
                             )
                             .onKeyEvent {
-                                if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionRight) {
+                                if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) {
+                                    try { exitButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                                    true
+                                } else if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionLeft) {
+                                    try { audioButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                                    true
+                                } else if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionRight) {
                                     onGoNext()
                                     true
                                 } else false
@@ -1033,11 +1069,7 @@ private fun ScenePageContent(
     isLandscape: Boolean,
     isCurrentPage: Boolean = true,
     isPlayingAudio: Boolean,
-    onGoPrev: () -> Unit = {},
-    onGoNext: () -> Unit = {},
-    onToggleAudio: () -> Unit,
-    onFocusTop: () -> Unit = {},
-    onFocusBottom: () -> Unit = {}
+    onToggleAudio: () -> Unit
 ) {
     val scene = page.scene
     if (isLandscape) {
@@ -1074,9 +1106,8 @@ private fun ScenePageContent(
                 }
             }
 
-            // Right Page: Story Text Card (Focusable with D-Pad scroll UP/DOWN and page turn LEFT/RIGHT)
+            // Right Page: Story Text Card (Clean, stable 10-foot typography)
             val textScrollState = rememberScrollState()
-            val coroutineScope = rememberCoroutineScope()
             Card(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1085,65 +1116,13 @@ private fun ScenePageContent(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .tvFocusable(
-                        enabled = isCurrentPage,
-                        shape = RoundedCornerShape(24.dp),
-                        focusedScale = 1.02f,
-                        focusBorderColor = TvFocusGold,
-                        focusBorderWidth = 3.dp,
-                        playClickSound = false,
-                        onClick = onToggleAudio
-                    )
-                    .onKeyEvent { keyEvent ->
-                        if (!isCurrentPage) return@onKeyEvent false
-                        if (keyEvent.type == KeyEventType.KeyDown) {
-                            when (keyEvent.key) {
-                                Key.DirectionUp -> {
-                                    if (textScrollState.value > 0) {
-                                        coroutineScope.launch {
-                                            textScrollState.animateScrollBy(-140f)
-                                        }
-                                        true
-                                    } else {
-                                        onFocusTop()
-                                        true
-                                    }
-                                }
-                                Key.DirectionDown -> {
-                                    if (textScrollState.value < textScrollState.maxValue) {
-                                        coroutineScope.launch {
-                                            textScrollState.animateScrollBy(140f)
-                                        }
-                                        true
-                                    } else {
-                                        onFocusBottom()
-                                        true
-                                    }
-                                }
-                                Key.DirectionLeft -> {
-                                    onGoPrev()
-                                    true
-                                }
-                                Key.DirectionRight -> {
-                                    onGoNext()
-                                    true
-                                }
-                                else -> false
-                            }
-                        } else if (keyEvent.type == KeyEventType.KeyUp) {
-                            when (keyEvent.key) {
-                                Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight, Key.DirectionCenter, Key.Enter -> true
-                                else -> false
-                            }
-                        } else false
-                    }
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(textScrollState)
                         .padding(horizontal = 32.dp, vertical = 26.dp),
-                    verticalArrangement = Arrangement.Center
+                    verticalArrangement = if (textScrollState.maxValue > 0) Arrangement.Top else Arrangement.Center
                 ) {
                     Text(
                         text = scene.textContent,
@@ -1463,8 +1442,11 @@ private fun RetoSuperadoPageContent(
                                 .focusRequester(nextChapterFocusRequester)
                                 .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onTurnToNextChapter)
                                 .onKeyEvent {
-                                    if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
+                                    if (it.type == KeyEventType.KeyUp && (it.key == Key.DirectionLeft || it.key == Key.Back)) {
                                         onGoPrev()
+                                        true
+                                    } else if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionRight) {
+                                        onTurnToNextChapter()
                                         true
                                     } else false
                                 }

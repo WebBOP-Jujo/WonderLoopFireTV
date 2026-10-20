@@ -23,11 +23,31 @@ export class StoryOrchestratorService {
     console.log(`🔍 [StoryService] Analyzing drawing (${imageBuffer.length} bytes, ${mimeType}, style: ${artStyle})...`);
     const profile = await this.visionAdapter.analyzeDrawing(imageBuffer, mimeType);
 
+    const isBlank =
+      profile.isValidDrawing === false ||
+      (typeof profile.confidence === 'number' && profile.confidence < 0.55) ||
+      profile.name.toLowerCase().includes('vacío') ||
+      profile.species.toLowerCase().includes('sin dibujo') ||
+      profile.species.toLowerCase().includes('vacía');
+
+    if (isBlank) {
+      console.log(`ℹ️ [StoryService] Drawing classified as blank/unclear (confidence: ${profile.confidence}). Skipping portrait generation to save quota.`);
+      return {
+        ...profile,
+        isValidDrawing: false,
+        name: profile.name || 'Sin dibujo',
+        species: profile.species || 'Superficie sin dibujo',
+        originalDrawingBase64: `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
+        reinterpretedImageUrl: undefined
+      };
+    }
+
     // Generate portrait based on the analyzed traits and chosen artStyle
     const reinterpretedImageUrl = await this.imageAdapter.generateCharacterPortrait(imageBuffer, mimeType, profile, artStyle);
 
     return {
       ...profile,
+      isValidDrawing: true,
       originalDrawingBase64: `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
       reinterpretedImageUrl
     };
@@ -105,7 +125,9 @@ export class StoryOrchestratorService {
               s.pageNumber,
               characterRefImage,
               companionRefImage,
-              effectiveArtStyle
+              effectiveArtStyle,
+              generated.settingBible,
+              sagaHero
             )
           )
         );
@@ -127,10 +149,10 @@ export class StoryOrchestratorService {
     const tParallelTotal = Date.now() - tParallelStart;
     console.log(`⏱️ [StoryService] Parallel Multimedia Phase finished in ${tParallelTotal} ms (${(tParallelTotal / 1000).toFixed(1)}s)`);
 
-    // 3. Assemble enriched scenes with synchronized audio and illustrations
+    // 3. Assemble enriched scenes with synchronized audio and illustrations (with fallback to character portrait)
     const enrichedScenes: StoryScene[] = generated.scenes.map((scene, idx) => ({
       ...scene,
-      illustrationUrl: illustrations[idx],
+      illustrationUrl: illustrations[idx] || characterRefImage,
       audioBase64: audioMap.get(scene.pageNumber) || undefined
     }));
 
@@ -139,6 +161,7 @@ export class StoryOrchestratorService {
     return {
       storyId,
       title: generated.title,
+      settingBible: generated.settingBible,
       childName,
       childAge,
       character: {

@@ -60,8 +60,10 @@ private val QrCardBorder = Color(0xFFEDE8E1)
 fun QrScanScreen(
     initialArtStyle: String = "watercolor",
     continuation: StoryContinuationContext? = null,
+    scanSessionKey: Long = 0L,
+    existingSessionId: String? = null,
     api: WonderLoopApi,
-    onPhotoCaptured: (imageBase64: String, artStyle: String) -> Unit,
+    onPhotoCaptured: (imageBase64: String, artStyle: String, sessionId: String) -> Unit,
     onBack: () -> Unit
 ) {
     var selectedArtStyle by remember(initialArtStyle) { mutableStateOf(initialArtStyle) }
@@ -71,6 +73,7 @@ fun QrScanScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showIpDialog by remember { mutableStateOf(false) }
     var customIpInput by remember { mutableStateOf(api.baseUrl.replace("http://", "").replace(":3000", "")) }
+    var pollTrigger by remember { mutableStateOf(0) }
 
     val retryFocusRequester = remember { FocusRequester() }
     val dialogConfirmRequester = remember { FocusRequester() }
@@ -120,16 +123,29 @@ fun QrScanScreen(
     )
 
     // Function to initialize or refresh the QR session
-    fun startSession() {
+    fun startSession(forceNew: Boolean = false) {
         isLoadingSession = true
         errorMessage = null
         coroutineScope.launch {
             try {
+                val targetSessionId = if (!forceNew) (existingSessionId ?: session?.sessionId) else null
+                if (targetSessionId != null) {
+                    val resetSession = api.resetTvSession(targetSessionId)
+                    if (resetSession != null) {
+                        session = resetSession
+                        sessionStatus = "waiting"
+                        isLoadingSession = false
+                        pollTrigger++
+                        PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                        return@launch
+                    }
+                }
                 val lang = if (AppStrings.isEnglish) "en" else "es"
                 val newSession = api.createTvSession(language = lang)
                 session = newSession
                 sessionStatus = "waiting"
                 isLoadingSession = false
+                pollTrigger++
                 PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
             } catch (e: Exception) {
                 isLoadingSession = false
@@ -138,12 +154,12 @@ fun QrScanScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        startSession()
+    LaunchedEffect(scanSessionKey) {
+        startSession(forceNew = scanSessionKey != 0L && existingSessionId == null)
     }
 
     // Active polling loop while session is open (with timeout & expiry detection)
-    LaunchedEffect(session?.sessionId) {
+    LaunchedEffect(session?.sessionId, pollTrigger) {
         val sId = session?.sessionId ?: return@LaunchedEffect
         var pollCount = 0
         val maxPolls = 400 // ~8 minutes of polling before automatic timeout
@@ -155,7 +171,7 @@ fun QrScanScreen(
                 sessionStatus = pollResult.status
                 if (pollResult.status == "ready" && !pollResult.imageBase64.isNullOrBlank()) {
                     PlatformAudioService.playSfx(SoundEffect.CELEBRATION)
-                    onPhotoCaptured(pollResult.imageBase64, selectedArtStyle)
+                    onPhotoCaptured(pollResult.imageBase64, selectedArtStyle, sId)
                     break
                 }
                 if (pollResult.expiresInSeconds <= 0) {
@@ -224,7 +240,7 @@ fun QrScanScreen(
                             onClick = {
                                 showIpDialog = false
                                 api.updateCustomBackendUrl(customIpInput)
-                                startSession()
+                                startSession(forceNew = true)
                             }
                         )
                         .padding(horizontal = 16.dp, vertical = 10.dp)
@@ -407,7 +423,7 @@ fun QrScanScreen(
                                                 shape = RoundedCornerShape(50.dp),
                                                 focusBorderColor = TvFocusGold,
                                                 focusedScale = 1.08f,
-                                                onClick = { startSession() }
+                                                onClick = { startSession(forceNew = true) }
                                             )
                                             .padding(horizontal = 24.dp, vertical = 10.dp)
                                     ) {
@@ -717,7 +733,7 @@ fun QrScanScreen(
                                             focusBorderWidth = 3.dp,
                                             onClick = {
                                                 PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                                onPhotoCaptured(demo.base64DataUri, selectedArtStyle)
+                                                onPhotoCaptured(demo.base64DataUri, selectedArtStyle, session?.sessionId ?: "")
                                             }
                                         )
                                 ) {

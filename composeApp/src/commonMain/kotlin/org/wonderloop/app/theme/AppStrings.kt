@@ -335,6 +335,34 @@ object AppStrings {
     fun sagaBadge(chapter: Int) = if (isEnglish) "SAGA · Chapter $chapter" else "SAGA · Capítulo $chapter"
     fun continueSagaButton(chapter: Int) = if (isEnglish) "📖 Continue Adventure (Ch. $chapter) ➔" else "📖 ¡Continuar Aventura (Cap. $chapter)! ➔"
 
+    // Blank / Unclear Drawing Retry State
+    val retryScanBadge get() = if (isEnglish) "🔍 ALMOST THERE! · NO DRAWING DETECTED" else "🔍 ¡CASI LO TENEMOS! · DIBUJO NO DETECTADO"
+    val retryScanTitle get() = if (isEnglish) "Help us find your drawing!" else "¿Nos ayudas a ver tu dibujo?"
+    val retryScanSubtitle get() = if (isEnglish)
+        "We could not spot clear drawing lines in the photo. Try these magical tricks:"
+    else
+        "No hemos podido ver los trazos del dibujo en la foto. ¡Prueba estos trucos mágicos!"
+    val retryTip1Title get() = if (isEnglish) "Good Light & Strong Colors" else "Buena Luz y Colores Vivos"
+    val retryTip1Desc get() = if (isEnglish)
+        "Draw with vibrant markers or crayons on white paper with good room light."
+    else
+        "Dibuja con rotuladores oscuros o colores vivos sobre papel blanco bien iluminado."
+    val retryTip2Title get() = if (isEnglish) "Center Drawing & Hold Steady" else "Centra la Hoja y Móvil Firme"
+    val retryTip2Desc get() = if (isEnglish)
+        "Bring your phone camera closer so the drawing fills the frame and hold it steady."
+    else
+        "Acerca la cámara para que el dibujo ocupe la pantalla y mantenla quieta un segundo."
+    val retryScanButton get() = if (isEnglish) "📸 Scan Again with Phone" else "📸 Volver a escanear con el móvil"
+    val retryMobileNoticeTitle get() = if (isEnglish) "Take another photo on your phone" else "Toma otra foto en tu móvil"
+    val retryMobileNoticeSubtitle get() = if (isEnglish)
+        "Focus on your paper drawing with good light. The TV will update automatically!"
+    else
+        "Enfoca bien tu dibujo en el papel. ¡La tele cambiará sola al recibirla!"
+    val retryDemoHint get() = if (isEnglish)
+        "💡 In the scan screen you can also try sample drawings if you have no paper!"
+    else
+        "💡 En la siguiente pantalla también puedes elegir un dibujo de ejemplo si no tienes papel."
+
     // -------------------------------------------------------------
     // MagicLoadingScreen
     // -------------------------------------------------------------

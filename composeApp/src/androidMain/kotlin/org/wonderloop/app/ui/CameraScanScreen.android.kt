@@ -19,7 +19,7 @@ actual fun CameraScanScreen(
     QrScanScreen(
         initialArtStyle = initialArtStyle,
         api = api,
-        onPhotoCaptured = onPhotoCaptured,
+        onPhotoCaptured = { base64, style, _ -> onPhotoCaptured(base64, style) },
         onBack = onBack
     )
 }

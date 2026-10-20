@@ -613,7 +613,7 @@ fun App(
                             },
                             onNewAdventureClick = {
                                 tryStartAdventure {
-                                    navigateTo(Screen.CameraScan())
+                                    navigateTo(Screen.CameraScan(scanSessionKey = PlatformStorage.currentTimeMillis()))
                                 }
                             },
                             onEditProfileClick = {
@@ -648,7 +648,7 @@ fun App(
                             },
                             onNewAdventureClick = {
                                 tryStartAdventure {
-                                    navigateTo(Screen.CameraScan())
+                                    navigateTo(Screen.CameraScan(scanSessionKey = PlatformStorage.currentTimeMillis()))
                                 }
                             }
                         )
@@ -662,7 +662,7 @@ fun App(
                             },
                             onNewAdventureClick = {
                                 tryStartAdventure {
-                                    navigateTo(Screen.CameraScan())
+                                    navigateTo(Screen.CameraScan(scanSessionKey = PlatformStorage.currentTimeMillis()))
                                 }
                             }
                         )
@@ -674,8 +674,10 @@ fun App(
                         QrScanScreen(
                             initialArtStyle = initialArtStyle,
                             continuation = screen.continuation,
+                            scanSessionKey = screen.scanSessionKey,
+                            existingSessionId = screen.existingSessionId,
                             api = api,
-                            onPhotoCaptured = { base64, chosenArtStyle ->
+                            onPhotoCaptured = { base64, chosenArtStyle, sessionId ->
                                 if (!SubscriptionManager.canCreateStory()) {
                                     parentalGateExplanation = AppStrings.quotaExhaustedPrompt
                                     parentalGateOnSuccess = { navigateTo(Screen.Paywall) }
@@ -683,7 +685,7 @@ fun App(
                                 } else {
                                     ProfileRepository.setPreferredArtStyle(chosenArtStyle)
                                     val updatedContinuation = screen.continuation?.copy(artStyle = chosenArtStyle)
-                                    navigateTo(Screen.MagicLoading(base64, updatedContinuation, chosenArtStyle))
+                                    navigateTo(Screen.MagicLoading(base64, updatedContinuation, chosenArtStyle, sessionId))
                                 }
                             },
                             onBack = { navigateBack() }
@@ -697,7 +699,12 @@ fun App(
                             artStyle = screen.artStyle,
                             onAnalysisComplete = { hero ->
                                 isBackNav = false
-                                screenStack = screenStack.dropLast(1) + Screen.HeroConfirm(hero, screen.continuation, screen.artStyle)
+                                screenStack = screenStack.dropLast(1) + Screen.HeroConfirm(
+                                    hero,
+                                    screen.continuation,
+                                    screen.artStyle,
+                                    screen.sessionId
+                                )
                             },
                             onError = {
                                 navigateBack()
@@ -710,6 +717,8 @@ fun App(
                             character = screen.character,
                             childName = childName,
                             continuation = screen.continuation,
+                            sessionId = screen.sessionId,
+                            api = api,
                             onStartStoryClick = { language ->
                                 if (!SubscriptionManager.canCreateStory()) {
                                     parentalGateExplanation = AppStrings.quotaExhaustedPrompt
@@ -724,8 +733,24 @@ fun App(
                                     screenStack = screenStack.dropLast(1) + Screen.StoryGenerating(screen.character, language, screen.continuation, screen.artStyle)
                                 }
                             },
+                            onNewPhotoReceived = { newBase64 ->
+                                isBackNav = false
+                                screenStack = screenStack.dropLast(1) + Screen.MagicLoading(
+                                    newBase64,
+                                    screen.continuation,
+                                    screen.artStyle,
+                                    screen.sessionId
+                                )
+                            },
                             onRescanClick = {
-                                navigateBack()
+                                screenStack = screenStack.dropLast(1).filterNot { it is Screen.CameraScan } + Screen.CameraScan(
+                                    continuation = screen.continuation,
+                                    scanSessionKey = PlatformStorage.currentTimeMillis(),
+                                    existingSessionId = screen.sessionId
+                                )
+                            },
+                            onBackToHomeClick = {
+                                navigateReplace(Screen.Home)
                             }
                         )
                     }
@@ -781,7 +806,7 @@ fun App(
                                         },
                                         artStyle = inheritedArtStyle
                                     )
-                                    navigateTo(Screen.CameraScan(continuationContext))
+                                    navigateTo(Screen.CameraScan(continuationContext, scanSessionKey = PlatformStorage.currentTimeMillis()))
                                 }
                             },
                             onCloseClick = {

@@ -54,18 +54,24 @@ La premisa mágica de **WonderLoop** es:
      - Verde Menta: `#0E7F64` (`WonderMint`)
      - Texto Ciruela Oscuro de alto contraste: `#2B253A` (`WonderTextPrimary`)
      - Tipografías redondeadas y legibles a 3 metros: `Fredoka` (títulos) y `Nunito` (lectura).
-3. **Arquitectura de Rutas y Seguridad en el Backend:**
+3. **Arquitectura de Rutas y Seguridad Robusta en el Backend:**
    - Se respeta la convención real del proyecto (`/api/...`):
      - `/api/story/health`, `/api/story/analyze-drawing`, `/api/story/generate` (protegidos con `X-WonderLoop-Key` para la app Fire TV).
      - `/api/tv-session` (con alias `/v1/tv-session` por compatibilidad) para crear y consultar sesiones de emparejamiento QR desde el Fire TV.
      - `/upload/:sessionId` en la raíz para que el código QR sea corto, limpio y fácil de escanear por cualquier cámara móvil. La subida desde el móvil se valida mediante el token temporal `sessionId` (expira a los 15 minutos), sin exponer jamás `X-WonderLoop-Key` en el navegador público.
+   - **Hardening y Protección DoS/Fuga:** Rate limiting dual en sesiones y subidas (`express-rate-limit`), validación estricta de mimetypes en Multer (`jpeg`, `png`, `webp` hasta 10MB), tope de decodificación Base64 (15MB), cabeceras de seguridad `helmet()` y ofuscación de excepciones internas (`error.message` no se expone a los clientes).
+   - **Privacidad Infantil (COPPA) y Gestión de Memoria:** Destrucción y purga inmediata del buffer en memoria (`session.imageBase64 = undefined`) tan pronto como el Fire TV realiza el primer poll en estado `ready`, impidiendo la persistencia o re-exposición de dibujos infantiles y protegiendo la RAM del servidor.
 4. **Proporciones de Imagen (`16:9` en Escenas vs. `1:1` en Retratos):**
    - **Retrato del Héroe / Compañero (`generateCharacterPortrait`):** Formato cuadrado `1:1` (`1024x1024`).
    - **Ilustraciones de las 5 Escenas (`generateSceneIllustration`):** Formato panorámico cinematográfico **`16:9` (`1280x720`)** optimizado para televisores de salón (+42 pulgadas).
 5. **Estrategia de Proveedores de IA y Dispositivo Objetivo:**
-   - **Dispositivo principal de prueba:** **Amazon Fire TV Stick 4K** real conectado a la misma red Wi-Fi LAN que el backend y el teléfono móvil.
+   - **Dispositivo principal de prueba:** **Amazon Fire TV Stick 4K** real conectado a la misma red Wi-Fi LAN que el backend y el teléfono móvil (IP actual del dispositivo: `192.168.0.38`).
    - **Fases 1 a 4:** Mantenemos los modelos actuales de Gemini (`gemini-3.5-flash-lite`, `gemini-3.1-flash-lite-image`, `gemini-3.8-flash-lite-tts`) para validar toda la experiencia Fire TV y el puente QR.
    - **Fase 5 (AWS Builder):** Añadiremos **Amazon Bedrock + Amazon Polly** como proveedores principales con **fallback automático y transparente a Gemini**, garantizando elegibilidad para el premio **Best AWS Builder ($5,000 + $5,000 AWS Credits)** y fiabilidad del 100%.
+6. **Estrategia de Monetización y Cumplimiento Fire TV (Sin Google Play Services):**
+   - Fire OS carece de Google Play Services; invocar Google Billing produce excepciones inmediatas.
+   - Para el Hackathon se activa cuota ilimitada (`HACKATHON_UNLIMITED`). Para producción en Amazon Appstore, la monetización se basa en el **Amazon In-App Purchasing (IAP) SDK** (suscripciones familiares y monedas/créditos de cuentos), habiéndose purgado y aislado las librerías móviles de Google Play Billing y OneSignal del target de TV.
+   - Eliminación estricta de permisos irrelevantes para televisores en el manifiesto (`android.permission.CAMERA` y `POST_NOTIFICATIONS`), cumpliendo al 100% las directrices de certificación Leanback de Amazon.
 
 ---
 
@@ -149,6 +155,29 @@ Siguiendo la documentación oficial de Amazon Fire TV:
    - [`MyStoriesScreen.kt`](file:///C:/Users/jorge.arcicollar/Documents/WonderLoopTV/composeApp/src/commonMain/kotlin/org/wonderloop/app/ui/MyStoriesScreen.kt) y [`MyCharactersScreen.kt`](file:///C:/Users/jorge.arcicollar/Documents/WonderLoopTV/composeApp/src/commonMain/kotlin/org/wonderloop/app/ui/MyCharactersScreen.kt): Botones de vuelta y tarjetas de cuentos/amigos totalmente focusables con el mando Fire TV.
    - Integración completa en [`App.kt`](file:///C:/Users/jorge.arcicollar/Documents/WonderLoopTV/composeApp/src/commonMain/kotlin/org/wonderloop/app/App.kt), sustituyendo la antigua cámara móvil por `QrScanScreen`.
 3. Verificación de compilación: Android target compilado con éxito (`:composeApp:compileDebugKotlinAndroid` $\rightarrow$ `BUILD SUCCESSFUL`) y backend TypeScript (`npm run build` $\rightarrow$ exit code 0).
+
+### FASE 4.5: Auditoría Profunda de TV, Refuerzo de Seguridad, Estabilidad de Foco D-Pad y Despliegue en Hardware Real [COMPLETADA]
+1. **Refuerzo de Seguridad, Privacidad Infantil y Gestión de Memoria en Backend:**
+   - Rate limiting con `express-rate-limit` en `/api/tv-session` (`sessionLimiter`: 30 req/min) y en la subida de dibujos (`uploadLimiter`: 10 req/min) para mitigar abusos y ataques DoS.
+   - Destrucción de imagen en memoria: una vez el Fire TV descarga el dibujo infantil (`status === "ready"`), el backend libera inmediatamente `session.imageBase64 = undefined`, evitando consumo de RAM en el servidor y protegiendo la privacidad infantil (COPPA).
+   - `fileFilter` estricto en Multer (`image/jpeg`, `image/png`, `image/webp`), cota de 10MB en subida multipart y cota máxima de 15MB en decodificación Base64 antes de invocar `sharp`.
+   - Protección con `helmet()`, CORS restringido a la app y ofuscación de trazas internas (`error.message` nunca se expone en respuestas HTTP hacia el exterior).
+2. **Perfeccionamiento del Foco D-Pad y Navegación TV:**
+   - **Consumo atómico de KeyDown y KeyUp:** En [`TvFocusModifiers.kt`](file:///C:/Users/jorge.arcicollar/Documents/WonderLoopTV/composeApp/src/commonMain/kotlin/org/wonderloop/app/ui/components/TvFocusModifiers.kt), se consumen ambos eventos de teclado para `DPAD_CENTER` y `ENTER`, eliminando pulsaciones dobles, desincronizaciones de foco y parpadeos en el lector.
+   - **Retención de foco en Zona de Padres:** Resuelta la pérdida de foco al conmutar el interruptor de efectos de sonido (SFX) en [`ParentsZoneScreen.kt`](file:///C:/Users/jorge.arcicollar/Documents/WonderLoopTV/composeApp/src/commonMain/kotlin/org/wonderloop/app/ui/ParentsZoneScreen.kt) mediante `sfxRowRequester` y gestión reactiva del estado.
+   - **Unificación de Safe Zone:** Margen estandarizado a `48.dp` horizontal y `24.dp` vertical en todas las pantallas para garantizar cumplimiento del >5% de overscan en televisores (resolución lógica `960x540dp`).
+   - **Estabilidad de foco en arranque frío:** Retardo de inicialización unificado a `120-150ms` (`LaunchedEffect`) para asegurar que el `FocusRequester` se ancle correctamente tras la composición inicial.
+   - **Navegación controlada en el lector:** Corrección del evento `DPAD_UP` en [`StoryReaderScreen.kt`](file:///C:/Users/jorge.arcicollar/Documents/WonderLoopTV/composeApp/src/commonMain/kotlin/org/wonderloop/app/ui/StoryReaderScreen.kt) para evitar saltos erráticos fuera del libro.
+3. **Rediseño 10-Foot de la Pantalla de Inicio (`HomeScreen.kt`):**
+   - Eliminación de botones redundantes `+ Nuevo cuento` y `+ Nuevo amigo`.
+   - Nuevas tarjetas de acción a pantalla completa: **"Ver Biblioteca"** (acceso a todos los cuentos con conteo exacto en singular/plural) y **"Ver todos"** (galería completa de personajes creados).
+   - Corrección del solapamiento y corte de texto en la tarjeta destacada *"Seguir leyendo"* ajustando el balance de pesos (`1.4f` vs `0.85f`), limitando a `maxLines = 1` y usando una cabecera compacta en pastilla única.
+4. **Resiliencia en el Polling QR (`QrScanScreen.kt`):**
+   - Detección de estado caducado (`status === "expired"` o TTL >15 min): la app regenera automáticamente una nueva sesión y código QR sin bloquear al usuario en pantalla.
+   - Diálogo de configuración de IP del servidor y botón de reintento completamente accesibles y enfocables con D-Pad.
+5. **Verificación en Dispositivo Real (Amazon Fire TV Stick 4K):**
+   - Instalación y validación en vivo sobre hardware real conectado por Wi-Fi (`adb connect 192.168.0.38:5555`).
+   - Capturas de pantalla de verificación obtenidas y validadas (`home_verified2.png`, `focus_card1-4.png`, `sfx_on.png`, `sfx_off.png`), confirmando legibilidad a 3 metros, contraste accesible y respuesta instantánea del mando físico.
 
 ### FASE 5: Integración Principal con AWS (`Bedrock` + `Polly`) con Fallback a Gemini + `FRICTION_LOG_AND_FEEDBACK.md` [PENDIENTE]
 1. Integrar `@aws-sdk/client-bedrock-runtime` y `@aws-sdk/client-polly` como proveedores primarios (cuando las credenciales AWS estén activas) y mantener Gemini como fallback automático.

@@ -27,19 +27,19 @@ const GenerateStorySchema = z.object({
     primaryColors: z.array(z.string().trim().max(50)).optional().default([]),
     distinctiveFeatures: z.array(z.string().trim().max(150)).optional().default([]),
     personality: z.string().trim().max(250).optional().default('amigable y curioso'),
-    reinterpretedImageUrl: z.string().max(2048).optional(),
-    originalDrawingBase64: z.string().max(7 * 1024 * 1024).optional()
-  }),
+    reinterpretedImageUrl: z.string().max(7 * 1024 * 1024).nullable().optional(),
+    originalDrawingBase64: z.string().max(7 * 1024 * 1024).nullable().optional()
+  }).passthrough(),
   childName: z.string().trim().min(1, 'Falta el nombre del niño/a').max(50, 'El nombre no puede exceder 50 caracteres'),
   childAge: z.preprocess(
     (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
     z.number().int().min(2, 'La edad mínima recomendada es 2 años').max(14, 'La edad máxima recomendada es 14 años')
   ),
-  theme: z.string().trim().max(300).optional(),
+  theme: z.string().trim().max(300).nullable().optional(),
   language: z.enum(['es', 'en']).optional().default('es'),
-  continuation: z.any().optional(),
+  continuation: z.any().nullable().optional(),
   voiceStyle: z.enum(['soft', 'normal', 'lively']).optional().default('soft'),
-  artStyle: z.enum(['watercolor', '3d_animation']).optional()
+  artStyle: z.enum(['watercolor', '3d_animation']).nullable().optional()
 });
 
 export function createStoryRouter(
@@ -114,6 +114,7 @@ export function createStoryRouter(
     try {
       const parseResult = GenerateStorySchema.safeParse(req.body);
       if (!parseResult.success) {
+        console.error('❌ [StoryRouter] Validation failed for /generate:', parseResult.error.errors);
         res.status(400).json({
           error: 'INVALID_REQUEST',
           message: 'Parámetros de historia inválidos o incompletos',
@@ -128,11 +129,11 @@ export function createStoryRouter(
         character,
         childName,
         childAge,
-        theme,
+        theme || undefined,
         language,
-        continuation,
+        continuation || undefined,
         voiceStyle,
-        artStyle
+        artStyle || undefined
       );
 
       res.json({ success: true, story });

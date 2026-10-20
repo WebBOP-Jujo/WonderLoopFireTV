@@ -3,7 +3,7 @@ import os from 'os';
 import crypto from 'crypto';
 import sharp from 'sharp';
 
-export type TvSessionStatus = 'waiting' | 'connected' | 'uploading' | 'ready';
+export type TvSessionStatus = 'waiting' | 'connected' | 'uploading' | 'ready' | 'retry';
 
 export interface TvSession {
   sessionId: string;
@@ -249,7 +249,7 @@ export function createTvSessionApiRouter(): Router {
 
   /**
    * POST /api/tv-session/:sessionId/status
-   * Updates intermediate status (e.g., 'connected' | 'uploading').
+   * Updates intermediate status (e.g., 'connected' | 'uploading' | 'retry').
    */
   router.post('/:sessionId/status', (req: Request, res: Response) => {
     const sessionId = String(req.params.sessionId || '').trim().toUpperCase();
@@ -261,12 +261,57 @@ export function createTvSessionApiRouter(): Router {
     }
 
     const nextStatus = req.body?.status as TvSessionStatus | undefined;
-    if (nextStatus && (nextStatus === 'connected' || nextStatus === 'uploading') && session.status !== 'ready') {
-      session.status = nextStatus;
-      console.log(`🔄 [TvSession] Session ${sessionId} status -> ${session.status}`);
+    if (nextStatus) {
+      if (nextStatus === 'retry') {
+        session.status = 'retry';
+        session.imageBase64 = undefined;
+        session.mimeType = undefined;
+        (session as any)._cleanupScheduled = false;
+        session.expiresAt = Date.now() + SESSION_TTL_MS;
+        console.log(`🔄 [TvSession] Session ${sessionId} status -> retry (cleared previous drawing)`);
+      } else if ((nextStatus === 'connected' || nextStatus === 'uploading') && session.status !== 'ready') {
+        session.status = nextStatus;
+        console.log(`🔄 [TvSession] Session ${sessionId} status -> ${session.status}`);
+      }
     }
 
     res.json({ success: true, status: session.status });
+  });
+
+  /**
+   * POST /api/tv-session/:sessionId/reset
+   * Resets an active session back to 'connected' or 'waiting' and clears the previous drawing.
+   * Allows the mobile phone and TV to reuse the same session smoothly without refreshing or closing the browser.
+   */
+  router.post('/:sessionId/reset', (req: Request, res: Response) => {
+    const sessionId = String(req.params.sessionId || '').trim().toUpperCase();
+    const session = sessions.get(sessionId);
+
+    if (!session || session.expiresAt <= Date.now()) {
+      res.status(404).json({ success: false, error: 'SESSION_NOT_FOUND' });
+      return;
+    }
+
+    const lanIp = detectLanIp();
+    const baseUrl = resolveBaseUrlForQr(req, lanIp);
+    const uploadUrl = `${baseUrl}/upload/${session.sessionId}`;
+
+    session.status = 'connected';
+    session.imageBase64 = undefined;
+    session.mimeType = undefined;
+    (session as any)._cleanupScheduled = false;
+    session.expiresAt = Date.now() + SESSION_TTL_MS; // extend session
+
+    console.log(`🔄 [TvSession] Session ${sessionId} reset for new drawing upload.`);
+    res.json({
+      success: true,
+      sessionId: session.sessionId,
+      shortCode: session.shortCode,
+      uploadUrl,
+      lanIp,
+      status: session.status,
+      expiresInSeconds: Math.round(SESSION_TTL_MS / 1000)
+    });
   });
 
   /**
@@ -682,6 +727,12 @@ function renderMobileUploadHtml(session: TvSession): string {
       border: 2px solid var(--coral);
       color: var(--coral);
     }
+    .status-retry {
+      display: block;
+      background: #FFF8E7;
+      border: 2px solid var(--gold);
+      color: #925C00;
+    }
     input[type="file"] {
       display: none;
     }
@@ -722,11 +773,11 @@ function renderMobileUploadHtml(session: TvSession): string {
 
     <div class="btn-group" id="actionButtons">
       <button type="button" class="btn btn-primary" id="cameraBtn">
-        <span>📸</span>
+        <span id="cameraBtnIcon">📸</span>
         <span id="cameraBtnText">Hacer foto al dibujo</span>
       </button>
       <button type="button" class="btn btn-secondary" id="galleryBtn">
-        <span>🖼️</span>
+        <span id="galleryBtnIcon">🖼️</span>
         <span id="galleryBtnText">Elegir de la galería</span>
       </button>
     </div>
@@ -753,10 +804,13 @@ function renderMobileUploadHtml(session: TvSession): string {
           placeholder: "Coloca el dibujo sobre una mesa bien iluminada",
           cameraBtn: "Hacer foto al dibujo",
           galleryBtn: "Elegir de la galería",
-          uploading: "⬆️ Enviando dibujo mágico a tu Fire TV...",
-          success: "✨ ¡Dibujo recibido en tu Fire TV! Mira la pantalla de tu salón.",
-          sendAnother: "📸 Enviar otro dibujo",
+          uploading: "⬆️ Enviando dibujo a tu Fire TV...",
+          success: "✨ ¡Dibujo recibido en tu Fire TV! Mira la pantalla del salón.",
+          sendAnother: "Hacer otra foto",
+          retryNotice: "🔍 ¡Casi lo tenemos! La tele no ha detectado un dibujo claro en tu foto anterior. Enfoca bien tu dibujo en el papel con buena luz y vuelve a disparar.",
+          retryBtn: "Repetir foto del dibujo",
           errorGeneric: "No se pudo enviar el dibujo. Inténtalo de nuevo.",
+          sessionExpired: "📺 Tu televisor ha renovado el código QR. Apunta tu cámara a la tele para reconectar.",
           footer: "✨ La magia comenzará automáticamente en tu televisor"
         },
         en: {
@@ -766,10 +820,13 @@ function renderMobileUploadHtml(session: TvSession): string {
           placeholder: "Place the drawing on a well-lit table",
           cameraBtn: "Take photo of drawing",
           galleryBtn: "Choose from gallery",
-          uploading: "⬆️ Sending magic drawing to your Fire TV...",
+          uploading: "⬆️ Sending drawing to your Fire TV...",
           success: "✨ Drawing received on your Fire TV! Look at your TV screen.",
-          sendAnother: "📸 Send another drawing",
+          sendAnother: "Take another photo",
+          retryNotice: "🔍 Almost there! The TV couldn't detect a clear drawing in your previous photo. Focus closely on the paper drawing with good light and try again.",
+          retryBtn: "Retake drawing photo",
           errorGeneric: "Could not send the drawing. Please try again.",
+          sessionExpired: "📺 Your TV has generated a new QR code. Point your camera at the TV to reconnect.",
           footer: "✨ The magic will start automatically on your TV"
         }
       };
@@ -778,7 +835,9 @@ function renderMobileUploadHtml(session: TvSession): string {
       const titleText = document.getElementById('titleText');
       const subtitleText = document.getElementById('subtitleText');
       const placeholderHint = document.getElementById('placeholderHint');
+      const cameraBtnIcon = document.getElementById('cameraBtnIcon');
       const cameraBtnText = document.getElementById('cameraBtnText');
+      const galleryBtnIcon = document.getElementById('galleryBtnIcon');
       const galleryBtnText = document.getElementById('galleryBtnText');
       const footerNote = document.getElementById('footerNote');
       const langBtn = document.getElementById('langBtn');
@@ -815,8 +874,14 @@ function renderMobileUploadHtml(session: TvSession): string {
         headers: { 'Content-Type': 'application/json' }
       }).catch(function() {});
 
-      cameraBtn.addEventListener('click', function() { cameraInput.click(); });
-      galleryBtn.addEventListener('click', function() { galleryInput.click(); });
+      cameraBtn.addEventListener('click', function() {
+        cameraInput.value = '';
+        cameraInput.click();
+      });
+      galleryBtn.addEventListener('click', function() {
+        galleryInput.value = '';
+        galleryInput.click();
+      });
 
       function showStatus(type, text) {
         statusBox.className = 'status-box status-' + type;
@@ -827,6 +892,13 @@ function renderMobileUploadHtml(session: TvSession): string {
         if (!file) return;
         const t = STRINGS[currentLang] || STRINGS.es;
         showStatus('uploading', t.uploading);
+
+        cameraBtn.disabled = true;
+        galleryBtn.disabled = true;
+        cameraBtn.style.opacity = '0.6';
+        galleryBtn.style.opacity = '0.6';
+        if (cameraBtnIcon) cameraBtnIcon.textContent = "⏳";
+        cameraBtnText.textContent = currentLang === 'es' ? "Enviando..." : "Sending...";
 
         // Notify TV immediately that upload/processing started
         fetch('/api/tv-session/' + encodeURIComponent(SESSION_ID) + '/status', {
@@ -887,15 +959,32 @@ function renderMobileUploadHtml(session: TvSession): string {
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {
+          cameraBtn.disabled = false;
+          galleryBtn.disabled = false;
+          cameraBtn.style.opacity = '1';
+          galleryBtn.style.opacity = '1';
+          cameraInput.value = '';
+          galleryInput.value = '';
+
+          if (cameraBtnIcon) cameraBtnIcon.textContent = "📸";
           if (data && data.success) {
             showStatus('success', t.success);
             cameraBtnText.textContent = t.sendAnother;
           } else {
             showStatus('error', (data && data.message) || t.errorGeneric);
+            cameraBtnText.textContent = t.cameraBtn;
           }
         })
         .catch(function() {
+          cameraBtn.disabled = false;
+          galleryBtn.disabled = false;
+          cameraBtn.style.opacity = '1';
+          galleryBtn.style.opacity = '1';
+          if (cameraBtnIcon) cameraBtnIcon.textContent = "📸";
+          cameraInput.value = '';
+          galleryInput.value = '';
           showStatus('error', t.errorGeneric);
+          cameraBtnText.textContent = t.cameraBtn;
         });
       }
 
@@ -909,6 +998,46 @@ function renderMobileUploadHtml(session: TvSession): string {
           compressAndSendFile(e.target.files[0]);
         }
       });
+
+      // Background polling: check if TV session is renewed, reset or requests retry
+      setInterval(function() {
+        fetch('/api/tv-session/' + encodeURIComponent(SESSION_ID))
+          .then(function(res) {
+            if (res.status === 404) {
+              const t = STRINGS[currentLang] || STRINGS.es;
+              showStatus('error', t.sessionExpired);
+              tvBadgeText.textContent = currentLang === 'es' ? "⚠️ Código QR renovado en TV" : "⚠️ TV QR Code renewed";
+              const pulseDot = document.querySelector('.pulse-dot');
+              if (pulseDot) pulseDot.style.background = '#D9384A';
+            } else if (res.ok) {
+              return res.json();
+            }
+          })
+          .then(function(data) {
+            if (data && data.success) {
+              const t = STRINGS[currentLang] || STRINGS.es;
+              if (data.status === 'retry') {
+                showStatus('retry', t.retryNotice);
+                if (cameraBtnIcon) cameraBtnIcon.textContent = "📸";
+                cameraBtnText.textContent = t.retryBtn;
+                cameraBtn.disabled = false;
+                galleryBtn.disabled = false;
+                cameraBtn.style.opacity = '1';
+                galleryBtn.style.opacity = '1';
+              } else if (data.status === 'connected' && !data.imageBase64 && (statusBox.className.includes('status-success') || statusBox.className.includes('status-retry'))) {
+                statusBox.className = 'status-box';
+                statusBox.style.display = 'none';
+                if (cameraBtnIcon) cameraBtnIcon.textContent = "📸";
+                cameraBtnText.textContent = t.cameraBtn;
+                cameraBtn.disabled = false;
+                galleryBtn.disabled = false;
+                cameraBtn.style.opacity = '1';
+                galleryBtn.style.opacity = '1';
+              }
+            }
+          })
+          .catch(function() {});
+      }, 1500);
     })();
   </script>
 </body>

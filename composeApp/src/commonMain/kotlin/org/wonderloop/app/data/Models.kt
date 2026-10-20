@@ -12,7 +12,9 @@ data class CharacterProfile(
     val distinctiveFeatures: List<String> = emptyList(),
     val personality: String = "",
     val originalDrawingBase64: String? = null,
-    val reinterpretedImageUrl: String? = null
+    val reinterpretedImageUrl: String? = null,
+    val isValidDrawing: Boolean = true,
+    val confidence: Float = 1.0f
 )
 
 @Immutable

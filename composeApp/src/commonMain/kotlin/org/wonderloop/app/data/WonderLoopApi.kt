@@ -12,8 +12,10 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.wonderloop.app.platform.PlatformStorage
@@ -148,12 +150,18 @@ class WonderLoopApi(
                 throw BackendOfflineException("Backend unreachable across all candidate URLs")
             }
         }
-        val response: AnalyzeDrawingResponse = client.post("$baseUrl/api/story/analyze-drawing") {
+        val httpResponse = client.post("$baseUrl/api/story/analyze-drawing") {
             contentType(ContentType.Application.Json)
             header("X-WonderLoop-Key", appSecretKey)
             header("X-User-Id", appUserId)
             setBody(AnalyzeDrawingRequest(imageBase64, mimeType, artStyle))
-        }.body()
+        }
+        if (!httpResponse.status.isSuccess()) {
+            val errBody = try { httpResponse.bodyAsText() } catch (_: Exception) { "" }
+            println("❌ [WonderLoopApi] /api/story/analyze-drawing failed (${httpResponse.status.value}): $errBody")
+            throw Exception("HTTP ${httpResponse.status.value}: $errBody")
+        }
+        val response: AnalyzeDrawingResponse = httpResponse.body()
         if (response.success) {
             isOnline = true
         }
@@ -178,12 +186,18 @@ class WonderLoopApi(
         }
         val resolvedChar = character.withResolvedDataUris()
         val resolvedCont = continuation?.withResolvedDataUris()
-        val response: StoryGenerateResponse = client.post("$baseUrl/api/story/generate") {
+        val httpResponse = client.post("$baseUrl/api/story/generate") {
             contentType(ContentType.Application.Json)
             header("X-WonderLoop-Key", appSecretKey)
             header("X-User-Id", appUserId)
             setBody(StoryGenerateRequest(resolvedChar, childName, childAge, theme, language, resolvedCont, voiceStyle, artStyle))
-        }.body()
+        }
+        if (!httpResponse.status.isSuccess()) {
+            val errBody = try { httpResponse.bodyAsText() } catch (_: Exception) { "" }
+            println("❌ [WonderLoopApi] /api/story/generate failed (${httpResponse.status.value}): $errBody")
+            throw Exception("HTTP ${httpResponse.status.value}: $errBody")
+        }
+        val response: StoryGenerateResponse = httpResponse.body()
         if (response.success) {
             isOnline = true
         }
@@ -264,5 +278,50 @@ class WonderLoopApi(
                 requestTimeoutMillis = 6000
             }
         }.body()
+    }
+
+    /**
+     * Resets an active session back to 'connected' or 'waiting' so a new photo can be uploaded
+     * from the mobile phone without recreating the session or closing the mobile browser.
+     */
+    suspend fun resetTvSession(sessionId: String): TvSessionResponse? {
+        return try {
+            val response = client.post("$baseUrl/api/tv-session/$sessionId/reset") {
+                header("X-WonderLoop-Key", appSecretKey)
+                header("X-User-Id", appUserId)
+                timeout {
+                    connectTimeoutMillis = 2500
+                    requestTimeoutMillis = 6000
+                }
+            }
+            if (response.status.value in 200..299) {
+                response.body<TvSessionResponse>()
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Updates intermediate status of an active session (e.g. 'retry' when drawing is unclear).
+     */
+    suspend fun updateTvSessionStatus(sessionId: String, status: String): Boolean {
+        return try {
+            val response = client.post("$baseUrl/api/tv-session/$sessionId/status") {
+                contentType(ContentType.Application.Json)
+                header("X-WonderLoop-Key", appSecretKey)
+                header("X-User-Id", appUserId)
+                timeout {
+                    connectTimeoutMillis = 2500
+                    requestTimeoutMillis = 6000
+                }
+                setBody(mapOf("status" to status))
+            }
+            response.status.value in 200..299
+        } catch (_: Exception) {
+            false
+        }
     }
 }

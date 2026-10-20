@@ -26,12 +26,28 @@ actual object PlatformAudioService {
     }
 
     private val staticTracks = java.util.concurrent.ConcurrentHashMap<SoundEffect, AudioTrack>()
-    private val sfxExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
-        Thread(r, "WonderLoop-SfxWorker").apply { isDaemon = true }
+    @Volatile
+    private var sfxExecutor = createSfxExecutor()
+
+    private fun createSfxExecutor(): java.util.concurrent.ExecutorService {
+        return java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "WonderLoop-SfxWorker").apply { isDaemon = true }
+        }
+    }
+
+    private fun getActiveSfxExecutor(): java.util.concurrent.ExecutorService {
+        val current = sfxExecutor
+        if (current.isShutdown || current.isTerminated) {
+            val fresh = createSfxExecutor()
+            sfxExecutor = fresh
+            return fresh
+        }
+        return current
     }
 
     fun init(context: Context) {
         appContext = context.applicationContext
+        getActiveSfxExecutor()
         if (tts != null) return
         try {
             tts = TextToSpeech(context.applicationContext) { status ->
@@ -266,51 +282,59 @@ actual object PlatformAudioService {
         if (!isSfxEnabled()) return
         val staticTrack = staticTracks[effect]
         if (staticTrack != null) {
-            sfxExecutor.execute {
-                try {
-                    synchronized(staticTrack) {
-                        staticTrack.stop()
-                        staticTrack.reloadStaticData()
-                        staticTrack.play()
+            try {
+                getActiveSfxExecutor().execute {
+                    try {
+                        synchronized(staticTrack) {
+                            staticTrack.stop()
+                            staticTrack.reloadStaticData()
+                            staticTrack.play()
+                        }
+                    } catch (e: Throwable) {
+                        android.util.Log.w("WonderLoopAudio", "Error replaying static SFX $effect: ${e.message}")
                     }
-                } catch (e: Throwable) {
-                    android.util.Log.w("WonderLoopAudio", "Error replaying static SFX $effect: ${e.message}")
                 }
+            } catch (e: Throwable) {
+                android.util.Log.w("WonderLoopAudio", "Failed to dispatch static SFX $effect: ${e.message}")
             }
         } else {
             // Immediate background fallback if called before pre-cache completes
-            sfxExecutor.execute {
-                try {
-                    val sampleRate = 22050
-                    val pcmData: ShortArray = when (effect) {
-                        SoundEffect.POP -> generatePopPcm(sampleRate)
-                        SoundEffect.MAGIC_CHIME -> generateMagicChimePcm(sampleRate)
-                        SoundEffect.PAGE_TURN -> generatePageTurnPcm(sampleRate)
-                        SoundEffect.CELEBRATION -> generateCelebrationPcm(sampleRate)
+            try {
+                getActiveSfxExecutor().execute {
+                    try {
+                        val sampleRate = 22050
+                        val pcmData: ShortArray = when (effect) {
+                            SoundEffect.POP -> generatePopPcm(sampleRate)
+                            SoundEffect.MAGIC_CHIME -> generateMagicChimePcm(sampleRate)
+                            SoundEffect.PAGE_TURN -> generatePageTurnPcm(sampleRate)
+                            SoundEffect.CELEBRATION -> generateCelebrationPcm(sampleRate)
+                        }
+                        val track = AudioTrack.Builder()
+                            .setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                    .build()
+                            )
+                            .setAudioFormat(
+                                AudioFormat.Builder()
+                                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                    .setSampleRate(sampleRate)
+                                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                    .build()
+                            )
+                            .setBufferSizeInBytes(pcmData.size * 2)
+                            .setTransferMode(AudioTrack.MODE_STATIC)
+                            .build()
+                        track.write(pcmData, 0, pcmData.size)
+                        staticTracks[effect] = track
+                        track.play()
+                    } catch (e: Throwable) {
+                        android.util.Log.e("WonderLoopAudio", "Fallback error playing SFX $effect: ${e.message}")
                     }
-                    val track = AudioTrack.Builder()
-                        .setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                .build()
-                        )
-                        .setAudioFormat(
-                            AudioFormat.Builder()
-                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                                .setSampleRate(sampleRate)
-                                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                                .build()
-                        )
-                        .setBufferSizeInBytes(pcmData.size * 2)
-                        .setTransferMode(AudioTrack.MODE_STATIC)
-                        .build()
-                    track.write(pcmData, 0, pcmData.size)
-                    staticTracks[effect] = track
-                    track.play()
-                } catch (e: Throwable) {
-                    android.util.Log.e("WonderLoopAudio", "Fallback error playing SFX $effect: ${e.message}")
                 }
+            } catch (e: Throwable) {
+                android.util.Log.w("WonderLoopAudio", "Failed to dispatch fallback SFX $effect: ${e.message}")
             }
         }
     }

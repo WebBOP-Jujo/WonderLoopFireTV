@@ -1,9 +1,21 @@
+export interface ColorDef {
+  name: string;
+  hex: string;
+}
+
 export interface CharacterProfile {
   name: string;
+  namePhonetic?: string;
   species: string;
   primaryColors: string[];
+  colorPalette?: ColorDef[];
+  colorHexes?: string[];
+  shapeLanguage?: string;
+  mood?: string;
   distinctiveFeatures: string[];
   personality: string;
+  confidence?: number;
+  isValidDrawing?: boolean;
   originalDrawingBase64?: string;
   reinterpretedImageUrl?: string;
 }
@@ -16,9 +28,11 @@ export interface StoryScene {
   audioBase64?: string;
 }
 
+export type ChallengeSubject = 'friend' | 'accessory' | 'shelter' | 'vehicle' | 'snack' | 'place';
+
 export interface CreativeChallenge {
   prompt: string;
-  targetSubject: 'friend' | 'accessory' | 'place' | 'vehicle';
+  targetSubject: ChallengeSubject;
   encouragement: string;
 }
 
@@ -53,6 +67,7 @@ export interface FullStoryResponse {
   companionName?: string;
   nextStoryTitle?: string;
   artStyle?: ArtStyle;
+  settingBible?: string;
 }
 
 export interface CreateStoryRequest {

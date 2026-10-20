@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -62,6 +63,7 @@ fun ParentsZoneScreen(
     val availableStories by SubscriptionManager.availableStories
     val dailyLimit by SubscriptionManager.dailyLimit
 
+    val coroutineScope = rememberCoroutineScope()
     var sfxEnabled by remember { mutableStateOf(PlatformAudioService.isSfxEnabled()) }
     var voiceStyle by remember(activeProfileId, ProfileRepository.activeProfile?.age, ProfileRepository.activeProfile?.preferredVoiceStyle) {
         mutableStateOf(ProfileRepository.getEffectiveVoiceStyle())
@@ -106,6 +108,38 @@ fun ParentsZoneScreen(
     val activeProfileFocusRequester = remember { FocusRequester() }
     val addProfileFocusRequester = remember { FocusRequester() }
     val gestionarFocusRequester = remember { FocusRequester() }
+
+    val dailyLimitRowRequester = remember { FocusRequester() }
+    val languageRowRequester = remember { FocusRequester() }
+    val voiceRowRequester = remember { FocusRequester() }
+    val artStyleRowRequester = remember { FocusRequester() }
+    val sfxRowRequester = remember { FocusRequester() }
+    val replayRowRequester = remember { FocusRequester() }
+    val privacyRowRequester = remember { FocusRequester() }
+    val aboutRowRequester = remember { FocusRequester() }
+
+    var lastFocusedSetting by remember { mutableStateOf<String?>(null) }
+
+    val anyDialogOpen = showLanguageDialog || showVoiceDialog || showArtStyleDialog ||
+        showDailyLimitDialog || showPrivacyDialog || showAboutDialog || showConfirmClearStories
+
+    LaunchedEffect(anyDialogOpen) {
+        if (!anyDialogOpen && lastFocusedSetting != null) {
+            delay(120)
+            try {
+                when (lastFocusedSetting) {
+                    "dailyLimit" -> dailyLimitRowRequester.requestFocus()
+                    "language" -> languageRowRequester.requestFocus()
+                    "voice" -> voiceRowRequester.requestFocus()
+                    "artStyle" -> artStyleRowRequester.requestFocus()
+                    "privacy" -> privacyRowRequester.requestFocus()
+                    "about" -> aboutRowRequester.requestFocus()
+                    else -> activeProfileFocusRequester.requestFocus()
+                }
+            } catch (_: Exception) {}
+            lastFocusedSetting = null
+        }
+    }
 
     LaunchedEffect(Unit) {
         delay(120)
@@ -501,8 +535,10 @@ fun ParentsZoneScreen(
                             iconBg = Color(0xFFFFF1CF),
                             title = if (AppStrings.isEnglish) "Daily limit" else "Límite diario",
                             valueText = dailyLimitDisplay,
+                            focusRequester = dailyLimitRowRequester,
                             onClick = {
                                 PlatformAudioService.playSfx(SoundEffect.POP)
+                                lastFocusedSetting = "dailyLimit"
                                 showDailyLimitDialog = true
                             }
                         )
@@ -514,8 +550,10 @@ fun ParentsZoneScreen(
                             iconBg = Color(0xFFDDF5EE),
                             title = AppStrings.storyLanguageRowLabel,
                             valueText = if (AppStrings.isStoryEnglish) "English" else "Español",
+                            focusRequester = languageRowRequester,
                             onClick = {
                                 PlatformAudioService.playSfx(SoundEffect.POP)
+                                lastFocusedSetting = "language"
                                 showLanguageDialog = true
                             }
                         )
@@ -527,8 +565,10 @@ fun ParentsZoneScreen(
                             iconBg = Color(0xFFE4EEFF),
                             title = AppStrings.readingVoiceRowLabel,
                             valueText = voiceStyleDisplay,
+                            focusRequester = voiceRowRequester,
                             onClick = {
                                 PlatformAudioService.playSfx(SoundEffect.POP)
+                                lastFocusedSetting = "voice"
                                 showVoiceDialog = true
                             }
                         )
@@ -540,8 +580,10 @@ fun ParentsZoneScreen(
                             iconBg = Color(0xFFFCEAE7),
                             title = if (AppStrings.isEnglish) "Illustration style" else "Estilo de ilustración",
                             valueText = artStyleDisplay,
+                            focusRequester = artStyleRowRequester,
                             onClick = {
                                 PlatformAudioService.playSfx(SoundEffect.POP)
+                                lastFocusedSetting = "artStyle"
                                 showArtStyleDialog = true
                             }
                         )
@@ -553,12 +595,16 @@ fun ParentsZoneScreen(
                             iconBg = Color(0xFFE4F6F0),
                             title = AppStrings.soundEffectsRowLabel,
                             valueText = if (sfxEnabled) AppStrings.sfxActiveLabel else AppStrings.sfxMutedLabel,
+                            focusRequester = sfxRowRequester,
                             onClick = {
                                 val nextState = !sfxEnabled
                                 sfxEnabled = nextState
                                 PlatformAudioService.setSfxEnabled(nextState)
-                                if (nextState) {
-                                    PlatformAudioService.playSfx(SoundEffect.POP)
+                                coroutineScope.launch {
+                                    delay(50)
+                                    try {
+                                        sfxRowRequester.requestFocus()
+                                    } catch (_: Exception) {}
                                 }
                             }
                         )
@@ -570,6 +616,7 @@ fun ParentsZoneScreen(
                             iconBg = Color(0xFFFFF1CF),
                             title = AppStrings.replayTutorialRowLabel,
                             valueText = if (AppStrings.isEnglish) "View" else "Ver",
+                            focusRequester = replayRowRequester,
                             onClick = {
                                 PlatformAudioService.playSfx(SoundEffect.POP)
                                 onReplayOnboardingClick()
@@ -583,8 +630,10 @@ fun ParentsZoneScreen(
                             iconBg = Color(0xFFEDE7F8),
                             title = AppStrings.privacyAndDataRowLabel,
                             valueText = "",
+                            focusRequester = privacyRowRequester,
                             onClick = {
                                 PlatformAudioService.playSfx(SoundEffect.POP)
+                                lastFocusedSetting = "privacy"
                                 showPrivacyDialog = true
                             }
                         )
@@ -596,8 +645,10 @@ fun ParentsZoneScreen(
                             iconBg = Color(0xFFFCEAE7),
                             title = AppStrings.helpAndAboutRowLabel,
                             valueText = "",
+                            focusRequester = aboutRowRequester,
                             onClick = {
                                 PlatformAudioService.playSfx(SoundEffect.POP)
+                                lastFocusedSetting = "about"
                                 showAboutDialog = true
                             }
                         )
@@ -628,6 +679,12 @@ fun ParentsZoneScreen(
     // DIALOG 1: Language Picker
     // =============================================================
     if (showLanguageDialog) {
+        val dialogInitialFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            delay(120)
+            try { dialogInitialFocus.requestFocus() } catch (_: Exception) {}
+        }
+
         Dialog(
             onDismissRequest = { showLanguageDialog = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -696,6 +753,7 @@ fun ParentsZoneScreen(
                                     .tvFocusable(
                                         shape = RoundedCornerShape(16.dp),
                                         focusedScale = 1.04f,
+                                        focusRequester = if (isSelected || (code == "es" && AppStrings.language != "en")) dialogInitialFocus else null,
                                         onClick = {
                                             PlatformAudioService.playSfx(SoundEffect.POP)
                                             AppStrings.setAppLanguage(code)
@@ -772,6 +830,12 @@ fun ParentsZoneScreen(
     // DIALOG 2: Reading Voice Style Picker
     // =============================================================
     if (showVoiceDialog) {
+        val dialogInitialFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            delay(120)
+            try { dialogInitialFocus.requestFocus() } catch (_: Exception) {}
+        }
+
         Dialog(
             onDismissRequest = { showVoiceDialog = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -846,6 +910,7 @@ fun ParentsZoneScreen(
                                     .tvFocusable(
                                         shape = RoundedCornerShape(16.dp),
                                         focusedScale = 1.04f,
+                                        focusRequester = if (isSelected || (code == "soft" && voiceStyle !in listOf("normal", "lively"))) dialogInitialFocus else null,
                                         onClick = {
                                             PlatformAudioService.playSfx(SoundEffect.POP)
                                             voiceStyle = code
@@ -934,6 +999,12 @@ fun ParentsZoneScreen(
     // DIALOG 2B: Illustration Art Style Picker
     // =============================================================
     if (showArtStyleDialog) {
+        val dialogInitialFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            delay(120)
+            try { dialogInitialFocus.requestFocus() } catch (_: Exception) {}
+        }
+
         Dialog(
             onDismissRequest = { showArtStyleDialog = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1021,6 +1092,7 @@ fun ParentsZoneScreen(
                                     .tvFocusable(
                                         shape = RoundedCornerShape(16.dp),
                                         focusedScale = 1.04f,
+                                        focusRequester = if (isSelected || (code == "watercolor" && artStyle != "3d_animation")) dialogInitialFocus else null,
                                         onClick = {
                                             PlatformAudioService.playSfx(SoundEffect.POP)
                                             artStyle = code
@@ -1110,6 +1182,12 @@ fun ParentsZoneScreen(
     // =============================================================
     if (showDailyLimitDialog) {
         val createdToday = SubscriptionManager.getStoriesCreatedToday()
+        val dialogInitialFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            delay(120)
+            try { dialogInitialFocus.requestFocus() } catch (_: Exception) {}
+        }
+
         Dialog(
             onDismissRequest = { showDailyLimitDialog = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1227,6 +1305,7 @@ fun ParentsZoneScreen(
                                     .tvFocusable(
                                         shape = RoundedCornerShape(16.dp),
                                         focusedScale = 1.04f,
+                                        focusRequester = if (isSelected || (limitVal == 2 && dailyLimit !in listOf(3, 5))) dialogInitialFocus else null,
                                         onClick = {
                                             PlatformAudioService.playSfx(SoundEffect.POP)
                                             SubscriptionManager.setDailyLimit(limitVal)
@@ -1314,6 +1393,12 @@ fun ParentsZoneScreen(
     // DIALOG 3: Privacy & Local Data
     // =============================================================
     if (showPrivacyDialog) {
+        val dialogInitialFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            delay(120)
+            try { dialogInitialFocus.requestFocus() } catch (_: Exception) {}
+        }
+
         Dialog(
             onDismissRequest = { showPrivacyDialog = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1445,6 +1530,7 @@ fun ParentsZoneScreen(
                             .tvFocusable(
                                 shape = RoundedCornerShape(50.dp),
                                 focusedScale = 1.04f,
+                                focusRequester = dialogInitialFocus,
                                 onClick = {
                                     PlatformAudioService.playSfx(SoundEffect.POP)
                                     showPrivacyDialog = false
@@ -1468,6 +1554,12 @@ fun ParentsZoneScreen(
     // DIALOG 3B: Confirm Clear Saved Stories
     // =============================================================
     if (showConfirmClearStories) {
+        val dialogInitialFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            delay(120)
+            try { dialogInitialFocus.requestFocus() } catch (_: Exception) {}
+        }
+
         Dialog(
             onDismissRequest = { showConfirmClearStories = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1579,6 +1671,7 @@ fun ParentsZoneScreen(
                             .tvFocusable(
                                 shape = RoundedCornerShape(50.dp),
                                 focusedScale = 1.04f,
+                                focusRequester = dialogInitialFocus,
                                 onClick = {
                                     PlatformAudioService.playSfx(SoundEffect.POP)
                                     showConfirmClearStories = false
@@ -1602,6 +1695,12 @@ fun ParentsZoneScreen(
     // DIALOG 4: Help & About WonderLoop
     // =============================================================
     if (showAboutDialog) {
+        val dialogInitialFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            delay(120)
+            try { dialogInitialFocus.requestFocus() } catch (_: Exception) {}
+        }
+
         Dialog(
             onDismissRequest = { showAboutDialog = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1685,6 +1784,7 @@ fun ParentsZoneScreen(
                             .tvFocusable(
                                 shape = RoundedCornerShape(50.dp),
                                 focusedScale = 1.04f,
+                                focusRequester = dialogInitialFocus,
                                 onClick = {
                                     PlatformAudioService.playSfx(SoundEffect.POP)
                                     showAboutDialog = false
@@ -1711,6 +1811,7 @@ private fun ParentsSettingsRow(
     iconBg: Color,
     title: String,
     valueText: String,
+    focusRequester: FocusRequester? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -1721,6 +1822,7 @@ private fun ParentsSettingsRow(
                 focusedScale = 1.02f,
                 focusedContainerColor = Color(0xFFFFF8EE),
                 focusedElevation = 0.dp,
+                focusRequester = focusRequester,
                 onClick = onClick
             )
             .padding(horizontal = 14.dp, vertical = 2.dp),

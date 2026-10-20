@@ -1,34 +1,40 @@
-# 🚀 Guía de Pruebas WonderLoop en Móvil Android (Modo Mocks vs Modo Real)
+# 📺 Guía de Pruebas WonderLoop TV en Amazon Fire TV Stick 4K (y Móvil Companion QR)
 
-WonderLoop está diseñado con **arquitectura dual**: puedes probar el **100% de la experiencia de la app de inmediato con Mocks** (sin necesidad de crear cuentas ni configurar API keys), o pasar al **Modo Real** conectando Gemini, RevenueCat y OneSignal.
+**WonderLoop TV** está optimizado para ejecutarse en **Amazon Fire TV Stick 4K** con navegación 100% por mando a distancia (D-Pad) y escaneo de dibujos infantiles desde cualquier smartphone a través de un puente QR en red local Wi-Fi.
 
 ---
 
-## ⚡ 1. Modo Rápido con Mocks (¡Listo en 2 minutos sin configurar nada!)
+## ⚡ 1. Despliegue Rápido en Amazon Fire TV Stick 4K (Vía Wi-Fi ADB)
 
-El proyecto **ya viene configurado con Mocks por defecto**. No necesitas registrarte en ningún servicio ni poner claves de API. El backend ya está corriendo en tu equipo.
+### Requisitos:
+- **Dispositivo Fire TV Stick 4K** encendido y conectado a la misma red Wi-Fi que el PC (ej. IP `192.168.0.38`).
+- En el Fire TV: **Opciones para desarrolladores** activadas (*Depuración ADB* y *Apps de fuentes desconocidas* en `ON`).
+- Backend Node.js de WonderLoop corriendo en el PC en el puerto 3000 (`npm run dev`).
 
-### ¿Qué hace el Modo con Mocks?
-* **Cámara / Visión Mock:** Puedes hacer una foto a cualquier dibujo (o coger cualquier imagen de tu galería). El sistema simulará la extracción mágica de Gemini devolviendo un personaje de alta calidad: *"Nilo, Dragón amable y volador"* con sus rasgos, colores y personalidad.
-* **Generador de Cuentos Mock:** Crea al instante un libro ilustrado completo de 5 páginas (*"El Gran Viaje de Nilo y [Tu Nombre]"*) con acuarelas digitales de alta definición, textos adaptados a la edad y el reto físico de *The Creativity Loop*.
-* **Paywall / RevenueCat Mock:** Permite ver todos los planes, simular compras de prueba con 1 toque sin tarjeta de crédito, y canjear cupones de evaluación como `SHIPATON2026`.
-* **OneSignal Mock:** Registra las etiquetas de retención en consola de forma segura sin requerir cuenta externa.
+### 🚀 Comandos de Despliegue en 3 Pasos (PowerShell):
+```powershell
+# Paso 1: Conectar ADB por Wi-Fi al Fire TV Stick 4K
+adb connect 192.168.0.38:5555
 
-### 📲 Cómo lanzarlo en tu móvil ahora mismo (3 pasos):
+# Paso 2: Instalar o actualizar el APK de WonderLoop TV
+adb -s 192.168.0.38:5555 install -r composeApp\build\outputs\apk\debug\composeApp-debug.apk
 
-1. **Conecta tu móvil Android por USB** con *Depuración por USB* activada.
-2. Abre PowerShell en tu PC y ejecuta estos **3 comandos**:
-   ```powershell
-   # Paso A: Conectar la red del móvil con el backend de tu PC
-   adb reverse tcp:3000 tcp:3000
+# Paso 3: Arrancar la app en la pantalla del televisor
+adb -s 192.168.0.38:5555 shell am start -n org.wonderloop.app/.MainActivity
+```
 
-   # Paso B: Instalar el APK recién compilado
-   adb install -r composeApp\build\outputs\apk\debug\composeApp-debug.apk
-
-   # Paso C: Abrir la app en la pantalla de tu móvil
-   adb shell am start -n org.wonderloop.app/.MainActivity
-   ```
-3. **¡Listo!** Verás la app abierta en tu móvil con el indicador `🟢 Conectado con IA`. Ya puedes probar la cámara, el cuento, el audio, el reto físico y el paywall.
+### 🎮 Cómo Probar la Experiencia Completa de Salón:
+1. **Navegación con Mando D-Pad:**
+   - La pantalla de inicio enfoca automáticamente el botón principal *"Crear un nuevo cuento mágico"*.
+   - Explora las tarjetas 10-foot *"Ver Biblioteca"* (colección de cuentos) y *"Ver todos"* (galería de amigos) usando la cruceta del mando Fire TV.
+2. **Escaneo de Dibujo vía Código QR:**
+   - Pulsa el botón central del mando en *"Crear un nuevo cuento"*.
+   - Aparece la pantalla `QrScanScreen` con un código QR gigante y nítido.
+   - Con cualquier teléfono móvil conectado a la misma Wi-Fi, abre la cámara y escanea el QR (`http://<IP_PC>:3000/upload/<sessionId>`).
+   - Sube una foto de un dibujo en papel. El televisor reacciona automáticamente sin tocar nada más, generando el cuento de 5 escenas 16:9 ilustradas y narradas.
+3. **¿Sin móvil a mano? (Modo Demo con Mando):**
+   - En `QrScanScreen`, baja con el D-Pad a la sección *"¿Sin móvil a mano? Elige un dibujo de prueba con el mando"*.
+   - Elige entre los 4 dibujos de prueba precargados (*Dragón Nilo*, *Robot Sparky*, *Perrito Toby*, *Monstruo Chomp*) pulsando el botón central del mando.
 
 ---
 
