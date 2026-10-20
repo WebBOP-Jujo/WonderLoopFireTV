@@ -16,16 +16,16 @@ export interface CharacterProfile {
   personality: string;
   confidence?: number;
   isValidDrawing?: boolean;
-  originalDrawingBase64?: string;
-  reinterpretedImageUrl?: string;
+  originalDrawingBase64?: string | null;
+  reinterpretedImageUrl?: string | null;
 }
 
 export interface StoryScene {
   pageNumber: number;
   textContent: string;
   visualPrompt: string;
-  illustrationUrl?: string;
-  audioBase64?: string;
+  illustrationUrl?: string | null;
+  audioBase64?: string | null;
 }
 
 export type ChallengeSubject = 'friend' | 'accessory' | 'shelter' | 'vehicle' | 'snack' | 'place';

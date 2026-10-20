@@ -98,10 +98,10 @@ export class StoryOrchestratorService {
     const tParallelStart = Date.now();
 
     // Reference 1 is ALWAYS the Saga Hero (Toby)
-    const characterRefImage = sagaHero.reinterpretedImageUrl || sagaHero.originalDrawingBase64;
+    const characterRefImage = (sagaHero.reinterpretedImageUrl || sagaHero.originalDrawingBase64) || undefined;
     // Reference 2 is ALWAYS the newly drawn companion (Barquito / Pájaro)
     const companionRefImage = newCompanion
-      ? (newCompanion.reinterpretedImageUrl || newCompanion.originalDrawingBase64)
+      ? ((newCompanion.reinterpretedImageUrl || newCompanion.originalDrawingBase64) || undefined)
       : undefined;
 
     const [audioMap, illustrations] = await Promise.all([
@@ -152,7 +152,7 @@ export class StoryOrchestratorService {
     // 3. Assemble enriched scenes with synchronized audio and illustrations (with fallback to character portrait)
     const enrichedScenes: StoryScene[] = generated.scenes.map((scene, idx) => ({
       ...scene,
-      illustrationUrl: illustrations[idx] || characterRefImage,
+      illustrationUrl: illustrations[idx] || characterRefImage || undefined,
       audioBase64: audioMap.get(scene.pageNumber) || undefined
     }));
 
