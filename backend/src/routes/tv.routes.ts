@@ -18,6 +18,7 @@ export interface TvSession {
 
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_SESSIONS = 500; // Cap concurrent memory footprint
+const MAX_DRAWING_INPUT_PIXELS = 25_000_000;
 const sessions = new Map<string, TvSession>();
 
 // Periodic cleanup of expired sessions every 2 minutes
@@ -373,7 +374,9 @@ export function createTvSessionApiRouter(): Router {
       // Normalize & auto-rotate (EXIF orientation) via sharp so phone camera photos are always upright
       try {
         const inputBuf = Buffer.from(base64Clean, 'base64');
-        const optimizedBuf = await sharp(inputBuf)
+        // limitInputPixels guards against decompression bombs (a tiny PNG declaring e.g. 16k x 16k pixels).
+        // The mobile page already downscales to 1024px, so 25 MP is generous for any real phone photo.
+        const optimizedBuf = await sharp(inputBuf, { limitInputPixels: MAX_DRAWING_INPUT_PIXELS })
           .rotate() // Honors EXIF orientation from mobile cameras
           .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
           .jpeg({ quality: 85, mozjpeg: true })

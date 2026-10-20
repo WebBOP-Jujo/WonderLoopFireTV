@@ -655,7 +655,7 @@ fun QrScanScreen(
                                 Text(text = "🎬", fontSize = 16.sp)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (AppStrings.isEnglish) "3D Pixar" else "3D Pixar",
+                                    text = if (AppStrings.isEnglish) "3D Animation" else "Animación 3D",
                                     fontFamily = TitleFont(),
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,

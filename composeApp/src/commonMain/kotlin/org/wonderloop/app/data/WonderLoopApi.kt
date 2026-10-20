@@ -19,6 +19,8 @@ import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.wonderloop.app.platform.PlatformStorage
+import org.wonderloop.app.platform.platformAppSecretKey
+import org.wonderloop.app.theme.AppStrings
 
 class BackendOfflineException(message: String) : Exception(message)
 
@@ -27,7 +29,7 @@ class WonderLoopApi(
     var baseUrl: String = "http://192.168.0.35:3000"
 ) {
     var appUserId: String = getOrCreateAppUserId()
-    private val appSecretKey: String = "change-me-to-a-long-random-secret"
+    private val appSecretKey: String = platformAppSecretKey()
 
     var isOnline by mutableStateOf<Boolean?>(null)
         private set
@@ -132,13 +134,6 @@ class WonderLoopApi(
         return false
     }
 
-    suspend fun checkQuota(userId: String = appUserId): QuotaResponse {
-        return client.get("$baseUrl/api/revenuecat/quota/$userId") {
-            header("X-WonderLoop-Key", appSecretKey)
-            header("X-User-Id", userId)
-        }.body()
-    }
-
     suspend fun analyzeDrawing(
         imageBase64: String,
         mimeType: String = "image/jpeg",
@@ -231,13 +226,17 @@ class WonderLoopApi(
         )
     }
 
+    /**
+     * Fire TV hackathon build: the backend billing/coupon routes are disabled (unlimited mode),
+     * so coupons are validated locally by SubscriptionManager.
+     */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun redeemPromoCode(userId: String = appUserId, code: String): RedeemCodeResponse {
-        return client.post("$baseUrl/api/subscription/redeem") {
-            contentType(ContentType.Application.Json)
-            header("X-WonderLoop-Key", appSecretKey)
-            header("X-User-Id", userId)
-            setBody(RedeemCodeRequest(userId, code))
-        }.body()
+        val redeemed = SubscriptionManager.redeemCode(code)
+        return RedeemCodeResponse(
+            success = redeemed,
+            message = if (redeemed) AppStrings.vipActivated else AppStrings.couponValidationFailed
+        )
     }
 
     /**

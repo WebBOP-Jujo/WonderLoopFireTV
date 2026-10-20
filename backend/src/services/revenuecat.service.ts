@@ -15,6 +15,7 @@ export class RevenueCatService {
   private secretKey?: string;
   private quotaCache = new Map<string, CacheEntry>();
   private readonly CACHE_TTL_MS = 60_000; // 60s cache TTL
+  private readonly MAX_CACHE_ENTRIES = 5_000;
 
   constructor() {
     this.secretKey = process.env.REVENUECAT_SECRET_KEY;
@@ -30,15 +31,14 @@ export class RevenueCatService {
     }
 
     if (!this.secretKey || process.env.HACKATHON_UNLIMITED !== 'false') {
-      const hackathonStatus: UserSubscriptionStatus = {
+      // Constant answer: nothing to cache
+      return {
         hasActiveSubscription: true,
         entitlements: ['wonderloop_pro', 'premium_access', 'amazon_firetv_hackathon'],
         remainingFreeStories: 999,
         canCreateStory: true,
         activePlan: 'wonderloop_annual_star_15'
       };
-      this.quotaCache.set(appUserId, { status: hackathonStatus, expiresAt: Date.now() + this.CACHE_TTL_MS });
-      return hackathonStatus;
     }
 
 
@@ -96,7 +96,7 @@ export class RevenueCatService {
         activePlan: normalizedPlan
       };
 
-      this.quotaCache.set(appUserId, { status: computedStatus, expiresAt: Date.now() + this.CACHE_TTL_MS });
+      this.cacheStatus(appUserId, computedStatus);
       return computedStatus;
     } catch (error) {
       console.error('⚠️ [RevenueCatService] Error checking subscriber quota:', error);
@@ -109,51 +109,18 @@ export class RevenueCatService {
     }
   }
 
-  /**
-   * Redeem a promo/coupon code (e.g. SHIPATON2026, DEVPOSTVIP)
-   */
-  async redeemPromoCode(appUserId: string, code: string): Promise<{ success: boolean; message: string; status?: UserSubscriptionStatus }> {
-    const validCodes = ['SHIPATON2026', 'DEVPOSTVIP', 'WONDERVIP', 'HACKATHON2026'];
-    const normalizedCode = (code || '').trim().toUpperCase();
-
-    if (validCodes.includes(normalizedCode)) {
-      console.log(`🎉 [RevenueCatService] Valid promo code '${normalizedCode}' redeemed for ${appUserId}`);
-      const vipStatus: UserSubscriptionStatus = {
-        hasActiveSubscription: true,
-        entitlements: ['premium_access', 'family_tier'],
-        remainingFreeStories: 9999,
-        canCreateStory: true,
-        activePlan: 'wonderloop_family_vip'
-      };
-
-      // Cache VIP status immediately
-      this.quotaCache.set(appUserId, { status: vipStatus, expiresAt: Date.now() + (300_000) });
-
-      return {
-        success: true,
-        message: '¡Código promocional activado con éxito! Tienes acceso ilimitado.',
-        status: vipStatus
-      };
+  private cacheStatus(appUserId: string, status: UserSubscriptionStatus): void {
+    // Bound the cache: user IDs come from a client header, so an attacker could otherwise grow it forever
+    if (this.quotaCache.size >= this.MAX_CACHE_ENTRIES) {
+      const now = Date.now();
+      for (const [id, entry] of this.quotaCache.entries()) {
+        if (entry.expiresAt <= now) this.quotaCache.delete(id);
+      }
+      if (this.quotaCache.size >= this.MAX_CACHE_ENTRIES) {
+        const oldestKey = this.quotaCache.keys().next().value;
+        if (oldestKey) this.quotaCache.delete(oldestKey);
+      }
     }
-
-    return {
-      success: false,
-      message: 'Código promocional no válido o caducado.'
-    };
-  }
-
-  /**
-   * Handle Webhooks from RevenueCat dashboard
-   */
-  async handleWebhook(eventPayload: any): Promise<void> {
-    const event = eventPayload?.event;
-    const appUserId = event?.app_user_id;
-    console.log(`🔔 [RevenueCatService] Received Webhook event: ${event?.type} for user: ${appUserId}`);
-
-    if (appUserId) {
-      // Invalidate in-memory cache so next check fetches fresh entitlement state
-      this.quotaCache.delete(appUserId);
-      console.log(`🧹 [RevenueCatService] Cache invalidated for user ${appUserId}`);
-    }
+    this.quotaCache.set(appUserId, { status, expiresAt: Date.now() + this.CACHE_TTL_MS });
   }
 }

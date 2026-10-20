@@ -97,7 +97,6 @@ fun PaywallScreen(
             onDismiss = { showRedeemDialog = false },
             onCouponRedeemed = {
                 showRedeemDialog = false
-                SubscriptionManager.redeemCode("SHIPATON2026")
                 feedbackMessage = AppStrings.vipActivated
                 onPurchaseCompleted()
             }

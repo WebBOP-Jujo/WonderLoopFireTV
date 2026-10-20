@@ -1,4 +1,14 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
+
+// Secrets live in the git-ignored local.properties (or env vars on CI), never in source control
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val wonderLoopAppKey: String = localProperties.getProperty("wonderloop.appKey")
+    ?: System.getenv("WONDERLOOP_APP_KEY")
+    ?: ""
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -51,6 +61,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        buildConfigField("String", "WONDERLOOP_APP_KEY", "\"$wonderLoopAppKey\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     packaging {

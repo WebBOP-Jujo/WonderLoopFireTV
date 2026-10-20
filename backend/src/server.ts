@@ -1,5 +1,6 @@
-import dotenv from 'dotenv';
-dotenv.config();
+// Must be the first import: ESM evaluates imports before the module body,
+// so a later dotenv.config() call would run after other modules already read process.env.
+import 'dotenv/config';
 
 import express from 'express';
 import cors from 'cors';
@@ -9,11 +10,27 @@ import helmet from 'helmet';
 import { StoryOrchestratorService } from './services/story.service.js';
 import { RevenueCatService } from './services/revenuecat.service.js';
 import { createStoryRouter } from './routes/story.routes.js';
-import { createRevenueCatRouter } from './routes/revenuecat.routes.js';
 import { createTvSessionApiRouter, createTvUploadWebRouter, detectLanIp } from './routes/tv.routes.js';
+import { assertAppSecretConfigured } from './middleware/auth.middleware.js';
+
+try {
+  assertAppSecretConfigured();
+} catch (err: any) {
+  console.error(`🚨 [Security] ${err.message}`);
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Behind a reverse proxy / load balancer (Caddy, ALB, App Runner, Cloud Run) req.ip would otherwise be
+// the proxy's address, making every client share a single rate-limit bucket.
+// Set TRUST_PROXY to the number of proxy hops in front of the app (e.g. 1). Leave unset on a bare LAN
+// server so clients cannot spoof X-Forwarded-For to dodge the rate limiters.
+const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY || '0', 10);
+if (Number.isFinite(trustProxyHops) && trustProxyHops > 0) {
+  app.set('trust proxy', trustProxyHops);
+}
 
 // Security HTTP headers via Helmet
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -90,11 +107,11 @@ const tvUploadRateLimiter = rateLimit({
 
 // Routes
 app.use('/api/story', aiRateLimiter, createStoryRouter(storyOrchestrator, revenueCatService));
+// Drawing uploads decode images with sharp (CPU heavy): apply the stricter upload limiter on top of the session one
+app.post(['/api/tv-session/:sessionId/drawing', '/v1/tv-session/:sessionId/drawing'], tvUploadRateLimiter);
 app.use('/api/tv-session', tvSessionRateLimiter, tvSessionApiRouter);
 app.use('/v1/tv-session', tvSessionRateLimiter, tvSessionApiRouter);
 app.use('/upload', tvUploadRateLimiter, tvUploadWebRouter);
-app.use('/api/revenuecat', createRevenueCatRouter(revenueCatService));
-app.use('/api/subscription', createRevenueCatRouter(revenueCatService));
 
 // Public health endpoint alias
 app.get('/health', (_req, res) => {

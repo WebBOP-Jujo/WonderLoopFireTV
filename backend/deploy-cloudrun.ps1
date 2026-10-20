@@ -61,7 +61,23 @@ Write-Host "📌 Región: $Region (Madrid)" -ForegroundColor Cyan
 Write-Host "📌 Servicio: $ServiceName" -ForegroundColor Cyan
 Write-Host "📦 Compilando y desplegando con Cloud Build (usando Dockerfile multi-stage)..." -ForegroundColor Yellow
 
-$envVars = "NODE_ENV=production,APP_SECRET_KEY=change-me-to-a-long-random-secret"
+# APP_SECRET_KEY se lee de .env (nunca se escribe en este script, que está en el repositorio)
+$AppSecretKey = ""
+if (Test-Path ".env") {
+    foreach ($line in (Get-Content ".env")) {
+        if ($line -match "^APP_SECRET_KEY=(.+)$") {
+            $AppSecretKey = $Matches[1].Trim()
+            break
+        }
+    }
+}
+if ($AppSecretKey.Length -lt 32) {
+    Write-Host "❌ Falta APP_SECRET_KEY (mín. 32 caracteres) en .env. Consulta .env.example." -ForegroundColor Red
+    exit 1
+}
+
+# TRUST_PROXY=1: Cloud Run pone un proxy delante; sin esto todos los clientes comparten el mismo rate limit
+$envVars = "NODE_ENV=production,TRUST_PROXY=1,APP_SECRET_KEY=$AppSecretKey"
 if (-not [string]::IsNullOrWhiteSpace($GeminiApiKey)) {
     $envVars += ",GEMINI_API_KEY=$GeminiApiKey"
 }
@@ -73,7 +89,7 @@ gcloud run deploy $ServiceName `
     --region $Region `
     --allow-unauthenticated `
     --timeout 300s `
-    --max-instances 2 `
+    --max-instances 1 `
     --memory 512Mi `
     --set-env-vars "$envVars"
 

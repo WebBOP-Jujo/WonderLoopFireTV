@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 
 // Extend Express Request interface to include userId
 declare global {
@@ -9,15 +10,34 @@ declare global {
   }
 }
 
-const CONFIGURED_SECRET = process.env.APP_SECRET_KEY?.trim();
-if (!CONFIGURED_SECRET) {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('🚨 [Security CRITICAL] APP_SECRET_KEY is not defined in production environment!');
-  } else {
-    console.warn('⚠️ [Security Notice] APP_SECRET_KEY is not set in .env. Using fallback development key.');
-  }
+const MIN_SECRET_LENGTH = 32;
+let expectedSecretDigest: Buffer | null = null;
+
+function sha256(value: string): Buffer {
+  return crypto.createHash('sha256').update(value, 'utf8').digest();
 }
-const EXPECTED_SECRET_KEY = CONFIGURED_SECRET || 'change-me-to-a-long-random-secret';
+
+/**
+ * Validates APP_SECRET_KEY at startup. There is intentionally NO fallback key:
+ * the server refuses to boot without a strong secret so a public default can never leak into a deploy.
+ * Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ */
+export function assertAppSecretConfigured(): void {
+  const configured = process.env.APP_SECRET_KEY?.trim();
+  if (!configured || configured.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      `APP_SECRET_KEY is missing or shorter than ${MIN_SECRET_LENGTH} characters. ` +
+        `Set a random secret in backend/.env (and the same value as wonderloop.appKey in local.properties).`
+    );
+  }
+  expectedSecretDigest = sha256(configured);
+}
+
+function isValidAppKey(candidate: string): boolean {
+  if (!expectedSecretDigest) assertAppSecretConfigured();
+  // Compare fixed-length digests in constant time to avoid timing side channels
+  return crypto.timingSafeEqual(sha256(candidate), expectedSecretDigest!);
+}
 
 /**
  * Middleware that authenticates incoming requests from the WonderLoop mobile application.
@@ -33,7 +53,7 @@ export function authenticateApp(req: Request, res: Response, next: NextFunction)
   const userId = req.headers['x-user-id'] || req.body?.userId || req.query?.userId;
 
   // 1. Verify App Secret Key (prevents unauthorized external scripts calling Gemini AI)
-  if (!appKey || appKey !== EXPECTED_SECRET_KEY) {
+  if (typeof appKey !== 'string' || !appKey || !isValidAppKey(appKey)) {
     console.warn(`⛔ [Auth] Unauthorized access attempt from IP: ${req.ip} to ${req.originalUrl}`);
     res.status(401).json({
       error: 'UNAUTHORIZED',
