@@ -808,6 +808,8 @@ fun HeroConfirmScreen(
                                     .tvFocusable(
                                         shape = RoundedCornerShape(50.dp),
                                         focusedScale = 1.05f,
+                                        focusedElevation = 0.dp,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.75f),
                                         onClick = {
                                             selectedLanguage = "es"
                                             AppStrings.setAppLanguage("es")
@@ -836,6 +838,8 @@ fun HeroConfirmScreen(
                                     .tvFocusable(
                                         shape = RoundedCornerShape(50.dp),
                                         focusedScale = 1.05f,
+                                        focusedElevation = 0.dp,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.75f),
                                         onClick = {
                                             selectedLanguage = "en"
                                             AppStrings.setAppLanguage("en")

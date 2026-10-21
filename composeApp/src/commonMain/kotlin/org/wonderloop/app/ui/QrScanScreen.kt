@@ -605,6 +605,9 @@ fun QrScanScreen(
                                     focusedScale = 1.04f,
                                     focusBorderColor = TvFocusGold,
                                     focusBorderWidth = 3.dp,
+                                    // No focus shadow on a transparent pill: it shows through as a grey veil
+                                    focusedElevation = 0.dp,
+                                    focusedContainerColor = Color.White.copy(alpha = 0.75f),
                                     onClick = { selectedArtStyle = "watercolor" }
                                 )
                         ) {
@@ -618,7 +621,7 @@ fun QrScanScreen(
                                 Text(
                                     text = if (AppStrings.isEnglish) "Watercolor" else "Acuarela",
                                     fontFamily = TitleFont(),
-                                    fontSize = 14.sp,
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isWatercolor) QrInkDark else QrInkMuted
                                 )
@@ -638,6 +641,9 @@ fun QrScanScreen(
                                     focusedScale = 1.04f,
                                     focusBorderColor = TvFocusGold,
                                     focusBorderWidth = 3.dp,
+                                    // No focus shadow on a transparent pill: it shows through as a grey veil
+                                    focusedElevation = 0.dp,
+                                    focusedContainerColor = Color.White.copy(alpha = 0.75f),
                                     onClick = { selectedArtStyle = "3d_animation" }
                                 )
                         ) {
@@ -651,7 +657,7 @@ fun QrScanScreen(
                                 Text(
                                     text = if (AppStrings.isEnglish) "3D Animation" else "Animación 3D",
                                     fontFamily = TitleFont(),
-                                    fontSize = 14.sp,
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (is3D) QrInkDark else QrInkMuted
                                 )
