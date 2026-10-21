@@ -1,5 +1,6 @@
 package org.wonderloop.app.ui
 
+import org.wonderloop.app.ui.components.WonderBackdrop
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -274,23 +275,10 @@ fun MyStoriesScreen(
         }
     }
 
+    WonderBackdrop {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(ShelfCreamBg)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            ShelfGoldSoft.copy(alpha = 0.45f),
-                            ShelfCoralSoft.copy(alpha = 0.18f),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = maxOf(size.width, size.height) * 0.65f
-                    )
-                )
-            }
     ) {
         val availableWidth = (maxWidth - 96.dp).coerceAtLeast(260.dp)
 
@@ -582,6 +570,7 @@ fun MyStoriesScreen(
                 }
             }
         }
+    }
     }
 }
 

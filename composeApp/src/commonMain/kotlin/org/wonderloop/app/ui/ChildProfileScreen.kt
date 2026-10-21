@@ -29,6 +29,12 @@ import org.wonderloop.app.theme.*
 import org.wonderloop.app.ui.components.DPadArrows
 import org.wonderloop.app.ui.components.tvFocusable
 import org.wonderloop.app.ui.components.TvFocusGold
+import org.wonderloop.app.ui.components.WonderBackdrop
+import org.wonderloop.app.platform.WonderLoopImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 
 private val ChildCreamBg = Color(0xFFFFFBF5)
 private val ChildInkDark = Color(0xFF2B2340)
@@ -166,24 +172,23 @@ fun ChildProfileScreen(
             "¡Eres un Maestro de Historias! Sigue imaginando nuevos mundos."
     }
 
+    val storyCovers = remember(profileStories) {
+        profileStories.mapNotNull { story -> story.scenes.firstOrNull { !it.illustrationUrl.isNullOrBlank() }?.illustrationUrl }.take(3)
+    }
+    val friendPortraits = remember(profileStories) {
+        profileStories
+            .flatMap { story -> listOfNotNull(story.character, story.continuation?.effectiveHero) }
+            .filter { it.name.isNotBlank() }
+            .distinctBy { it.name.trim().lowercase() }
+            .mapNotNull { it.reinterpretedImageUrl?.takeIf { url -> url.isNotBlank() } }
+            .take(3)
+    }
+
     // Main 1080p Widescreen Container (Zero vertical scrolling)
+    WonderBackdrop {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ChildCreamBg)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            ChildGoldSoft.copy(alpha = 0.35f),
-                            ChildCoralSoft.copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = maxOf(size.width, size.height) * 0.65f
-                    )
-                )
-            }
             .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV 5% Safe Zone
     ) {
         Column(
@@ -232,7 +237,7 @@ fun ChildProfileScreen(
                             Text(
                                 text = if (AppStrings.isEnglish) "Back" else "Volver",
                                 fontFamily = TitleFont(),
-                                fontSize = 14.5.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ChildInkDark
                             )
@@ -242,7 +247,7 @@ fun ChildProfileScreen(
                     Text(
                         text = if (AppStrings.isEnglish) "Creator Profile" else "Mi Perfil de Creador",
                         fontFamily = TitleFont(),
-                        fontSize = 24.sp,
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = ChildInkDark
                     )
@@ -288,12 +293,16 @@ fun ChildProfileScreen(
                 // -------------------------------------------------------------
                 Card(
                     shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                     border = BorderStroke(1.5.dp, ChildCardBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                     modifier = Modifier
                         .weight(0.38f)
                         .fillMaxHeight()
+                        .shadow(6.dp, RoundedCornerShape(28.dp))
+                        .background(
+                            Brush.verticalGradient(0f to ChildCoralSoft, 0.45f to Color.White),
+                            RoundedCornerShape(28.dp)
+                        )
                 ) {
                     Column(
                         modifier = Modifier
@@ -310,7 +319,7 @@ fun ChildProfileScreen(
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
-                                    .size(92.dp)
+                                    .size(106.dp)
                                     .tvFocusable(shape = CircleShape, focusedScale = 1.08f, onClick = {
                                         PlatformAudioService.playSfx(SoundEffect.POP)
                                         showAvatarPicker = true
@@ -319,12 +328,13 @@ fun ChildProfileScreen(
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
-                                        .size(86.dp)
+                                        .size(98.dp)
+                                        .shadow(6.dp, CircleShape)
                                         .clip(CircleShape)
-                                        .background(ChildCoralSoft)
-                                        .border(2.5.dp, ChildCoralBorder, CircleShape)
+                                        .background(Color.White)
+                                        .border(4.dp, ChildCoral, CircleShape)
                                 ) {
-                                    Text(text = childAvatar.ifBlank { "👦" }, fontSize = 44.sp)
+                                    Text(text = childAvatar.ifBlank { "👦" }, fontSize = 52.sp)
                                 }
 
                                 // Floating edit badge
@@ -332,12 +342,12 @@ fun ChildProfileScreen(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
-                                        .size(28.dp)
+                                        .size(34.dp)
                                         .clip(CircleShape)
                                         .background(ChildCoral)
                                         .border(2.dp, Color.White, CircleShape)
                                 ) {
-                                    Text(text = "🎨", fontSize = 13.sp)
+                                    Text(text = "🎨", fontSize = 16.sp)
                                 }
                             }
 
@@ -345,7 +355,7 @@ fun ChildProfileScreen(
                             Text(
                                 text = childName.ifBlank { "Leo" },
                                 fontFamily = TitleFont(),
-                                fontSize = 24.sp,
+                                fontSize = 32.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ChildInkDark,
                                 textAlign = TextAlign.Center
@@ -363,7 +373,7 @@ fun ChildProfileScreen(
                                 ) {
                                     Text(
                                         text = AppStrings.ageYears(childAge),
-                                        fontSize = 11.5.sp,
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = ChildGoldText,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -377,7 +387,7 @@ fun ChildProfileScreen(
                                 ) {
                                     Text(
                                         text = pedagogicalBadge,
-                                        fontSize = 11.5.sp,
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = ChildMint,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -406,7 +416,7 @@ fun ChildProfileScreen(
                                     Text(
                                         text = "🏆 $creatorLevelName",
                                         fontFamily = TitleFont(),
-                                        fontSize = 15.sp,
+                                        fontSize = 19.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ChildInkDark
                                     )
@@ -416,7 +426,7 @@ fun ChildProfileScreen(
                                     ) {
                                         Text(
                                             text = "$storiesCount / $nextGoalTarget",
-                                            fontSize = 11.5.sp,
+                                            fontSize = 14.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = ChildCoral,
                                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
@@ -430,16 +440,16 @@ fun ChildProfileScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp))
+                                        .height(12.dp)
+                                        .clip(RoundedCornerShape(6.dp))
                                         .background(Color(0xFFF2ECE1))
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth(levelProgress)
                                             .fillMaxHeight()
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(ChildCoral)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Brush.horizontalGradient(listOf(ChildCoral, Color(0xFFF2B630))))
                                     )
                                 }
 
@@ -447,10 +457,10 @@ fun ChildProfileScreen(
 
                                 Text(
                                     text = motivationText,
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
                                     color = ChildInkMuted,
                                     fontWeight = FontWeight.SemiBold,
-                                    lineHeight = 14.sp
+                                    lineHeight = 18.sp
                                 )
                             }
                         }
@@ -482,7 +492,7 @@ fun ChildProfileScreen(
                                 Text(
                                     text = if (AppStrings.isEnglish) "View all stories ($storiesCount) →" else "Ver mis cuentos ($storiesCount) →",
                                     fontFamily = TitleFont(),
-                                    fontSize = 14.sp,
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color.White
                                 )
@@ -509,7 +519,7 @@ fun ChildProfileScreen(
                         Text(
                             text = if (AppStrings.isEnglish) "Your Medals and Achievements" else "Tus Medallas y Logros",
                             fontFamily = TitleFont(),
-                            fontSize = 20.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = ChildInkDark
                         )
@@ -521,7 +531,7 @@ fun ChildProfileScreen(
                         ) {
                             Text(
                                 text = "✨ $unlockedCount / ${medals.size} " + if (AppStrings.isEnglish) "Unlocked" else "Desbloqueadas",
-                                fontSize = 12.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = ChildGoldText,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -546,98 +556,13 @@ fun ChildProfileScreen(
                                 horizontalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
                                 row.forEach { medal ->
-                                    Card(
-                                        shape = RoundedCornerShape(22.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (medal.isUnlocked) Color.White else Color(0xFFF9F6F0)
-                                        ),
-                                        border = BorderStroke(
-                                            width = 1.5.dp,
-                                            color = if (medal.isUnlocked) ChildCoralBorder else ChildCardBorder
-                                        ),
-                                        elevation = CardDefaults.cardElevation(
-                                            defaultElevation = if (medal.isUnlocked) 3.dp else 1.dp
-                                        ),
+                                    MedalTile(
+                                        medal = medal,
+                                        tint = MedalTints[medals.indexOf(medal) % MedalTints.size],
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight()
-                                            .tvFocusable(
-                                                shape = RoundedCornerShape(22.dp),
-                                                focusedScale = 1.04f,
-                                                onClick = {
-                                                    PlatformAudioService.playSfx(SoundEffect.POP)
-                                                }
-                                            )
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(14.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            // Emoji Circle
-                                            Box(
-                                                contentAlignment = Alignment.Center,
-                                                modifier = Modifier
-                                                    .size(54.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        if (medal.isUnlocked) ChildGoldSoft else Color(0xFFEAE5DC)
-                                                    )
-                                            ) {
-                                                Text(text = medal.emoji, fontSize = 28.sp)
-                                            }
-
-                                            // Text + Status
-                                            Column(
-                                                modifier = Modifier.weight(1f),
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text = medal.title,
-                                                        fontFamily = TitleFont(),
-                                                        fontSize = 15.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = if (medal.isUnlocked) ChildInkDark else ChildInkMuted,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-
-                                                    // Badge status
-                                                    Surface(
-                                                        shape = RoundedCornerShape(10.dp),
-                                                        color = if (medal.isUnlocked) ChildMintSoft else Color(0xFFEAE5DC)
-                                                    ) {
-                                                        Text(
-                                                            text = if (medal.isUnlocked) "✓" else medal.progressText,
-                                                            fontSize = 12.sp,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            color = if (medal.isUnlocked) ChildMint else ChildInkMuted,
-                                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                                        )
-                                                    }
-                                                }
-
-                                                Spacer(modifier = Modifier.height(4.dp))
-
-                                                Text(
-                                                    text = medal.description,
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = ChildInkMuted,
-                                                    lineHeight = 15.sp,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -647,7 +572,7 @@ fun ChildProfileScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp),
+                            .height(78.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         // Stat 1: Cuentos creados
@@ -675,18 +600,18 @@ fun ChildProfileScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text(text = "📚", fontSize = 24.sp)
+                                ArtworkStack(images = storyCovers.take(2), fallbackEmoji = "📚", square = true)
                                 Column {
                                     Text(
                                         text = "$storiesCount " + if (AppStrings.isEnglish) "Stories created" else "Cuentos creados",
                                         fontFamily = TitleFont(),
-                                        fontSize = 14.sp,
+                                        fontSize = 17.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = ChildCoral
                                     )
                                     Text(
                                         text = if (AppStrings.isEnglish) "Open bookshelf →" else "Ver biblioteca →",
-                                        fontSize = 11.sp,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ChildInkMuted
                                     )
@@ -719,18 +644,18 @@ fun ChildProfileScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text(text = "🎨", fontSize = 24.sp)
+                                ArtworkStack(images = friendPortraits, fallbackEmoji = "🎨", square = false)
                                 Column {
                                     Text(
                                         text = "$uniqueCharactersCount " + if (AppStrings.isEnglish) "Drawings alive" else "Dibujos con vida",
                                         fontFamily = TitleFont(),
-                                        fontSize = 14.sp,
+                                        fontSize = 17.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = ChildMint
                                     )
                                     Text(
                                         text = if (AppStrings.isEnglish) "Open friends →" else "Ver amigos →",
-                                        fontSize = 11.sp,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ChildInkMuted
                                     )
@@ -770,7 +695,7 @@ fun ChildProfileScreen(
                             DPadArrows(color = ChildInkDark, width = 16.dp, height = 11.dp)
                             Text(
                                 text = if (AppStrings.isEnglish) "Navigate" else "Moverse",
-                                fontSize = 11.5.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ChildInkDark
                             )
@@ -782,10 +707,10 @@ fun ChildProfileScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                            Text(text = "OK", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = ChildCoral)
+                            Text(text = "OK", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = ChildCoral)
                             Text(
                                 text = if (AppStrings.isEnglish) "Select / Open" else "Seleccionar / Abrir",
-                                fontSize = 11.5.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ChildInkDark
                             )
@@ -800,7 +725,7 @@ fun ChildProfileScreen(
                             Text(text = "↩", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ChildInkMuted)
                             Text(
                                 text = if (AppStrings.isEnglish) "Back" else "Volver",
-                                fontSize = 11.5.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ChildInkDark
                             )
@@ -908,12 +833,149 @@ fun ChildProfileScreen(
                             Text(
                                 text = if (AppStrings.isEnglish) "Close" else "Cerrar",
                                 fontFamily = TitleFont(),
-                                fontSize = 14.sp,
+                                fontSize = 17.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ChildInkDark
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+    }
+}
+
+/** Overlapping thumbnails of the child's real artwork (story covers or drawn friends). */
+@Composable
+private fun ArtworkStack(images: List<String>, fallbackEmoji: String, square: Boolean) {
+    if (images.isEmpty()) {
+        Text(text = fallbackEmoji, fontSize = 30.sp)
+        return
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy((-14).dp)) {
+        images.forEach { image ->
+            val shape = if (square) RoundedCornerShape(10.dp) else CircleShape
+            WonderLoopImage(
+                model = image,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(width = if (square) 58.dp else 46.dp, height = 46.dp)
+                    .clip(shape)
+                    .border(2.5.dp, Color.White, shape)
+            )
+        }
+    }
+}
+
+private val MedalTints = listOf(
+    Color(0xFFF2B630), // gold
+    Color(0xFF14A37F), // mint
+    Color(0xFF7C5CE0), // violet
+    Color(0xFFE0485A)  // coral
+)
+
+/** A medal that looks like one: ribbon tails, metal-ring disc, and a soft tinted card when earned. */
+@Composable
+private fun MedalTile(medal: ChildMedal, tint: Color, modifier: Modifier = Modifier) {
+    val unlocked = medal.isUnlocked
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                if (unlocked) {
+                    Brush.linearGradient(listOf(tint.copy(alpha = 0.16f), Color.White))
+                } else {
+                    Brush.linearGradient(listOf(Color(0xFFF3EFE8), Color(0xFFF9F6F0)))
+                }
+            )
+            .border(1.5.dp, if (unlocked) tint.copy(alpha = 0.35f) else ChildCardBorder, RoundedCornerShape(24.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(contentAlignment = Alignment.TopCenter, modifier = Modifier.size(width = 78.dp, height = 92.dp)) {
+                // Ribbon tails
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) {
+                    listOf(-12f, 12f).forEach { angle ->
+                        Box(
+                            modifier = Modifier
+                                .size(width = 16.dp, height = 30.dp)
+                                .rotate(angle)
+                                .clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp))
+                                .background(if (unlocked) tint else Color(0xFFD9D3C8))
+                        )
+                    }
+                }
+                // Disc with a metallic ring
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(72.dp)
+                        .shadow(if (unlocked) 6.dp else 0.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(
+                            if (unlocked) {
+                                Brush.linearGradient(listOf(Color(0xFFFFE08A), Color(0xFFF2B630), Color(0xFFFFE9A8)))
+                            } else {
+                                Brush.linearGradient(listOf(Color(0xFFE2DDD3), Color(0xFFCFC8BC)))
+                            }
+                        )
+                        .padding(6.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                ) {
+                    Text(
+                        text = medal.emoji,
+                        fontSize = 32.sp,
+                        modifier = Modifier.graphicsLayer { alpha = if (unlocked) 1f else 0.35f }
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = medal.title,
+                    fontFamily = TitleFont(),
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (unlocked) ChildInkDark else ChildInkMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = medal.description,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ChildInkMuted,
+                    lineHeight = 18.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = if (unlocked) tint.copy(alpha = 0.14f) else Color(0xFFEAE5DC)
+                ) {
+                    Text(
+                        text = if (unlocked) {
+                            if (AppStrings.isEnglish) "✓ Earned" else "✓ Conseguida"
+                        } else {
+                            "🔒 ${medal.progressText}"
+                        },
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (unlocked) tint else ChildInkMuted,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                    )
                 }
             }
         }

@@ -179,9 +179,9 @@ object AppStrings {
         if (isEnglish) "$count friends" else "$count amigos"
     }
     val boardSubtitle get() = if (isEnglish)
-        "Choose a friend with the remote and press OK to read their story:"
+        "Press OK on a friend to see the drawing you made · ▼ to read their story"
     else
-        "Elige un amigo con el mando y pulsa OK para leer su cuento:"
+        "Pulsa OK en un amigo para ver el dibujo que hiciste · ▼ para leer su cuento"
     val emptyBoardTitle get() = if (isEnglish) "Your art board is open" else "Tu tablón de arte está libre"
     val emptyBoardDesc get() = if (isEnglish)
         "Draw your hero on paper, snap a photo, and we'll pin their magical artwork here!"
@@ -433,19 +433,19 @@ object AppStrings {
     else
         "Coge tus ceras o rotuladores favoritos y dibuja cualquier personaje que imagines: un dragón travieso, un cohete espacial o tu propio héroe."
 
-    val onboardingStep2Badge get() = if (isEnglish) "📸 STEP 2 OF 5 · PHYGITAL MAGIC" else "📸 PASO 2 DE 5 · MAGIA PHYGITAL"
-    val onboardingStep2Title get() = if (isEnglish) "Snap a photo and bring it to life" else "Haz una foto y dale vida"
+    val onboardingStep2Badge get() = if (isEnglish) "📱 STEP 2 OF 5 · FROM PAPER TO TV" else "📱 PASO 2 DE 5 · DEL PAPEL A LA TELE"
+    val onboardingStep2Title get() = if (isEnglish) "Scan, snap and watch it come alive" else "Escanea, haz la foto y cobra vida"
     val onboardingStep2Desc get() = if (isEnglish)
-        "Take a photo of your drawing with an adult's help. Our AI instantly discovers its colors, smile, and personality to start your story."
+        "Scan the QR code on the TV with any phone (no app needed) and take a photo of the drawing. In seconds the AI discovers its colors, smile and personality."
     else
-        "Fotografía tu dibujo con ayuda de un adulto. Nuestra IA descubre sus colores, su sonrisa y su personalidad al instante para empezar tu cuento."
+        "Escanea el código QR de la tele con cualquier móvil (sin instalar nada) y haz una foto al dibujo. En segundos, la IA descubre sus colores, su sonrisa y su personalidad."
 
     val onboardingStep3Badge get() = if (isEnglish) "📖 STEP 3 OF 5 · YOUR STORY" else "📖 PASO 3 DE 5 · TU CUENTO"
     val onboardingStep3Title get() = if (isEnglish) "Star in your own book" else "Protagoniza tu propio libro"
     val onboardingStep3Desc get() = if (isEnglish)
-        "Your drawing becomes the hero of a 5-page illustrated story, with lovely watercolors or 3D animation and a voice that reads it to you."
+        "Your drawing becomes the hero of a 5-page illustrated story. A narrator reads it aloud while the words light up on screen."
     else
-        "Tu dibujo se convierte en el héroe de un cuento ilustrado de 5 páginas, con preciosas acuarelas o animación 3D y una voz que te lo cuenta."
+        "Tu dibujo se convierte en el héroe de un cuento ilustrado de 5 páginas. Una voz te lo lee mientras las palabras se iluminan en la pantalla."
 
     val onboardingStep4Badge get() = if (isEnglish) "🌍 STEP 4 OF 5 · LEARN BY PLAYING" else "🌍 PASO 4 DE 5 · APRENDE JUGANDO"
     val onboardingStep4Title get() = if (isEnglish) "One story, two languages" else "Un cuento, dos idiomas"

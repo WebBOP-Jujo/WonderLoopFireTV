@@ -1,3 +1,4 @@
+import { randomInt } from 'crypto';
 import { CharacterProfile, ColorDef } from '../types/story.types.js';
 import { ILlmClient, getLlmClient } from './llm.client.js';
 
@@ -63,9 +64,13 @@ function sanitizeHex(hexCandidate?: string, colorName: string = ''): string {
 }
 
 /** Names the models fall back to again and again: banned so every drawing gets a fresh name. */
-const OVERUSED_NAMES = ['Felicito', 'Mimí', 'Mimi', 'Misu', 'Misi', 'Pipo', 'Nilo', 'Chispita', 'Blub', 'Lulú', 'Lulu', 'Pingui', 'Sparky', 'Bolita'];
+const OVERUSED_NAMES = ['Felicito', 'Mimí', 'Mimi', 'Misu', 'Misi', 'Pipo', 'Pepe', 'Pepito', 'Nilo', 'Chispita', 'Blub', 'Lulú', 'Lulu', 'Pingui', 'Sparky', 'Bolita'];
+
+/** A random first letter per analysis: models otherwise give different drawings the same favourite name. */
+const NAME_INITIALS = ['B', 'C', 'D', 'F', 'G', 'L', 'M', 'N', 'R', 'S', 'T', 'V', 'Z'];
 
 function buildVisionPrompt(language: 'es' | 'en'): string {
+  const initial = NAME_INITIALS[randomInt(NAME_INITIALS.length)];
   const outLanguage = language === 'en' ? 'ENGLISH' : 'SPANISH (from Spain)';
   return `You analyze a photo of a drawing a child (3-10 years old) made on paper. The result becomes the hero of a bedtime story shown on the family TV.
 
@@ -81,7 +86,7 @@ function buildVisionPrompt(language: 'es' | 'en'): string {
    - distinctiveFeatures: 2-4 concrete VISIBLE features from the drawing (long curly tail, three eyes, big wheels, striped legs). They will be used in the story, so make them specific.
    - personality: one short sentence a child would like, consistent with the facial expression.
    - shapeLanguage: the silhouette in a few words (round fluffy body with triangle ears).
-6. NAME: an ORIGINAL name of 2-3 syllables, easy to say for a small child, inspired by the drawing's look, color or sound (a round orange fish could be "Mango"; a tall green robot "Tuli"). Do not use these overused names: ${OVERUSED_NAMES.join(', ')}.
+6. NAME: an ORIGINAL name of 2-3 syllables, easy to say for a small child, inspired by the drawing's look, color or sound (a round orange fish could be "Mango"; a tall green robot "Tuli"). Prefer a name starting with the letter "${initial}". Do not use these overused names: ${OVERUSED_NAMES.join(', ')}.
 7. namePhonetic: simple syllables for text-to-speech (e.g. "man-go").
 8. visualDescriptionEn: ALWAYS IN ENGLISH, 20-40 words describing exactly how the character looks (body shape, colors, features, expression) so an illustrator can redraw it consistently.`;
 }

@@ -1,5 +1,6 @@
 package org.wonderloop.app.ui
 
+import org.wonderloop.app.ui.components.WonderBackdrop
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
@@ -163,23 +165,10 @@ fun HeroConfirmScreen(
             .take(3)
     }
 
+    WonderBackdrop {
     BoxWithConstraints(
         modifier = Modifier
-            .fillMaxSize()
-            .background(HeroCreamBg)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            HeroGoldSoft.copy(alpha = 0.55f),
-                            HeroCoralSoft.copy(alpha = 0.25f),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = maxOf(size.width, size.height) * 0.65f
-                    )
-                )
-            },
+            .fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         if (!isBlankOrInvalid) {
@@ -604,7 +593,7 @@ fun HeroConfirmScreen(
                                     .padding(10.dp)
                             ) {
                                 Text(
-                                    text = "✨ ${AppStrings.yourHero}",
+                                    text = AppStrings.yourHero,
                                     color = Color.White,
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
@@ -623,7 +612,7 @@ fun HeroConfirmScreen(
                             Text(
                                 text = character.name,
                                 fontFamily = TitleFont(),
-                                fontSize = 24.sp,
+                                fontSize = 30.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = HeroInkDark
                             )
@@ -635,7 +624,7 @@ fun HeroConfirmScreen(
                                 ) {
                                     Text(
                                         text = character.species,
-                                        fontSize = 12.sp,
+                                        fontSize = 15.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = HeroCoral,
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -667,7 +656,7 @@ fun HeroConfirmScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = quoteText,
-                                    fontSize = 13.5.sp,
+                                    fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = HeroInkDark,
                                     maxLines = 2,
@@ -701,7 +690,7 @@ fun HeroConfirmScreen(
                             } else {
                                 "✨ NUEVO PROTAGONISTA MÁGICO ✨"
                             },
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = HeroGoldText,
                             letterSpacing = 0.4.sp,
@@ -718,7 +707,7 @@ fun HeroConfirmScreen(
                                 AppStrings.heroBornTitle
                             },
                             fontFamily = TitleFont(),
-                            fontSize = 26.sp,
+                            fontSize = 34.sp,
                             fontWeight = FontWeight.Bold,
                             color = HeroInkDark,
                             textAlign = TextAlign.Center
@@ -730,11 +719,60 @@ fun HeroConfirmScreen(
                             } else {
                                 AppStrings.heroBornSubtitle(childName)
                             },
-                            fontSize = 14.5.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = HeroInkMuted,
                             textAlign = TextAlign.Center
                         )
+                    }
+
+                    // Paper drawing ➜ hero: the transformation children love to see
+                    val paperDrawing = character.originalDrawingBase64?.takeIf { it.isNotBlank() }
+                    if (paperDrawing != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(18.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(Color.White.copy(alpha = 0.85f))
+                                .border(1.5.dp, HeroCardBorder, RoundedCornerShape(24.dp))
+                                .padding(horizontal = 18.dp, vertical = 12.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.White,
+                                shadowElevation = 5.dp,
+                                modifier = Modifier.rotate(-5f)
+                            ) {
+                                WonderLoopImage(
+                                    model = paperDrawing,
+                                    contentDescription = if (AppStrings.isEnglish) "Your paper drawing" else "Tu dibujo en papel",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 16.dp)
+                                        .size(84.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                            }
+                            Text(text = "➜", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = HeroCoral)
+                            Column {
+                                Text(
+                                    text = if (AppStrings.isEnglish) "🖍️ YOUR DRAWING" else "🖍️ TU DIBUJO",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 0.5.sp,
+                                    color = HeroGoldText
+                                )
+                                Text(
+                                    text = if (AppStrings.isEnglish) "became ${character.name}!" else "¡se ha convertido en ${character.name}!",
+                                    fontFamily = TitleFont(),
+                                    fontSize = 21.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = HeroInkDark,
+                                    maxLines = 2
+                                )
+                            }
+                        }
                     }
 
                     // Story Language Selector Pill
@@ -744,7 +782,7 @@ fun HeroConfirmScreen(
                     ) {
                         Text(
                             text = AppStrings.storyLanguageLabel.uppercase(),
-                            fontSize = 11.5.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = HeroInkMuted,
                             letterSpacing = 0.6.sp,
@@ -766,7 +804,7 @@ fun HeroConfirmScreen(
                                 shadowElevation = if (isEs) 3.dp else 0.dp,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(44.dp)
+                                    .height(52.dp)
                                     .tvFocusable(
                                         shape = RoundedCornerShape(50.dp),
                                         focusedScale = 1.05f,
@@ -794,7 +832,7 @@ fun HeroConfirmScreen(
                                 shadowElevation = if (isEn) 3.dp else 0.dp,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(44.dp)
+                                    .height(52.dp)
                                     .tvFocusable(
                                         shape = RoundedCornerShape(50.dp),
                                         focusedScale = 1.05f,
@@ -903,5 +941,6 @@ fun HeroConfirmScreen(
                 }
             }
         }
+    }
     }
 }

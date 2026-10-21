@@ -92,6 +92,7 @@ fun App(
             var parentalGateOnSuccess by remember { mutableStateOf<(() -> Unit)?>(null) }
             var showDailyLimitDialog by remember { mutableStateOf(false) }
             var dailyLimitHeroName by remember { mutableStateOf<String?>(null) }
+            var showExitDialog by remember { mutableStateOf(false) }
 
             fun tryStartAdventure(sagaHeroName: String? = null, onProceed: () -> Unit) {
                 if (!SubscriptionManager.canCreateStory()) {
@@ -119,9 +120,12 @@ fun App(
                     focusRestoreTick++
                     return
                 }
-                // Fire TV Guideline: BACK from root destinations must exit the app to TV launcher directly without a confirmation dialog
-                if (currentScreen is Screen.Home || currentScreen is Screen.Splash || (currentScreen is Screen.ProfilePicker && !currentScreen.canGoBack) || screenStack.size <= 1) {
+                // Fire TV controller guidelines: on the main screen, capture BACK to ask "Are you sure you want to exit?".
+                // BACK inside the dialog only closes it (the Dialog window handles it), so there is no reopen loop.
+                if (currentScreen is Screen.Splash) {
                     onExitApp()
+                } else if (currentScreen is Screen.Home || (currentScreen is Screen.ProfilePicker && !currentScreen.canGoBack) || screenStack.size <= 1) {
+                    showExitDialog = true
                 } else {
                     isBackNav = true
                     screenStack = screenStack.dropLast(1)
@@ -207,6 +211,21 @@ fun App(
                         }
                     }
                 }
+            }
+
+            if (showExitDialog) {
+                ExitConfirmDialog(
+                    childName = childName,
+                    childAvatar = childAvatar,
+                    onStay = {
+                        showExitDialog = false
+                        focusRestoreTick++
+                    },
+                    onExit = {
+                        showExitDialog = false
+                        onExitApp()
+                    }
+                )
             }
 
             // Parental Gate Dialog for accessing financial/paywall areas

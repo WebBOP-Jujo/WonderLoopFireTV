@@ -6,7 +6,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,88 +15,131 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
-import kotlinx.coroutines.launch
 import org.wonderloop.app.platform.PlatformAudioService
 import org.wonderloop.app.platform.PlatformBackHandler
 import org.wonderloop.app.platform.SoundEffect
+import org.wonderloop.app.platform.WonderLoopImage
 import org.wonderloop.app.theme.*
 import org.wonderloop.app.ui.components.DPadArrows
-import org.wonderloop.app.ui.components.tvFocusable
+import org.wonderloop.app.ui.components.QrCodeView
+import org.wonderloop.app.ui.components.WonderBackdrop
+import org.wonderloop.app.ui.tv.TvClickableSurface
+
+private val TutInk = Color(0xFF2B2340)
+private val TutInkMuted = Color(0xFF6B6480)
+private val TutCoral = Color(0xFFD9384A)
+private val TutCoralSoft = Color(0xFFFDECE9)
+private val TutMint = Color(0xFF0E7F64)
+private val TutMintBright = Color(0xFF1FBE9C)
+private val TutGold = Color(0xFFFFD166)
+private val TutGoldText = Color(0xFF9E6700)
+private val TutViolet = Color(0xFF7C5CE0)
+private val TutCardBorder = Color(0xFFEDE8E1)
 
 private data class TutorialSlide(
-    val stepIndex: Int,
+    val icon: String,
+    val shortLabel: String,
     val chipText: String,
     val title: String,
     val description: String,
-    val gradientColors: List<Color>
+    val accent: Color,
+    val stageColors: List<Color>
 )
+
+/** The real crayon dog bundled for the "no phone" demo ("Pepe", see [DemoPepeAssets]): the tutorial shows the actual product. */
+private val tutorialDrawing: String get() = DemoDrawings.items[1].base64DataUri
 
 @Composable
 fun OnboardingScreen(
     onFinish: () -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val BrandRed = Color(0xFFD9384A)
-    val BrandMint = Color(0xFF1FBE9C)
-    val DeepInk = Color(0xFF2B2340)
-    val MutedInk = Color(0xFF6B6480)
-
-    val slides = remember(AppStrings.isEnglish) {
+    val en = AppStrings.isEnglish
+    val slides = remember(en) {
         listOf(
             TutorialSlide(
-                stepIndex = 0,
+                icon = "🖍️",
+                shortLabel = if (en) "Draw" else "Dibuja",
                 chipText = AppStrings.onboardingStep1Badge,
                 title = AppStrings.onboardingStep1Title,
                 description = AppStrings.onboardingStep1Desc,
-                gradientColors = listOf(Color(0xFFFFF3D6), Color(0xFFFFE0AA))
+                accent = Color(0xFFF2B630),
+                stageColors = listOf(Color(0xFFFFF6DE), Color(0xFFFFE3A3))
             ),
             TutorialSlide(
-                stepIndex = 1,
+                icon = "📱",
+                shortLabel = if (en) "Scan" else "Escanea",
                 chipText = AppStrings.onboardingStep2Badge,
                 title = AppStrings.onboardingStep2Title,
                 description = AppStrings.onboardingStep2Desc,
-                gradientColors = listOf(Color(0xFFFFD9D3), Color(0xFFFF9E93))
+                accent = TutCoral,
+                stageColors = listOf(Color(0xFFFFEDEA), Color(0xFFFFC9C1))
             ),
             TutorialSlide(
-                stepIndex = 2,
+                icon = "📖",
+                shortLabel = if (en) "Listen" else "Escucha",
                 chipText = AppStrings.onboardingStep3Badge,
                 title = AppStrings.onboardingStep3Title,
                 description = AppStrings.onboardingStep3Desc,
-                gradientColors = listOf(Color(0xFFDFF6EE), Color(0xFFA9E1D0))
+                accent = TutMint,
+                stageColors = listOf(Color(0xFFE6F8F2), Color(0xFFB3E6D6))
             ),
             TutorialSlide(
-                stepIndex = 3,
+                icon = "🌍",
+                shortLabel = if (en) "Languages" else "Idiomas",
                 chipText = AppStrings.onboardingStep4Badge,
                 title = AppStrings.onboardingStep4Title,
                 description = AppStrings.onboardingStep4Desc,
-                gradientColors = listOf(Color(0xFFE7EEFF), Color(0xFFCFC4F0))
+                accent = TutViolet,
+                stageColors = listOf(Color(0xFFF0ECFF), Color(0xFFD5CBF5))
             ),
             TutorialSlide(
-                stepIndex = 4,
+                icon = "🌱",
+                shortLabel = if (en) "Create" else "Crea",
                 chipText = AppStrings.onboardingStep5Badge,
                 title = AppStrings.onboardingStep5Title,
                 description = AppStrings.onboardingStep5Desc,
-                gradientColors = listOf(Color(0xFFFBE7EC), Color(0xFFE1D6F0))
+                accent = TutCoral,
+                stageColors = listOf(Color(0xFFFFF0F3), Color(0xFFE6DBF5))
             )
         )
     }
 
     var currentPage by remember { mutableStateOf(0) }
     val isLastPage = currentPage == slides.size - 1
+
+    fun goNext() {
+        if (currentPage < slides.size - 1) {
+            PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
+            currentPage += 1
+        }
+    }
+
+    fun goPrev() {
+        if (currentPage > 0) {
+            PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
+            currentPage -= 1
+        }
+    }
 
     val nextBtnFocusRequester = remember { FocusRequester() }
     LaunchedEffect(currentPage) {
@@ -108,333 +150,76 @@ fun OnboardingScreen(
     }
 
     PlatformBackHandler(enabled = true) {
-        if (currentPage > 0) {
-            currentPage -= 1
-        } else {
-            onFinish()
-        }
+        if (currentPage > 0) goPrev() else onFinish()
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFFFFBF5))
-            .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV 5% Safe Zone
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyUp) {
+    WonderBackdrop {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV safe zone
+                .onPreviewKeyEvent {
+                    // ◀ ▶ always change step, wherever the focus is
                     when (it.key) {
                         Key.DirectionLeft -> {
-                            if (currentPage > 0) {
-                                currentPage -= 1
-                                true
-                            } else false
+                            if (it.type == KeyEventType.KeyDown) goPrev()
+                            true
                         }
                         Key.DirectionRight -> {
-                            if (currentPage < slides.size - 1) {
-                                currentPage += 1
-                                true
-                            } else false
+                            if (it.type == KeyEventType.KeyDown) goNext()
+                            true
                         }
                         else -> false
                     }
-                } else false
-            }
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
+                }
         ) {
             // =================================================================
-            // 1. TOP BAR: [ ← Anterior ]   Badge   [ Saltar tutorial ✕ ]
+            // 1. TOP BAR: brand · 5-step journey · skip
             // =================================================================
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Previous button (or spacer)
-                if (currentPage > 0) {
-                    val onGoPrev = {
-                        currentPage -= 1
-                    }
-                    Surface(
-                        onClick = { onGoPrev() },
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.White,
-                        border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                        shadowElevation = 2.dp,
-                        modifier = Modifier
-                            .height(42.dp)
-                            .tvFocusable(shape = RoundedCornerShape(24.dp), focusedScale = 1.06f, onClick = { onGoPrev() })
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        ) {
-                            Text(text = "←", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = DeepInk)
-                            Text(
-                                text = if (AppStrings.isEnglish) "Previous" else "Anterior",
-                                fontFamily = TitleFont(),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = DeepInk
-                            )
-                        }
-                    }
-                } else {
-                    Spacer(modifier = Modifier.width(100.dp))
-                }
-
-                // Center: Welcome Tutorial Badge
-                Surface(
-                    shape = RoundedCornerShape(50.dp),
-                    color = Color(0xFFFFF1CF),
-                    border = BorderStroke(1.dp, Color(0xFFF3DC9B))
-                ) {
+                Column(modifier = Modifier.width(190.dp)) {
                     Text(
-                        text = if (AppStrings.isEnglish) "✨ WELCOME TUTORIAL ✨" else "✨ TUTORIAL DE BIENVENIDA ✨",
-                        fontSize = 11.5.sp,
+                        text = if (en) "✨ WELCOME TO" else "✨ BIENVENIDO A",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF8A5A00),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        letterSpacing = 0.6.sp,
+                        color = TutGoldText
                     )
+                    Row {
+                        Text(text = "Wonder", fontFamily = TitleFont(), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TutCoral)
+                        Text(text = "Loop", fontFamily = TitleFont(), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TutMint)
+                    }
                 }
 
-                // Right: Skip button (hidden on last page)
-                if (!isLastPage) {
-                    Surface(
-                        onClick = onFinish,
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.White,
-                        border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                        shadowElevation = 2.dp,
-                        modifier = Modifier
-                            .height(42.dp)
-                            .tvFocusable(shape = RoundedCornerShape(24.dp), focusedScale = 1.06f, onClick = onFinish)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(horizontal = 16.dp)
+                TutorialJourney(
+                    slides = slides,
+                    currentIndex = currentPage,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Box(modifier = Modifier.width(150.dp), contentAlignment = Alignment.CenterEnd) {
+                    if (!isLastPage) {
+                        TvClickableSurface(
+                            onClick = onFinish,
+                            modifier = Modifier.height(44.dp),
+                            shape = RoundedCornerShape(50),
+                            containerColor = Color.White,
+                            borderColor = TutCardBorder,
+                            contentDescription = if (en) "Skip tutorial" else "Saltar tutorial"
                         ) {
                             Text(
-                                text = if (AppStrings.isEnglish) "Skip tutorial" else "Saltar tutorial",
+                                text = if (en) "Skip  ✕" else "Saltar  ✕",
                                 fontFamily = TitleFont(),
-                                fontSize = 14.sp,
+                                fontSize = 17.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MutedInk
+                                color = TutInkMuted,
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .padding(horizontal = 22.dp)
                             )
-                            Text(text = "✕", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MutedInk)
-                        }
-                    }
-                } else {
-                    Spacer(modifier = Modifier.width(100.dp))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // =================================================================
-            // 2. MAIN WIDESCREEN CAROUSEL (Left Stage · Right Narrative Card)
-            // =================================================================
-            AnimatedContent(
-                targetState = currentPage,
-                transitionSpec = {
-                    if (targetState > initialState) {
-                        (slideInHorizontally { width -> (width * 0.2f).toInt() } + fadeIn(tween(220)))
-                            .togetherWith(slideOutHorizontally { width -> (-width * 0.2f).toInt() } + fadeOut(tween(180)))
-                    } else {
-                        (slideInHorizontally { width -> (-width * 0.2f).toInt() } + fadeIn(tween(220)))
-                            .togetherWith(slideOutHorizontally { width -> (width * 0.2f).toInt() } + fadeOut(tween(180)))
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) { pageIndex ->
-                val slide = slides[pageIndex]
-
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // LEFT COLUMN (44% width): Animated Illustration Stage
-                    Card(
-                        shape = RoundedCornerShape(28.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                        modifier = Modifier
-                            .weight(0.44f)
-                            .fillMaxHeight()
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .drawBehind {
-                                    drawRect(
-                                        brush = Brush.radialGradient(
-                                            colors = slide.gradientColors,
-                                            center = center,
-                                            radius = maxOf(size.width, size.height) * 0.7f
-                                        )
-                                    )
-                                }
-                                .padding(16.dp)
-                        ) {
-                            when (pageIndex) {
-                                0 -> StageStep1DrawOnPaper()
-                                1 -> StageStep2SnapPhoto(BrandRed)
-                                2 -> StageStep3Storybook(BrandMint)
-                                3 -> StageStep4Bilingual(BrandRed, BrandMint, MutedInk)
-                                4 -> StageStep5CreativityLoop(BrandRed, BrandMint)
-                            }
-                        }
-                    }
-
-                    // RIGHT COLUMN (56% width): Information & Interactive Controls
-                    Card(
-                        shape = RoundedCornerShape(28.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-                        modifier = Modifier
-                            .weight(0.56f)
-                            .fillMaxHeight()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(32.dp),
-                            verticalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                // Step Chip (.chip)
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Color(0xFFFCEAE7)
-                                ) {
-                                    Text(
-                                        text = slide.chipText,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = BrandRed,
-                                        letterSpacing = 0.5.sp,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(18.dp))
-
-                                // Headline (h2)
-                                Text(
-                                    text = slide.title,
-                                    fontFamily = TitleFont(),
-                                    fontSize = 26.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = DeepInk,
-                                    lineHeight = 33.sp
-                                )
-
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                // Description (p)
-                                Text(
-                                    text = slide.description,
-                                    fontSize = 15.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MutedInk,
-                                    lineHeight = 24.sp
-                                )
-                            }
-
-                            // Footer: Dots Indicator + Next / Finish Button
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                TutorialDotsIndicator(
-                                    totalDots = slides.size,
-                                    currentIndex = pageIndex,
-                                    activeColor = BrandRed
-                                )
-
-                                if (pageIndex < slides.size - 1) {
-                                    // Siguiente paso
-                                    Surface(
-                                        onClick = {
-                                            currentPage += 1
-                                        },
-                                        shape = RoundedCornerShape(50.dp),
-                                        color = BrandRed,
-                                        shadowElevation = 4.dp,
-                                        modifier = Modifier
-                                            .height(48.dp)
-                                            .tvFocusable(
-                                                shape = RoundedCornerShape(50.dp),
-                                                focusedScale = 1.05f,
-                                                focusRequester = nextBtnFocusRequester,
-                                                onClick = {
-                                                    currentPage += 1
-                                                }
-                                            )
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            modifier = Modifier.padding(horizontal = 24.dp)
-                                        ) {
-                                            Text(
-                                                 text = if (AppStrings.isEnglish) "Next step" else "Siguiente paso",
-                                                 fontFamily = TitleFont(),
-                                                 fontSize = 15.sp,
-                                                 fontWeight = FontWeight.SemiBold,
-                                                 color = Color.White
-                                             )
-                                            Text(text = "→", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-                                        }
-                                    }
-                                } else {
-                                    // Último paso: ¡Empezar mi aventura!
-                                    Surface(
-                                        onClick = {
-                                            PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                            onFinish()
-                                        },
-                                        shape = RoundedCornerShape(50.dp),
-                                        color = BrandRed,
-                                        shadowElevation = 4.dp,
-                                        modifier = Modifier
-                                            .height(48.dp)
-                                            .tvFocusable(
-                                                shape = RoundedCornerShape(50.dp),
-                                                focusedScale = 1.05f,
-                                                focusRequester = nextBtnFocusRequester,
-                                                onClick = {
-                                                    PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                                    onFinish()
-                                                }
-                                            )
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 26.dp)
-                                        ) {
-                                            Text(
-                                                text = "${AppStrings.startMyAdventure} ✨",
-                                                fontFamily = TitleFont(),
-                                                fontSize = 15.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color.White
-                                            )
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -443,439 +228,538 @@ fun OnboardingScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             // =================================================================
-            // 3. BOTTOM HINT BAR: Symmetrical D-Pad arrows
+            // 2. SLIDE: animated stage (left) · story of the step (right)
             // =================================================================
-            Row(
+            AnimatedContent(
+                targetState = currentPage,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (slideInHorizontally { width -> (width * 0.15f).toInt() } + fadeIn(tween(260)))
+                            .togetherWith(slideOutHorizontally { width -> (-width * 0.15f).toInt() } + fadeOut(tween(180)))
+                    } else {
+                        (slideInHorizontally { width -> (-width * 0.15f).toInt() } + fadeIn(tween(260)))
+                            .togetherWith(slideOutHorizontally { width -> (width * 0.15f).toInt() } + fadeOut(tween(180)))
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(34.dp),
+                    .weight(1f),
+                label = "tutorial_slide"
+            ) { pageIndex ->
+                val slide = slides[pageIndex]
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // LEFT: illustration stage
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(0.46f)
+                            .fillMaxHeight()
+                            .shadow(10.dp, RoundedCornerShape(32.dp))
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(Brush.linearGradient(slide.stageColors))
+                            .border(2.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(32.dp))
+                    ) {
+                        FitStage {
+                            when (pageIndex) {
+                                0 -> StageStep1DrawOnPaper()
+                                1 -> StageStep2ScanToTv()
+                                2 -> StageStep3Storybook()
+                                3 -> StageStep4Bilingual(TutCoral, TutMintBright, TutInkMuted)
+                                4 -> StageStep5CreativityLoop()
+                            }
+                        }
+                    }
+
+                    // RIGHT: the step, in 10-foot type
+                    Column(
+                        modifier = Modifier
+                            .weight(0.54f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(Color.White.copy(alpha = 0.94f))
+                            .border(2.dp, slide.accent.copy(alpha = 0.35f), RoundedCornerShape(32.dp))
+                            .padding(horizontal = 28.dp, vertical = 22.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Surface(shape = RoundedCornerShape(50), color = slide.accent.copy(alpha = 0.12f)) {
+                                Text(
+                                    text = slide.chipText,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (slide.accent == Color(0xFFF2B630)) TutGoldText else slide.accent,
+                                    letterSpacing = 0.5.sp,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = slide.title,
+                                fontFamily = TitleFont(),
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TutInk,
+                                lineHeight = 35.sp,
+                                maxLines = 2
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = slide.description,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TutInkMuted,
+                                lineHeight = 25.sp
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (pageIndex < slides.size - 1) Text(
+                                text = "${pageIndex + 1} / ${slides.size}",
+                                fontFamily = TitleFont(),
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TutInkMuted
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (pageIndex > 0) {
+                                TvClickableSurface(
+                                    onClick = { goPrev() },
+                                    modifier = Modifier.height(52.dp),
+                                    shape = RoundedCornerShape(50),
+                                    containerColor = Color.White,
+                                    borderColor = TutCardBorder,
+                                    playClickSound = false,
+                                    contentDescription = if (en) "Previous step" else "Paso anterior"
+                                ) {
+                                    Text(
+                                        text = "←",
+                                        fontSize = 22.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = TutInkMuted,
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .padding(horizontal = 22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                            }
+                            TvClickableSurface(
+                                onClick = {
+                                    if (pageIndex < slides.size - 1) {
+                                        goNext()
+                                    } else {
+                                        PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                                        onFinish()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .height(52.dp)
+                                    .focusRequester(nextBtnFocusRequester),
+                                shape = RoundedCornerShape(50),
+                                containerColor = TutCoral,
+                                focusedContainerColor = TutCoral,
+                                contentColor = Color.White,
+                                glowColor = TutCoral.copy(alpha = 0.4f),
+                                playClickSound = false,
+                                contentDescription = if (pageIndex < slides.size - 1) {
+                                    if (en) "Next step" else "Siguiente paso"
+                                } else {
+                                    AppStrings.startMyAdventure
+                                }
+                            ) {
+                                Text(
+                                    text = if (pageIndex < slides.size - 1) {
+                                        if (en) "Next  →" else "Siguiente  →"
+                                    } else {
+                                        AppStrings.startMyAdventure
+                                    },
+                                    fontFamily = TitleFont(),
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .padding(horizontal = 26.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // =================================================================
+            // 3. REMOTE HINTS
+            // =================================================================
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.White.copy(alpha = 0.85f),
-                    border = BorderStroke(1.dp, Color(0xFFEDE8E1))
+                TutorialHint(label = null, text = if (en) "Change step" else "Cambiar paso")
+                Spacer(modifier = Modifier.width(28.dp))
+                TutorialHint(label = "OK", text = if (en) "Continue" else "Continuar")
+                Spacer(modifier = Modifier.width(28.dp))
+                TutorialHint(label = "↩", text = if (en) "Back" else "Volver")
+            }
+        }
+    }
+}
+
+/** Five icons joined by a line: where the child is in the journey, and what comes next. */
+@Composable
+private fun TutorialJourney(slides: List<TutorialSlide>, currentIndex: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.Top
+    ) {
+        slides.forEachIndexed { i, slide ->
+            if (i > 0) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 20.dp)
+                        .width(16.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(if (i <= currentIndex) TutMintBright else TutCardBorder)
+                )
+            }
+            val active = i == currentIndex
+            val done = i < currentIndex
+            val scale by animateFloatAsState(if (active) 1.12f else 1f, tween(250), label = "journey_scale")
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(70.dp)) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .scale(scale)
+                        .shadow(if (active) 6.dp else 0.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                active -> Color.White
+                                done -> TutMintBright
+                                else -> Color.White.copy(alpha = 0.7f)
+                            }
+                        )
+                        .border(3.dp, if (active) slide.accent else Color.Transparent, CircleShape)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            DPadArrows(color = DeepInk, width = 16.dp, height = 11.dp)
-                            Text(
-                                text = if (AppStrings.isEnglish) "Change step" else "Cambiar paso",
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DeepInk
-                            )
-                        }
-
-                        Text(text = "·", color = Color(0xFFEDE8E1), fontWeight = FontWeight.Bold)
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Text(text = "OK", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = BrandRed)
-                            Text(
-                                text = if (AppStrings.isEnglish) "Continue" else "Continuar",
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DeepInk
-                            )
-                        }
-
-                        Text(text = "·", color = Color(0xFFEDE8E1), fontWeight = FontWeight.Bold)
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Text(text = "↩", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MutedInk)
-                            Text(
-                                text = if (AppStrings.isEnglish) "Back / Exit" else "Volver / Salir",
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DeepInk
-                            )
-                        }
-                    }
+                    Text(
+                        text = if (done) "✓" else slide.icon,
+                        fontSize = if (done) 18.sp else 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        modifier = Modifier.alpha(if (active || done) 1f else 0.55f)
+                    )
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = slide.shortLabel,
+                    fontSize = 13.sp,
+                    fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Bold,
+                    color = if (active) TutInk else TutInkMuted,
+                    maxLines = 1
+                )
             }
         }
     }
 }
 
 @Composable
-private fun TutorialDotsIndicator(
-    totalDots: Int,
-    currentIndex: Int,
-    activeColor: Color
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        for (i in 0 until totalDots) {
-            val isActive = i == currentIndex
-            val width by animateDpAsState(
-                targetValue = if (isActive) 20.dp else 7.dp,
-                animationSpec = tween(250),
-                label = "dotWidth"
-            )
-            val color by animateColorAsState(
-                targetValue = if (isActive) activeColor else Color(0xFFEADCE0),
-                animationSpec = tween(250),
-                label = "dotColor"
-            )
-            Box(
-                modifier = Modifier
-                    .width(width)
-                    .height(7.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(color)
-            )
+private fun TutorialHint(label: String?, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color.White,
+            border = BorderStroke(1.dp, TutCardBorder)
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)) {
+                if (label == null) {
+                    DPadArrows(color = TutInk)
+                } else {
+                    Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = TutInk)
+                }
+            }
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = text, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TutInkMuted)
+    }
+}
+
+/** Stages are designed on a fixed 440x360 dp canvas and scaled down to fit their card, so nothing is ever cut. */
+@Composable
+private fun FitStage(content: @Composable BoxScope.() -> Unit) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val scale = minOf(maxWidth / 440.dp, maxHeight / 360.dp, 1.2f)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .requiredSize(440.dp, 360.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            content = content
+        )
+    }
+}
+
+/** A sheet of paper holding the child's real crayon drawing. */
+@Composable
+private fun PaperWithDrawing(modifier: Modifier = Modifier, rotation: Float = -5f, drawingAlpha: Float = 1f) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White,
+        shadowElevation = 12.dp,
+        modifier = modifier.rotate(rotation)
+    ) {
+        WonderLoopImage(
+            model = tutorialDrawing,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .padding(14.dp)
+                .fillMaxSize()
+                .alpha(drawingAlpha)
+        )
     }
 }
 
 // =========================================================================
-// STAGE 1: Draw on Paper (.paper1 + animated stroke + floating 🖍️ / 🖊️)
+// STAGE 1: a real crayon drawing on paper, crayons dancing around it
 // =========================================================================
 @Composable
 private fun StageStep1DrawOnPaper() {
-    val infiniteTransition = rememberInfiniteTransition(label = "step1")
-    val drawProgress by infiniteTransition.animateFloat(
-        initialValue = 0.05f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "drawProgress"
+    val transition = rememberInfiniteTransition(label = "step1")
+    val bob by transition.animateFloat(
+        initialValue = -6f,
+        targetValue = 6f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bob"
     )
-    val crayonScale1 by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1300, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "crayon1"
-    )
-    val crayonScale2 by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1300, delayMillis = 650, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "crayon2"
+    val reveal by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "reveal"
     )
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Tilted Paper Sheet (.paper1)
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = Color.White,
-            shadowElevation = 10.dp,
-            modifier = Modifier
-                .size(width = 148.dp, height = 176.dp)
-                .rotate(-5f)
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Canvas(modifier = Modifier.size(110.dp)) {
-                    val sx = size.width / 100f
-                    val sy = size.height / 100f
-                    val fullPath = Path().apply {
-                        moveTo(15f * sx, 70f * sy)
-                        cubicTo(20f * sx, 30f * sy, 45f * sx, 15f * sy, 55f * sx, 30f * sy)
-                        cubicTo(65f * sx, 45f * sy, 40f * sx, 50f * sy, 45f * sx, 65f * sy)
-                        cubicTo(50f * sx, 80f * sy, 75f * sx, 75f * sy, 80f * sx, 50f * sy)
-                    }
-                    val measure = PathMeasure()
-                    measure.setPath(fullPath, false)
-                    val partialPath = Path()
-                    measure.getSegment(0f, measure.length * drawProgress, partialPath, true)
-
-                    drawPath(
-                        path = partialPath,
-                        color = Color(0xFFFF6B6B),
-                        style = Stroke(
-                            width = 6.dp.toPx(),
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
-                        )
-                    )
-                }
-            }
-        }
-
-        // Floating Crayon Top-Left (right next to the top-left corner of the drawing paper)
-        Text(
-            text = "🖍️",
-            fontSize = 32.sp,
-            modifier = Modifier
-                .offset(x = (-92).dp, y = (-72).dp)
-                .scale(crayonScale1)
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+        PaperWithDrawing(
+            modifier = Modifier.size(width = 210.dp, height = 240.dp),
+            drawingAlpha = reveal
         )
-
-        // Floating Marker Bottom-Right (right next to the bottom-right corner of the drawing paper)
-        Text(
-            text = "🖊️",
-            fontSize = 32.sp,
-            modifier = Modifier
-                .offset(x = 92.dp, y = 70.dp)
-                .scale(crayonScale2)
-        )
+        Text(text = "🖍️", fontSize = 48.sp, modifier = Modifier.offset(x = 145.dp, y = (85 + bob).dp).rotate(-20f))
+        Text(text = "🖍️", fontSize = 40.sp, modifier = Modifier.offset(x = (-150).dp, y = (-95 - bob).dp).rotate(30f))
+        Text(text = "✏️", fontSize = 36.sp, modifier = Modifier.offset(x = (-150).dp, y = (105 + bob).dp))
+        Text(text = "✨", fontSize = 30.sp, modifier = Modifier.offset(x = 145.dp, y = (-120).dp).scale(reveal))
     }
 }
 
 // =========================================================================
-// STAGE 2: Snap Photo (.flashring + .paper1 + .camb camera button)
+// STAGE 2: a phone scans the TV's QR code, then photographs the drawing
 // =========================================================================
 @Composable
-private fun StageStep2SnapPhoto(brandRed: Color) {
-    val infiniteTransition = rememberInfiniteTransition(label = "step2")
-    val flashScale by infiniteTransition.animateFloat(
-        initialValue = 0.78f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "flashScale"
+private fun StageStep2ScanToTv() {
+    val transition = rememberInfiniteTransition(label = "step2")
+    val flash by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart),
+        label = "flash"
     )
-    val flashAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "flashAlpha"
+    val float by transition.animateFloat(
+        initialValue = -5f,
+        targetValue = 5f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "float"
     )
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Pulsing Flash Ring (.flashring)
-        Box(
-            modifier = Modifier
-                .size(176.dp)
-                .scale(flashScale)
-                .alpha(flashAlpha)
-                .border(6.dp, Color.White, RoundedCornerShape(28.dp))
-        )
-
-        // Tilted Paper Sheet (.paper1)
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = Color.White,
-            shadowElevation = 10.dp,
-            modifier = Modifier
-                .size(width = 156.dp, height = 186.dp)
-                .rotate(-5f)
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+        // The TV, showing the QR code
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.offset(x = (-70).dp, y = (-50).dp)
         ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Canvas(modifier = Modifier.size(116.dp)) {
-                    val sx = size.width / 100f
-                    val sy = size.height / 100f
-                    val fullPath = Path().apply {
-                        moveTo(15f * sx, 70f * sy)
-                        cubicTo(20f * sx, 30f * sy, 45f * sx, 15f * sy, 55f * sx, 30f * sy)
-                        cubicTo(65f * sx, 45f * sy, 40f * sx, 50f * sy, 45f * sx, 65f * sy)
-                        cubicTo(50f * sx, 80f * sy, 75f * sx, 75f * sy, 80f * sx, 50f * sy)
-                    }
-                    drawPath(
-                        path = fullPath,
-                        color = Color(0xFFFF6B6B),
-                        style = Stroke(
-                            width = 6.dp.toPx(),
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
-                        )
-                    )
-                }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(width = 250.dp, height = 160.dp)
+                    .shadow(8.dp, RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(TutInk)
+                    .padding(10.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFFFFBF5))
+            ) {
+                QrCodeView(
+                    content = "https://wonderloop.tv/upload/DEMO",
+                    modifier = Modifier.size(110.dp)
+                )
             }
+            Box(
+                modifier = Modifier
+                    .size(width = 90.dp, height = 10.dp)
+                    .clip(RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp))
+                    .background(TutInk.copy(alpha = 0.8f))
+            )
         }
 
-        // Camera Badge (.camb)
+        // The phone in front, photographing the drawing
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .offset(x = 125.dp, y = (55 + float).dp)
+                .rotate(8f)
+                .size(width = 125.dp, height = 220.dp)
+                .shadow(14.dp, RoundedCornerShape(26.dp))
+                .clip(RoundedCornerShape(26.dp))
+                .background(TutInk)
+                .padding(8.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.White)
+        ) {
+            WonderLoopImage(
+                model = tutorialDrawing,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .padding(12.dp)
+                    .fillMaxSize()
+            )
+            // Viewfinder corners
+            Canvas(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+                val l = 22.dp.toPx()
+                val sw = 4.dp.toPx()
+                val c = TutCoral
+                listOf(
+                    Offset(0f, 0f) to Offset(1f, 1f),
+                    Offset(size.width, 0f) to Offset(-1f, 1f),
+                    Offset(0f, size.height) to Offset(1f, -1f),
+                    Offset(size.width, size.height) to Offset(-1f, -1f)
+                ).forEach { (p, d) ->
+                    drawLine(c, p, Offset(p.x + d.x * l, p.y), sw, StrokeCap.Round)
+                    drawLine(c, p, Offset(p.x, p.y + d.y * l), sw, StrokeCap.Round)
+                }
+            }
+            // Camera flash
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White.copy(alpha = if (flash < 0.12f) 0.85f * (1f - flash / 0.12f) else 0f))
+            )
+        }
+
         Surface(
             shape = CircleShape,
-            color = Color.White,
-            shadowElevation = 8.dp,
+            color = TutCoral,
+            shadowElevation = 6.dp,
+            border = BorderStroke(3.dp, Color.White),
             modifier = Modifier
-                .offset(x = 68.dp, y = 76.dp)
-                .size(54.dp)
+                .offset(x = 185.dp, y = 140.dp)
+                .size(50.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Canvas(modifier = Modifier.size(24.dp)) {
-                    val w = size.width
-                    val h = size.height
-                    // Camera body rounded rect
-                    drawRoundRect(
-                        color = brandRed,
-                        topLeft = Offset(w * 0.12f, h * 0.28f),
-                        size = Size(w * 0.76f, h * 0.54f),
-                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
-                        style = Stroke(width = 2.2.dp.toPx())
-                    )
-                    // Top viewfinder bump
-                    val topBump = Path().apply {
-                        moveTo(w * 0.32f, h * 0.28f)
-                        lineTo(w * 0.40f, h * 0.16f)
-                        lineTo(w * 0.60f, h * 0.16f)
-                        lineTo(w * 0.68f, h * 0.28f)
-                    }
-                    drawPath(
-                        path = topBump,
-                        color = brandRed,
-                        style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                    )
-                    // Lens circle
-                    drawCircle(
-                        color = brandRed,
-                        radius = w * 0.15f,
-                        center = Offset(w * 0.5f, h * 0.55f),
-                        style = Stroke(width = 2.2.dp.toPx())
-                    )
-                }
+                Text(text = "📸", fontSize = 22.sp)
             }
         }
     }
 }
 
 // =========================================================================
-// STAGE 3: Storybook & Voice (.book + turning page + .snd speaker waves)
+// STAGE 3: the cinema reader in miniature (illustration + subtitle + voice)
 // =========================================================================
 @Composable
-private fun StageStep3Storybook(brandMint: Color) {
-    val infiniteTransition = rememberInfiniteTransition(label = "step3")
-    val pageFlipAngle by infiniteTransition.animateFloat(
+private fun StageStep3Storybook() {
+    val en = AppStrings.isEnglish
+    val words = remember(en) {
+        if (en) listOf("Pepe", "found", "a", "branch", "full", "of", "flowers.") else listOf("Pepe", "encontró", "una", "rama", "llena", "de", "flores.")
+    }
+    val transition = rememberInfiniteTransition(label = "step3")
+    val wordClock by transition.animateFloat(
         initialValue = 0f,
-        targetValue = -150f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pageFlipAngle"
+        targetValue = words.size.toFloat() + 1.5f,
+        animationSpec = infiniteRepeatable(tween(words.size * 480 + 700, easing = LinearEasing), RepeatMode.Restart),
+        label = "words"
     )
-    val ring1Scale by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1.45f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring1Scale"
+    val ring by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing), RepeatMode.Restart),
+        label = "ring"
     )
-    val ring1Alpha by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring1Alpha"
-    )
+    val activeWord = wordClock.toInt()
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Storybook (.book)
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
         Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(width = 160.dp, height = 120.dp)
+            modifier = Modifier
+                .size(width = 380.dp, height = 280.dp)
+                .rotate(-2f)
+                .shadow(14.dp, RoundedCornerShape(22.dp))
+                .clip(RoundedCornerShape(22.dp))
+                .background(TutInk)
+                .padding(8.dp)
+                .clip(RoundedCornerShape(16.dp))
         ) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.White,
-                shadowElevation = 10.dp,
+            WonderLoopImage(
+                model = DemoPepeAssets.STORY_SCENE_BASE64,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(text = "📖", fontSize = 48.sp)
-                }
-            }
-
-            // Animated 3D turning page flap (.pg) anchored at center spine
+            )
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(top = 7.dp, bottom = 7.dp, end = 7.dp)
-                    .width(73.dp)
-                    .fillMaxHeight()
-                    .graphicsLayer {
-                        transformOrigin = TransformOrigin(0f, 0.5f)
-                        rotationY = pageFlipAngle
-                        cameraDistance = 10f * density
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(110.dp)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f))))
+            )
+            Text(
+                text = buildAnnotatedString {
+                    words.forEachIndexed { i, w ->
+                        if (i > 0) append(" ")
+                        if (i == activeWord) withStyle(SpanStyle(color = TutGold)) { append(w) } else append(w)
                     }
-                    .clip(RoundedCornerShape(topStart = 2.dp, bottomStart = 2.dp, topEnd = 10.dp, bottomEnd = 10.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(Color(0xFFF3ECE1), Color.White)
-                        )
-                    )
+                },
+                style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)),
+                fontSize = 21.sp,
+                lineHeight = 27.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 18.dp, vertical = 14.dp)
             )
         }
 
-        // Speaker Badge with pulsing soundwave ring (.snd)
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.offset(x = 74.dp, y = 68.dp)
-        ) {
+        // Narrator badge with sound rings
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.offset(x = 180.dp, y = (-130).dp)) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .scale(ring1Scale)
-                    .alpha(ring1Alpha)
-                    .border(2.dp, brandMint, CircleShape)
+                    .size(64.dp)
+                    .scale(1f + ring * 0.6f)
+                    .alpha(1f - ring)
+                    .border(3.dp, TutMint, CircleShape)
             )
-            Surface(
-                shape = CircleShape,
-                color = Color.White,
-                shadowElevation = 6.dp,
-                modifier = Modifier.size(48.dp)
-            ) {
+            Surface(shape = CircleShape, color = Color.White, shadowElevation = 8.dp, modifier = Modifier.size(64.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.size(22.dp)) {
-                        val w = size.width
-                        val h = size.height
-                        val speakerPath = Path().apply {
-                            moveTo(w * 0.16f, h * 0.38f)
-                            lineTo(w * 0.16f, h * 0.62f)
-                            lineTo(w * 0.34f, h * 0.62f)
-                            lineTo(w * 0.56f, h * 0.80f)
-                            lineTo(w * 0.56f, h * 0.20f)
-                            lineTo(w * 0.34f, h * 0.38f)
-                            close()
-                        }
-                        drawPath(
-                            path = speakerPath,
-                            color = Color(0xFF0E7F64),
-                            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        )
-                        drawArc(
-                            color = Color(0xFF0E7F64),
-                            startAngle = -45f,
-                            sweepAngle = 90f,
-                            useCenter = false,
-                            topLeft = Offset(w * 0.48f, h * 0.28f),
-                            size = Size(w * 0.34f, h * 0.44f),
-                            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-                        )
-                    }
+                    Text(text = "🔊", fontSize = 28.sp)
                 }
             }
         }
@@ -930,12 +814,12 @@ private fun StageStep4Bilingual(
         // Floating bilingual word chips (.fw)
         FloatingWordPill("Hola", brandRed, Modifier.align(Alignment.TopStart).offset(x = w * 0.10f, y = h * 0.09f + floatOffset.dp))
         FloatingWordPill("Hello", brandMint, Modifier.align(Alignment.TopEnd).offset(x = -(w * 0.10f), y = h * 0.11f - floatOffset.dp))
-        FloatingWordPill("Dibuja", brandRed, Modifier.align(Alignment.CenterStart).offset(x = w * 0.05f, y = (-24).dp - floatOffset.dp))
-        FloatingWordPill("Dragon", brandMint, Modifier.align(Alignment.CenterEnd).offset(x = -(w * 0.05f), y = (-20).dp + floatOffset.dp))
-        FloatingWordPill("Amigos", Color(0xFF6A4FC7), Modifier.align(Alignment.BottomStart).offset(x = w * 0.07f, y = -(h * 0.24f) + floatOffset.dp))
+        FloatingWordPill("Dibuja", brandRed, Modifier.align(Alignment.TopCenter).offset(y = h * 0.02f - floatOffset.dp))
+        FloatingWordPill("Dragon", brandMint, Modifier.align(Alignment.BottomCenter).offset(x = 20.dp, y = -(h * 0.02f) + floatOffset.dp))
+        FloatingWordPill("Amigos", Color(0xFF6A4FC7), Modifier.align(Alignment.BottomStart).offset(x = w * 0.04f, y = -(h * 0.19f) + floatOffset.dp))
         FloatingWordPill("Friend", brandMint, Modifier.align(Alignment.BottomEnd).offset(x = -(w * 0.09f), y = -(h * 0.24f) - floatOffset.dp))
-        FloatingWordPill("Dragón", Color(0xFFB8860B), Modifier.align(Alignment.BottomStart).offset(x = w * 0.18f, y = -(h * 0.07f) - floatOffset.dp))
-        FloatingWordPill("Draw", Color(0xFFB8860B), Modifier.align(Alignment.BottomEnd).offset(x = -(w * 0.16f), y = -(h * 0.07f) + floatOffset.dp))
+        FloatingWordPill("Dragón", Color(0xFFB8860B), Modifier.align(Alignment.BottomStart).offset(x = w * 0.10f, y = -(h * 0.05f) - floatOffset.dp))
+        FloatingWordPill("Draw", Color(0xFFB8860B), Modifier.align(Alignment.BottomEnd).offset(x = -(w * 0.05f), y = -(h * 0.08f) + floatOffset.dp))
 
         // Center ES 🔁 EN Pill (.langwrap)
         Surface(
@@ -946,19 +830,19 @@ private fun StageStep4Bilingual(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp)
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(76.dp)
                         .scale(esScale)
                         .clip(CircleShape)
                         .background(brandRed)
                 ) {
                     Text(
                         text = "ES",
-                        fontSize = 15.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White
                     )
@@ -966,21 +850,21 @@ private fun StageStep4Bilingual(
 
                 Text(
                     text = "🔁",
-                    fontSize = 20.sp,
+                    fontSize = 30.sp,
                     color = mutedInk
                 )
 
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(76.dp)
                         .scale(enScale)
                         .clip(CircleShape)
                         .background(brandMint)
                 ) {
                     Text(
                         text = "EN",
-                        fontSize = 15.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White
                     )
@@ -1004,106 +888,110 @@ private fun FloatingWordPill(
     ) {
         Text(
             text = word,
-            fontSize = 12.5.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.ExtraBold,
             color = textColor,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
         )
     }
 }
 
 // =========================================================================
-// STAGE 5: The Creativity Loop (.loopwrap 📱 -> spinning arcs -> 🖍️)
+// STAGE 5: the Creativity Loop: draw on paper → story on the TV → new drawing mission
 // =========================================================================
 @Composable
-private fun StageStep5CreativityLoop(
-    brandRed: Color,
-    brandMint: Color
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "step5")
-    val loopRotation by infiniteTransition.animateFloat(
+private fun StageStep5CreativityLoop() {
+    val en = AppStrings.isEnglish
+    val transition = rememberInfiniteTransition(label = "step5")
+    val loopRotation by transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(9000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
+        animationSpec = infiniteRepeatable(tween(12000, easing = LinearEasing), RepeatMode.Restart),
         label = "loopRotation"
     )
-    val phoneAlpha by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 0.30f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "phoneAlpha"
+    val pulse by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(tween(4500, easing = LinearEasing), RepeatMode.Restart),
+        label = "nodePulse"
     )
-    val crayonScale by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "crayonScale"
-    )
+    val activeNode = pulse.toInt()
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.size(196.dp)
-    ) {
-        // Rotating Dual-Arc Loop (.loopa)
-        Canvas(
-            modifier = Modifier
-                .size(168.dp)
-                .rotate(loopRotation)
-        ) {
-            val strokeW = 10.dp.toPx()
-            val pad = strokeW * 1.5f
-            val arcSize = Size(size.width - pad * 2, size.height - pad * 2)
-
-            // Red Arc
-            drawArc(
-                color = brandRed,
-                startAngle = -90f,
-                sweepAngle = 250f,
-                useCenter = false,
-                topLeft = Offset(pad, pad),
-                size = arcSize,
-                style = Stroke(width = strokeW, cap = StrokeCap.Round)
-            )
-
-            // Mint Arc
-            drawArc(
-                color = brandMint,
-                startAngle = 90f,
-                sweepAngle = 250f,
-                useCenter = false,
-                topLeft = Offset(pad, pad),
-                size = arcSize,
-                style = Stroke(width = strokeW, cap = StrokeCap.Round)
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+        // Rotating dashed ring that connects the three moments
+        Canvas(modifier = Modifier.size(270.dp).rotate(loopRotation)) {
+            drawCircle(
+                color = TutCoral.copy(alpha = 0.45f),
+                radius = size.minDimension / 2f - 6.dp.toPx(),
+                style = Stroke(
+                    width = 6.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(18.dp.toPx(), 14.dp.toPx()))
+                )
             )
         }
 
-        // Top: Dimming Phone (📱)
         Text(
-            text = "📱",
-            fontSize = 32.sp,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 12.dp)
-                .alpha(phoneAlpha)
+            text = if (en) "♾️\nThe\nloop" else "♾️\nEl\nciclo",
+            fontFamily = TitleFont(),
+            fontSize = 18.sp,
+            lineHeight = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = TutInkMuted,
+            textAlign = TextAlign.Center
         )
 
-        // Bottom: Glowing Crayon (🖍️)
-        Text(
-            text = "🖍️",
-            fontSize = 32.sp,
+        LoopNode(
+            label = if (en) "Draw" else "Dibuja",
+            active = activeNode == 0,
+            modifier = Modifier.offset(x = 0.dp, y = (-112).dp)
+        ) {
+            WonderLoopImage(model = tutorialDrawing, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(6.dp))
+        }
+        LoopNode(
+            label = if (en) "Story" else "Cuento",
+            active = activeNode == 1,
+            modifier = Modifier.offset(x = 140.dp, y = 75.dp)
+        ) {
+            WonderLoopImage(model = DemoPepeAssets.JUMP_SCENE_BASE64, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        LoopNode(
+            label = if (en) "New mission" else "Nueva misión",
+            active = activeNode == 2,
+            modifier = Modifier.offset(x = (-140).dp, y = 75.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().background(Color(0xFFFFF6DE))) {
+                Text(text = "🖍️", fontSize = 38.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoopNode(label: String, active: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val scale by animateFloatAsState(if (active) 1.12f else 1f, tween(400), label = "loop_node")
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.scale(scale)) {
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp)
-                .scale(crayonScale)
-        )
+                .size(92.dp)
+                .shadow(if (active) 12.dp else 6.dp, RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.White)
+                .border(4.dp, if (active) TutGold else Color.White, RoundedCornerShape(24.dp))
+                .padding(4.dp)
+                .clip(RoundedCornerShape(20.dp))
+        ) {
+            content()
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Surface(shape = RoundedCornerShape(50), color = if (active) TutCoral else Color.White, shadowElevation = 3.dp) {
+            Text(
+                text = label,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (active) Color.White else TutInk,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+            )
+        }
     }
 }

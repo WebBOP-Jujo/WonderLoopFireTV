@@ -1,5 +1,6 @@
 package org.wonderloop.app.ui
 
+import org.wonderloop.app.ui.components.WonderBackdrop
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -276,23 +277,10 @@ fun QrScanScreen(
     }
 
     // Full 16:9 Widescreen Layout with Fire TV Safe Zone Padding
+    WonderBackdrop {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(QrCreamBg)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            QrGoldSoft.copy(alpha = 0.5f),
-                            QrCoralSoft.copy(alpha = 0.2f),
-                            Color.Transparent
-                        ),
-                        center = Offset(size.width * 0.35f, size.height * 0.45f),
-                        radius = maxOf(size.width, size.height) * 0.65f
-                    )
-                )
-            }
             .padding(horizontal = 48.dp, vertical = 20.dp) // Fire TV 5% Overscan Safe Zone
     ) {
         Row(
@@ -852,6 +840,7 @@ fun QrScanScreen(
                 }
             }
         }
+    }
     }
 }
 

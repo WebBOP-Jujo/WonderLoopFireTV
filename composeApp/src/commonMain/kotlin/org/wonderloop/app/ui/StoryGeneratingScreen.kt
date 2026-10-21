@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.wonderloop.app.ui.components.WonderBackdrop
 import org.wonderloop.app.data.CharacterProfile
 import org.wonderloop.app.data.FullStoryResponse
 import org.wonderloop.app.data.StoryContinuationContext
@@ -178,15 +180,20 @@ fun StoryGeneratingScreen(
         showCancelConfirmDialog = true
     }
 
-    // Cycle phrases & checklist progress
+    // Steps, subtitle and progress follow the real pipeline: story text (~6 s), then illustrations + voice
+    val storyProgress = remember { Animatable(0.08f) }
     LaunchedEffect(retryTrigger) {
         activeStepIndex = 2
+        phraseIndex = 0
+        storyProgress.snapTo(0.08f)
+        launch { storyProgress.animateTo(0.5f, tween(6500, easing = LinearEasing)) }
+        delay(6500)
+        activeStepIndex = 3
+        phraseIndex = 1
+        launch { storyProgress.animateTo(0.94f, tween(14000, easing = LinearOutSlowInEasing)) }
         while (true) {
-            delay(2400)
-            phraseIndex = (phraseIndex + 1) % phrases.size
-            if (activeStepIndex < 3 && phraseIndex >= 1) {
-                activeStepIndex = 3
-            }
+            delay(3500)
+            phraseIndex = if (phraseIndex >= phrases.lastIndex) 1 else phraseIndex + 1
         }
     }
 
@@ -214,7 +221,9 @@ fun StoryGeneratingScreen(
                 }
             }
             if (success && compactStory != null) {
-                delay(800)
+                activeStepIndex = checklistSteps.size
+                storyProgress.animateTo(1f, tween(450))
+                delay(500)
                 onStoryGenerated(compactStory)
             } else {
                 errorMessage = if (AppStrings.isEnglish) {
@@ -491,257 +500,243 @@ fun StoryGeneratingScreen(
         }
     }
 
-    // Main Screen Content
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(GenCreamBg)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            GenGoldSoft.copy(alpha = 0.6f),
-                            GenCoralSoft.copy(alpha = 0.35f),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = maxOf(size.width, size.height) * 0.65f
-                    )
-                )
-            }
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
+    // Main Screen Content: hero polaroid on the left, live progress on the right (16:9, 48/24dp safe zone)
+    val heroDisplayImage = character.reinterpretedImageUrl ?: character.originalDrawingBase64
+    val en = AppStrings.isEnglish
+    val waitingTips = remember(en, character.name) {
+        if (en) {
+            listOf(
+                "💡 Meanwhile: which friend could help ${character.name} in chapter 2?",
+                "🖍️ Keep paper and crayons handy: a drawing challenge is coming!",
+                "🔊 The story will read itself aloud with a narrator voice",
+                "📺 Use ◀ ▶ on the remote to turn the pages"
+            )
+        } else {
+            listOf(
+                "💡 Mientras tanto: ¿qué amigo podría ayudar a ${character.name} en el capítulo 2?",
+                "🖍️ Ten a mano papel y ceras: ¡al final habrá un reto de dibujo!",
+                "🔊 El cuento se leerá solo, con voz de narrador",
+                "📺 Usa ◀ ▶ del mando para pasar las páginas"
+            )
+        }
+    }
+    var tipIndex by remember { mutableStateOf(0) }
+    LaunchedEffect(waitingTips) {
+        while (true) {
+            delay(4500)
+            tipIndex = (tipIndex + 1) % waitingTips.size
+        }
+    }
+
+    WonderBackdrop {
+        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .fillMaxSize()
+                .padding(horizontal = 48.dp, vertical = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(40.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Top step pill
-            Surface(
-                shape = RoundedCornerShape(50.dp),
-                color = GenCoralSoft,
-                modifier = Modifier.padding(bottom = 18.dp)
+            // ---------------------------------------------------------
+            // LEFT: the hero, floating on a glowing polaroid
+            // ---------------------------------------------------------
+            Column(
+                modifier = Modifier.weight(0.4f),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = if (AppStrings.isEnglish) {
-                        "📖 STORY WORKSHOP · STEP 2 OF 2"
-                    } else {
-                        "📖 TALLER DE CUENTOS · PASO 2 DE 2"
-                    },
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = GenCoral,
-                    letterSpacing = 0.5.sp,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                )
-            }
-
-            // Central Enchanted Storybook & Hero Showcase (no CSS wizard)
-            val heroDisplayImage = character.reinterpretedImageUrl ?: character.originalDrawingBase64
-
-            Box(
-                modifier = Modifier
-                    .size(200.dp)
-                    .offset(y = floatY.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                // Soft outer golden-blush halo
                 Box(
                     modifier = Modifier
-                        .size(182.dp)
-                        .scale(badgePulse)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    GenGoldSoft.copy(alpha = 0.85f),
-                                    GenCoralSoft.copy(alpha = 0.45f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-
-                // Hero Storybook Cover Card
-                Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    color = Color.White,
-                    shadowElevation = 10.dp,
-                    border = BorderStroke(3.dp, Color.White),
-                    modifier = Modifier
-                        .size(150.dp)
-                        .rotate(-2f)
+                        .size(280.dp)
+                        .offset(y = floatY.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp)
-                            .clip(RoundedCornerShape(20.dp))
+                            .size(270.dp)
+                            .scale(badgePulse)
+                            .clip(CircleShape)
                             .background(
-                                Brush.linearGradient(
+                                Brush.radialGradient(
                                     colors = listOf(
-                                        Color(0xFFFFF6DE),
-                                        Color(0xFFFFE8EC)
+                                        GenGoldSoft.copy(alpha = 0.9f),
+                                        GenCoralSoft.copy(alpha = 0.45f),
+                                        Color.Transparent
                                     )
                                 )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!heroDisplayImage.isNullOrBlank()) {
-                            WonderLoopImage(
-                                model = heroDisplayImage,
-                                contentDescription = character.name,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
                             )
-                        } else {
-                            Text(text = "📚", fontSize = 56.sp)
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(26.dp),
+                        color = Color.White,
+                        shadowElevation = 12.dp,
+                        modifier = Modifier
+                            .size(width = 214.dp, height = 238.dp)
+                            .rotate(-3f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 36.dp)
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Brush.linearGradient(listOf(Color(0xFFFFF6DE), Color(0xFFFFE8EC)))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!heroDisplayImage.isNullOrBlank()) {
+                                WonderLoopImage(
+                                    model = heroDisplayImage,
+                                    contentDescription = character.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Text(text = "📚", fontSize = 64.sp)
+                            }
                         }
                     }
-                }
 
-                // Floating Book & Brush Badge at Bottom-Right
-                Surface(
-                    shape = CircleShape,
-                    color = GenCoral,
-                    shadowElevation = 6.dp,
-                    border = BorderStroke(2.5.dp, Color.White),
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = (-8).dp, y = (-6).dp)
-                        .size(50.dp)
-                        .scale(badgePulse)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(text = "📖", fontSize = 24.sp)
+                    Surface(
+                        shape = CircleShape,
+                        color = GenCoral,
+                        shadowElevation = 6.dp,
+                        border = BorderStroke(3.dp, Color.White),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = (-14).dp, y = (-18).dp)
+                            .size(62.dp)
+                            .scale(badgePulse)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(text = "📖", fontSize = 30.sp)
+                        }
                     }
+
+                    StorySparkleStar(
+                        color = GenGoldAccent,
+                        size = 30.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset(x = 14.dp, y = 14.dp)
+                            .scale(sparkleScale)
+                    )
+                    StorySparkleStar(
+                        color = GenCoral,
+                        size = 22.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = (-12).dp, y = 24.dp)
+                            .scale(1.8f - sparkleScale * 0.6f)
+                    )
+                    StorySparkleStar(
+                        color = GenMint,
+                        size = 22.dp,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .offset(x = 18.dp, y = (-24).dp)
+                            .scale(sparkleScale * 0.9f)
+                    )
                 }
 
-                // Floating 4-point sparkles
-                StorySparkleStar(
-                    color = GenGoldAccent,
-                    size = 24.dp,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .offset(x = 8.dp, y = 8.dp)
-                        .scale(sparkleScale)
-                )
-                StorySparkleStar(
-                    color = GenCoral,
-                    size = 18.dp,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-10).dp, y = 14.dp)
-                        .scale(1.8f - sparkleScale * 0.6f)
-                )
-                StorySparkleStar(
-                    color = GenMint,
-                    size = 18.dp,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .offset(x = 12.dp, y = (-14).dp)
-                        .scale(sparkleScale * 0.9f)
-                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(shape = RoundedCornerShape(50), color = Color.White, shadowElevation = 3.dp) {
+                    Text(
+                        text = "✨ ${character.name}",
+                        fontFamily = TitleFont(),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GenInkDark,
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            // ---------------------------------------------------------
+            // RIGHT: what the magic is doing right now
+            // ---------------------------------------------------------
+            Column(modifier = Modifier.weight(0.6f)) {
+                Surface(shape = RoundedCornerShape(50.dp), color = GenCoralSoft) {
+                    Text(
+                        text = if (en) "📖 STORY WORKSHOP" else "📖 TALLER DE CUENTOS",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = GenCoral,
+                        letterSpacing = 0.5.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp)
+                    )
+                }
 
-            // Title
-            Text(
-                text = AppStrings.creatingDigitalBook,
-                fontFamily = TitleFont(),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = GenInkDark,
-                textAlign = TextAlign.Center
-            )
+                Spacer(modifier = Modifier.height(12.dp))
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Animated current status subtitle
-            AnimatedContent(
-                targetState = phrases[phraseIndex],
-                transitionSpec = { fadeIn(tween(350)) togetherWith fadeOut(tween(250)) },
-                label = "story_phrase_anim"
-            ) { currentPhrase ->
                 Text(
-                    text = currentPhrase,
-                    fontSize = 14.sp,
+                    text = AppStrings.creatingDigitalBook,
+                    fontFamily = TitleFont(),
+                    fontSize = 36.sp,
                     fontWeight = FontWeight.Bold,
-                    color = GenInkMuted,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 19.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp)
+                    color = GenInkDark
                 )
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-            // Coral Progress Bar (.pr)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.78f)
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(50.dp))
-                    .background(GenCardBorder)
-            ) {
+                AnimatedContent(
+                    targetState = phrases[phraseIndex],
+                    transitionSpec = { fadeIn(tween(350)) togetherWith fadeOut(tween(250)) },
+                    label = "story_phrase_anim"
+                ) { currentPhrase ->
+                    Text(
+                        text = currentPhrase,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GenInkMuted,
+                        lineHeight = 25.sp,
+                        maxLines = 2
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Progress that only moves forward
                 Box(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(progressPulse)
-                        .clip(RoundedCornerShape(50.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(GenCoral, Color(0xFFFF8A65))
-                            )
-                        )
-                )
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            // 4-Step Live Checklist Card (.sl)
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = Color.White,
-                shadowElevation = 4.dp,
-                border = BorderStroke(1.5.dp, GenCardBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .height(14.dp)
+                        .clip(RoundedCornerShape(50.dp))
+                        .background(Color.White)
+                        .border(1.dp, GenCardBorder, RoundedCornerShape(50.dp))
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(storyProgress.value)
+                            .clip(RoundedCornerShape(50.dp))
+                            .background(Brush.horizontalGradient(listOf(GenCoral, Color(0xFFFFB347))))
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Horizontal stepper
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                     checklistSteps.forEachIndexed { index, stepText ->
                         val isDone = index < activeStepIndex
                         val isActive = index == activeStepIndex
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // Step Icon Circle
                             Box(
+                                contentAlignment = Alignment.Center,
                                 modifier = Modifier
-                                    .size(24.dp)
+                                    .size(48.dp)
+                                    .scale(if (isActive) badgePulse else 1f)
                                     .clip(CircleShape)
                                     .background(
                                         when {
-                                            isDone -> GenMintSoft
-                                            isActive -> GenCoralSoft
-                                            else -> Color(0xFFF3EFE8)
+                                            isDone -> GenMint
+                                            isActive -> GenCoral
+                                            else -> Color.White
                                         }
-                                    ),
-                                contentAlignment = Alignment.Center
+                                    )
+                                    .border(2.dp, if (isDone || isActive) Color.White else GenCardBorder, CircleShape)
                             ) {
                                 Text(
                                     text = when {
@@ -749,50 +744,76 @@ fun StoryGeneratingScreen(
                                         isActive -> "✨"
                                         else -> "${index + 1}"
                                     },
-                                    fontSize = 11.sp,
+                                    fontSize = 20.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = when {
-                                        isDone -> GenMint
-                                        isActive -> GenCoral
-                                        else -> GenInkMuted
-                                    }
+                                    color = if (isDone || isActive) Color.White else GenInkMuted
                                 )
                             }
-
-                            Spacer(modifier = Modifier.width(10.dp))
-
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = stepText,
-                                fontSize = 13.sp,
-                                fontWeight = when {
-                                    isActive -> FontWeight.ExtraBold
-                                    isDone -> FontWeight.Bold
-                                    else -> FontWeight.SemiBold
-                                },
+                                fontSize = 15.sp,
+                                lineHeight = 19.sp,
+                                fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold,
                                 color = when {
                                     isActive -> GenCoral
                                     isDone -> GenInkDark
-                                    else -> GenInkMuted.copy(alpha = 0.65f)
-                                }
+                                    else -> GenInkMuted.copy(alpha = 0.7f)
+                                },
+                                textAlign = TextAlign.Center,
+                                maxLines = 2
                             )
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-            // Cancel button at the bottom
-            TextButton(
-                onClick = { showCancelConfirmDialog = true }
-            ) {
-                Text(
-                    text = if (AppStrings.isEnglish) "Cancel" else "Cancelar",
-                    fontFamily = TitleFont(),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = GenInkMuted
-                )
+                // Rotating tip while waiting
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White.copy(alpha = 0.9f),
+                    border = BorderStroke(1.5.dp, GenCardBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AnimatedContent(
+                        targetState = waitingTips[tipIndex],
+                        transitionSpec = { fadeIn(tween(400)) togetherWith fadeOut(tween(250)) },
+                        label = "waiting_tip"
+                    ) { tip ->
+                        Text(
+                            text = tip,
+                            fontSize = 17.sp,
+                            lineHeight = 23.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GenInkDark,
+                            maxLines = 2,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                org.wonderloop.app.ui.tv.TvClickableSurface(
+                    onClick = { showCancelConfirmDialog = true },
+                    modifier = Modifier.height(46.dp),
+                    shape = RoundedCornerShape(50),
+                    containerColor = Color.White,
+                    borderColor = GenCardBorder,
+                    contentDescription = if (en) "Cancel" else "Cancelar"
+                ) {
+                    Text(
+                        text = if (en) "✕  Cancel" else "✕  Cancelar",
+                        fontFamily = TitleFont(),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GenInkMuted,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 24.dp)
+                    )
+                }
             }
         }
     }

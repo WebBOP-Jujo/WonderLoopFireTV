@@ -960,8 +960,9 @@ private fun FullTextPanel(text: String, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(28.dp))
-            .background(Color.White.copy(alpha = 0.95f))
-            .border(1.5.dp, ReaderCardBorder, RoundedCornerShape(28.dp))
+            // Frosted, not opaque: the illustration still shows through behind the text
+            .background(Color.White.copy(alpha = 0.58f))
+            .border(1.5.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(28.dp))
             .padding(horizontal = 28.dp, vertical = 20.dp)
     ) {
         Text(
@@ -972,9 +973,19 @@ private fun FullTextPanel(text: String, modifier: Modifier = Modifier) {
             color = ReaderGoldText
         )
         Spacer(modifier = Modifier.height(8.dp))
-        HighlightedStoryText(text = text, wordTimingsMs = emptyList(), positionMs = -1L)
+        HighlightedStoryText(text = tidyDialoguePunctuation(text), wordTimingsMs = emptyList(), positionMs = -1L)
     }
 }
+
+/**
+ * Same clean-up the backend applies to new stories ("te ayudaré —." → "te ayudaré."), for stories saved
+ * before it existed. Only for the full-text panel: subtitles keep the raw words their Polly timings belong to.
+ */
+private fun tidyDialoguePunctuation(text: String): String = text
+    .replace(Regex("\\s+—\\s*([.,;:!?])"), "$1")
+    .replace(Regex("\\s+—\\s*$", RegexOption.MULTILINE), "")
+    .replace(Regex("—\\s+—"), "—")
+    .replace(Regex("([!?])\\.(?!\\.)"), "$1")
 
 @Composable
 private fun EdgeChevron(glyph: String, modifier: Modifier = Modifier) {

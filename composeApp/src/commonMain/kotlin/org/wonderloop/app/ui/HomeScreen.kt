@@ -15,8 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -38,6 +41,7 @@ import org.wonderloop.app.platform.PlatformStorage
 import org.wonderloop.app.platform.WonderLoopImage
 import org.wonderloop.app.theme.*
 import org.wonderloop.app.ui.tv.TvClickableSurface
+import org.wonderloop.app.ui.components.WonderBackdrop
 
 private val HomeCream = Color(0xFFFFFBF5)
 private val HomeIvoryGlow = Color(0xFFFFF6E3)
@@ -121,20 +125,7 @@ fun HomeScreen(
         DAILY_IDEAS[((day % DAILY_IDEAS.size) + DAILY_IDEAS.size) % DAILY_IDEAS.size]
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(HomeCream)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(HomeIvoryGlow, HomeCream),
-                        center = Offset(size.width * 0.72f, size.height * 0.2f),
-                        radius = maxOf(size.width, size.height) * 0.55f
-                    )
-                )
-            }
-    ) {
+    WonderBackdrop {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -201,7 +192,7 @@ fun HomeScreen(
                     focusRequester = requester("create"),
                     onClick = remembered("create", onNewAdventureClick),
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.45f)
                         .fillMaxHeight()
                 )
                 if (displayStory != null) {
@@ -210,13 +201,13 @@ fun HomeScreen(
                         focusRequester = requester("continue"),
                         onClick = remembered("continue") { onOpenStory(displayStory) },
                         modifier = Modifier
-                            .weight(1.25f)
+                            .weight(1f)
                             .fillMaxHeight()
                     )
                 } else {
                     WelcomeCard(
                         modifier = Modifier
-                            .weight(1.25f)
+                            .weight(1f)
                             .fillMaxHeight()
                     )
                 }
@@ -233,6 +224,7 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 LazyRow(
+                    modifier = Modifier.railFocusEntry { requester("story:${sagas.first().sagaId}") },
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp)
                 ) {
@@ -268,6 +260,7 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 LazyRow(
+                    modifier = Modifier.railFocusEntry { requester("friend:${friends.first().name.lowercase()}") },
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp)
                 ) {
@@ -301,6 +294,14 @@ fun HomeScreen(
         }
     }
 }
+
+/**
+ * Leanback-style rail entry: ▲ ▼ into a rail land on its first card, or on the card the child
+ * last left there (the rail keeps its scroll), never on whatever card happens to sit below.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+private fun Modifier.railFocusEntry(firstItem: () -> FocusRequester): Modifier =
+    focusRestorer { firstItem() }
 
 @Composable
 private fun WonderLoopLogo() {
@@ -367,9 +368,20 @@ private fun CreateStoryCard(idea: String, focusRequester: FocusRequester, onClic
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.linearGradient(listOf(HomeCoral, HomeCoralEnd)))
-                .padding(horizontal = 22.dp, vertical = 16.dp)
+                .padding(start = 24.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+            // Drawing → story, at a glance
+            DrawingToStoryArt(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .size(width = 136.dp, height = 140.dp)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(end = 146.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
                 Column {
                     Text(
                         text = if (en) "✏️  NEW STORY" else "✏️  NUEVO CUENTO",
@@ -381,10 +393,10 @@ private fun CreateStoryCard(idea: String, focusRequester: FocusRequester, onClic
                     Text(
                         text = if (en) "Turn your drawing into a story" else "Convierte tu dibujo en un cuento",
                         fontFamily = TitleFont(),
-                        fontSize = 23.sp,
+                        fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        lineHeight = 27.sp,
+                        lineHeight = 30.sp,
                         maxLines = 2
                     )
                 }
@@ -394,7 +406,8 @@ private fun CreateStoryCard(idea: String, focusRequester: FocusRequester, onClic
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.95f),
-                        maxLines = 1,
+                        lineHeight = 19.sp,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -415,6 +428,41 @@ private fun CreateStoryCard(idea: String, focusRequester: FocusRequester, onClic
                 }
             }
         }
+    }
+}
+
+/** A crayon sheet of paper turning into a sparkling storybook. */
+@Composable
+private fun DrawingToStoryArt(modifier: Modifier = Modifier) {
+    Box(modifier = modifier) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .size(width = 96.dp, height = 112.dp)
+                .rotate(-8f)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White)
+        ) {
+            Text(text = "🦖", fontSize = 48.sp)
+        }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(HomeGold)
+        ) {
+            Text(text = "📖", fontSize = 32.sp)
+        }
+        Text(
+            text = "✨",
+            fontSize = 26.sp,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 6.dp)
+        )
     }
 }
 

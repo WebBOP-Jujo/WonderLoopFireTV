@@ -31,6 +31,7 @@ import org.wonderloop.app.platform.PlatformBackHandler
 import org.wonderloop.app.platform.SoundEffect
 import org.wonderloop.app.theme.*
 import org.wonderloop.app.ui.components.tvFocusable
+import org.wonderloop.app.ui.components.WonderBackdrop
 
 private val ProfCreamBg = Color(0xFFFFFBF5)
 private val ProfInkDark = Color(0xFF2B2340)
@@ -204,7 +205,7 @@ fun ProfileScreen(
                         Text(
                             text = AppStrings.cancel,
                             fontFamily = TitleFont(),
-                            fontSize = 14.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = ProfInkMuted
                         )
@@ -217,10 +218,10 @@ fun ProfileScreen(
     // -------------------------------------------------------------
     // MAIN 16:9 WIDESCREEN VIEWPORT (NO SCROLL)
     // -------------------------------------------------------------
+    WonderBackdrop {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(ProfCreamBg)
             .padding(horizontal = 48.dp, vertical = 22.dp)
     ) {
         // TOP NAVIGATION BAR: [ ← Cancelar ]     Título     [ Eliminar / Info ]
@@ -255,7 +256,7 @@ fun ProfileScreen(
                     Text(
                         text = if (AppStrings.isEnglish) "Cancel" else "Cancelar",
                         fontFamily = TitleFont(),
-                        fontSize = 15.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = ProfInkDark
                     )
@@ -267,7 +268,7 @@ fun ProfileScreen(
             Text(
                 text = if (isNewProfile) AppStrings.newProfileTitle else AppStrings.editProfile,
                 fontFamily = TitleFont(),
-                fontSize = 28.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = ProfInkDark
             )
@@ -292,12 +293,12 @@ fun ProfileScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "🗑️", fontSize = 16.sp)
+                        Text(text = "🗑️", fontSize = 19.sp)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (AppStrings.isEnglish) "Delete profile" else "Eliminar",
                             fontFamily = TitleFont(),
-                            fontSize = 13.5.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = ProfCoral
                         )
@@ -320,7 +321,7 @@ fun ProfileScreen(
                     Text(
                         text = tagText,
                         fontFamily = TitleFont(),
-                        fontSize = 13.5.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = ProfCoral,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
@@ -351,13 +352,12 @@ fun ProfileScreen(
                 Card(
                     shape = RoundedCornerShape(28.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                    border = BorderStroke(1.5.dp, Color(0xFFF3DC9B)),
+                    border = BorderStroke(1.5.dp, ProfCardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .shadow(6.dp, RoundedCornerShape(28.dp))
                         .background(
-                            Brush.verticalGradient(
-                                listOf(Color(0xFFFFF1CF), Color(0xFFFFE0E0))
-                            ),
+                            Brush.verticalGradient(0f to ProfCoralSoft, 0.55f to Color.White),
                             shape = RoundedCornerShape(28.dp)
                         )
                 ) {
@@ -369,10 +369,11 @@ fun ProfileScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(96.dp)
+                                .size(100.dp)
                                 .shadow(elevation = 8.dp, shape = CircleShape)
                                 .clip(CircleShape)
-                                .background(Color.White),
+                                .background(Color.White)
+                                .border(4.dp, ProfCoral, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(text = selectedAvatar, fontSize = 54.sp)
@@ -383,7 +384,7 @@ fun ProfileScreen(
                         Text(
                             text = name.ifBlank { if (AppStrings.isEnglish) "Name" else "Nombre" },
                             fontFamily = TitleFont(),
-                            fontSize = 24.sp,
+                            fontSize = 30.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = ProfInkDark,
                             maxLines = 1,
@@ -394,7 +395,7 @@ fun ProfileScreen(
 
                         Text(
                             text = "$selectedAge ${AppStrings.yearsOld}",
-                            fontSize = 15.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = ProfInkMuted
                         )
@@ -424,11 +425,11 @@ fun ProfileScreen(
                         ) {
                             Text(
                                 text = stageText,
-                                fontSize = 11.5.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ProfMint,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 15.sp,
+                                lineHeight = 18.sp,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
@@ -440,7 +441,7 @@ fun ProfileScreen(
                     Text(
                         text = AppStrings.howOldAreYouTitle,
                         fontFamily = TitleFont(),
-                        fontSize = 16.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = ProfInkDark
                     )
@@ -462,7 +463,7 @@ fun ProfileScreen(
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(44.dp)
+                                    .height(52.dp)
                                     .tvFocusable(
                                         shape = RoundedCornerShape(14.dp),
                                         focusedScale = 1.12f,
@@ -476,7 +477,7 @@ fun ProfileScreen(
                                     Text(
                                         text = "$age",
                                         fontFamily = TitleFont(),
-                                        fontSize = 16.sp,
+                                        fontSize = 19.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isSelected) Color.White else ProfInkDark
                                     )
@@ -502,7 +503,7 @@ fun ProfileScreen(
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
+                        .height(56.dp)
                         .tvFocusable(
                             shape = RoundedCornerShape(50.dp),
                             focusedScale = 1.05f,
@@ -517,7 +518,7 @@ fun ProfileScreen(
                     Text(
                         text = "✓ " + AppStrings.allSetCta,
                         fontFamily = TitleFont(),
-                        fontSize = 17.sp,
+                        fontSize = 21.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -538,7 +539,7 @@ fun ProfileScreen(
                     Text(
                         text = AppStrings.chooseYourAvatarTitle,
                         fontFamily = TitleFont(),
-                        fontSize = 16.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = ProfInkDark
                     )
@@ -602,7 +603,7 @@ fun ProfileScreen(
                     Text(
                         text = AppStrings.whatIsYourNameTitle,
                         fontFamily = TitleFont(),
-                        fontSize = 16.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = ProfInkDark
                     )
@@ -715,7 +716,7 @@ fun ProfileScreen(
                                 border = BorderStroke(1.5.dp, ProfCardBorder),
                                 modifier = Modifier
                                     .weight(3f)
-                                    .height(42.dp)
+                                    .height(46.dp)
                                     .tvFocusable(
                                         shape = RoundedCornerShape(12.dp),
                                         focusedScale = 1.08f,
@@ -731,7 +732,7 @@ fun ProfileScreen(
                                     Text(
                                         text = "⌫ " + if (AppStrings.isEnglish) "Delete" else "Borrar",
                                         fontFamily = TitleFont(),
-                                        fontSize = 14.sp,
+                                        fontSize = 17.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ProfInkDark
                                     )
@@ -745,7 +746,7 @@ fun ProfileScreen(
                                 border = BorderStroke(1.5.dp, ProfCardBorder),
                                 modifier = Modifier
                                     .weight(4f)
-                                    .height(42.dp)
+                                    .height(46.dp)
                                     .tvFocusable(
                                         shape = RoundedCornerShape(12.dp),
                                         focusedScale = 1.08f,
@@ -761,7 +762,7 @@ fun ProfileScreen(
                                     Text(
                                         text = if (AppStrings.isEnglish) "Space" else "Espacio",
                                         fontFamily = TitleFont(),
-                                        fontSize = 14.sp,
+                                        fontSize = 17.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ProfInkDark
                                     )
@@ -775,7 +776,7 @@ fun ProfileScreen(
                                 border = BorderStroke(1.5.dp, ProfCardBorder),
                                 modifier = Modifier
                                     .weight(2f)
-                                    .height(42.dp)
+                                    .height(46.dp)
                                     .tvFocusable(
                                         shape = RoundedCornerShape(12.dp),
                                         focusedScale = 1.08f,
@@ -789,7 +790,7 @@ fun ProfileScreen(
                                     Text(
                                         text = if (AppStrings.isEnglish) "Clear" else "Limpiar",
                                         fontFamily = TitleFont(),
-                                        fontSize = 14.sp,
+                                        fontSize = 17.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ProfCoral
                                     )
@@ -800,6 +801,7 @@ fun ProfileScreen(
                 }
             }
         }
+    }
     }
 }
 
@@ -819,7 +821,7 @@ private fun KeyboardRow(
                 border = BorderStroke(1.5.dp, ProfCardBorder),
                 modifier = Modifier
                     .weight(1f)
-                    .height(42.dp)
+                    .height(46.dp)
                     .tvFocusable(
                         shape = RoundedCornerShape(12.dp),
                         focusedScale = 1.15f,
@@ -833,7 +835,7 @@ private fun KeyboardRow(
                     Text(
                         text = key,
                         fontFamily = TitleFont(),
-                        fontSize = 17.sp,
+                        fontSize = 21.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = ProfInkDark
                     )

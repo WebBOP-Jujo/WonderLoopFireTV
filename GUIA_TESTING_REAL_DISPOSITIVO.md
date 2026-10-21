@@ -166,7 +166,7 @@ Si la app no encuentra el backend, revisa la dirección del servidor en el diál
 ### 🟢 1. Navegación con mando D-Pad
 - La pantalla de inicio enfoca automáticamente el botón principal *"Crear un nuevo cuento mágico"*.
 - Las tarjetas *"Ver Biblioteca"* y *"Ver todos"* se recorren con la cruceta y muestran el halo dorado de foco.
-- `BACK` en la pantalla de inicio sale directamente al launcher del Fire TV (sin diálogo de confirmación).
+- `BACK` en la pantalla de inicio abre el diálogo "¿Ya te vas?" con el foco en "Seguir creando"; BACK otra vez lo cierra y "Salir de WonderLoop" vuelve al launcher del Fire TV.
 
 ### 🟢 2. Escaneo del dibujo vía QR
 1. Pulsa *"Crear un nuevo cuento"* → aparece `QrScanScreen` con un QR grande.

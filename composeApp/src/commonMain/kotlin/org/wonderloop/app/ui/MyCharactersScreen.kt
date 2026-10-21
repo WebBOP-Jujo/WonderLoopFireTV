@@ -1,5 +1,6 @@
 package org.wonderloop.app.ui
 
+import org.wonderloop.app.ui.components.WonderBackdrop
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -137,23 +138,10 @@ fun MyCharactersScreen(
         }
     }
 
+    WonderBackdrop {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BoardCreamBg)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            BoardMintSoft.copy(alpha = 0.45f),
-                            BoardGoldSoft.copy(alpha = 0.25f),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = maxOf(size.width, size.height) * 0.65f
-                    )
-                )
-            }
             .padding(horizontal = 48.dp, vertical = 20.dp) // Fire TV 5% Safe Zone
     ) {
         // =================================================================
@@ -457,6 +445,7 @@ fun MyCharactersScreen(
             }
         }
     }
+    }
 }
 
 /**
@@ -492,29 +481,7 @@ private fun PinnedDrawingSheet(
             colors = CardDefaults.cardColors(containerColor = PaperPolaroid),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
             border = BorderStroke(1.5.dp, BoardCardBorder),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onKeyEvent {
-                    if (it.key == Key.Menu && it.type == KeyEventType.KeyUp && hasBothImages) {
-                        PlatformAudioService.playSfx(if (showOriginal) SoundEffect.POP else SoundEffect.MAGIC_CHIME)
-                        showOriginal = !showOriginal
-                        true
-                    } else false
-                }
-                .tvFocusable(
-                    shape = RoundedCornerShape(16.dp),
-                    focusedScale = 1.06f,
-                    focusRequester = focusRequester,
-                    onClick = {
-                        val first = stories.firstOrNull()
-                        if (first != null) {
-                            PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
-                            onOpenStory(first)
-                        } else if (hasBothImages) {
-                            showOriginal = !showOriginal
-                        }
-                    }
-                )
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
@@ -524,11 +491,36 @@ private fun PinnedDrawingSheet(
             ) {
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Photo Display (Tap to transform between AI watercolor & Original drawing)
+                // Photo: OK flips between the child's paper drawing and its magic version
+                val flipArt = {
+                    PlatformAudioService.playSfx(if (showOriginal) SoundEffect.POP else SoundEffect.MAGIC_CHIME)
+                    showOriginal = !showOriginal
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(0.94f)
+                        .onKeyEvent {
+                            if (it.key == Key.Menu && it.type == KeyEventType.KeyUp && hasBothImages) {
+                                flipArt()
+                                true
+                            } else false
+                        }
+                        .tvFocusable(
+                            shape = RoundedCornerShape(12.dp),
+                            focusedScale = 1.05f,
+                            focusRequester = focusRequester,
+                            onClick = {
+                                val first = stories.firstOrNull()
+                                when {
+                                    hasBothImages -> flipArt()
+                                    first != null -> {
+                                        PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
+                                        onOpenStory(first)
+                                    }
+                                }
+                            }
+                        )
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             Brush.linearGradient(
@@ -626,9 +618,9 @@ private fun PinnedDrawingSheet(
 
                 val tapFeedbackText = if (hasBothImages) {
                     if (showOriginal) {
-                        if (AppStrings.isEnglish) "☰ See magic" else "☰ Ver magia"
+                        if (AppStrings.isEnglish) "OK · See magic" else "OK · Ver magia"
                     } else {
-                        if (AppStrings.isEnglish) "☰ See drawing" else "☰ Ver dibujo"
+                        if (AppStrings.isEnglish) "OK · See drawing" else "OK · Ver dibujo"
                     }
                 } else if (character.species.isNotBlank()) {
                     character.species
@@ -670,6 +662,11 @@ private fun PinnedDrawingSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(34.dp)
+                            .tvFocusable(
+                                shape = RoundedCornerShape(50.dp),
+                                focusedScale = 1.06f,
+                                onClick = onReadFirstStory
+                            )
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),

@@ -215,7 +215,7 @@ export class NanobananaImageAdapter implements IImageAdapter {
       settingBible ? `Setting (keep it consistent across the whole story): ${settingBible}.` : '',
       `Moment to illustrate: ${visualPrompt}`,
       `Camera: ${direction.shot}. Lighting: ${direction.light}.`,
-      'Composition: full-bleed artwork filling the whole frame edge to edge (no white paper margins, borders or frames); main characters clearly visible and expressive, placed in the upper two-thirds of the frame with their faces well above the bottom quarter; the bottom quarter is calm, simple ground, water or sky with no faces or key details; uncluttered background.',
+      'Composition: full-bleed artwork filling the whole frame edge to edge (no white paper margins, borders or frames); characters clearly visible and expressive, uncluttered background, calm space in the lower third.',
       SAFE_FINISH
     ].filter(Boolean).join('\n');
 

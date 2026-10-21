@@ -1,5 +1,6 @@
 package org.wonderloop.app.ui
 
+import org.wonderloop.app.ui.components.WonderBackdrop
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -351,22 +352,10 @@ fun MagicLoadingScreen(
         }
     }
 
+    WonderBackdrop {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFFFFF3E0),
-                            Color(0xFFFDF3EC),
-                            Color(0xFFFFFBF5)
-                        ),
-                        center = Offset(size.width * 0.4f, size.height * 0.5f),
-                        radius = maxOf(size.width, size.height) * 0.75f
-                    )
-                )
-            }
     ) {
         // Soft ambient floating blobs
         Box(
@@ -574,6 +563,7 @@ fun MagicLoadingScreen(
                 )
             }
         }
+    }
     }
 }
 

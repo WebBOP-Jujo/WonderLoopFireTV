@@ -34,6 +34,10 @@ import org.wonderloop.app.platform.PlatformBackHandler
 import org.wonderloop.app.platform.SoundEffect
 import org.wonderloop.app.theme.*
 import org.wonderloop.app.ui.components.*
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 
 private val ParentsCreamBg = Color(0xFFFFFBF5)
 private val ParentsInkDark = Color(0xFF2B2340)
@@ -152,10 +156,10 @@ fun ParentsZoneScreen(
         } catch (_: Exception) {}
     }
 
+    WonderBackdrop(mood = BackdropMood.Calm) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(ParentsCreamBg)
             .padding(horizontal = 48.dp, vertical = 16.dp)
     ) {
         // -------------------------------------------------------------
@@ -279,10 +283,10 @@ fun ParentsZoneScreen(
                             )
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = if (AppStrings.isEnglish) {
-                                    if (availableStories == 1) "1 story available" else "$availableStories stories available"
-                                } else {
-                                    if (availableStories == 1) "1 cuento disponible" else "$availableStories cuentos disponibles"
+                                text = when {
+                                    availableStories >= 999 -> if (AppStrings.isEnglish) "∞ Unlimited stories" else "∞ Cuentos ilimitados"
+                                    AppStrings.isEnglish -> if (availableStories == 1) "1 story available" else "$availableStories stories available"
+                                    else -> if (availableStories == 1) "1 cuento disponible" else "$availableStories cuentos disponibles"
                                 },
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -320,9 +324,7 @@ fun ParentsZoneScreen(
 
                 // 2B. PERFILES SECTION
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
@@ -337,7 +339,7 @@ fun ParentsZoneScreen(
                             color = ParentsInkDark
                         )
                         Text(
-                            text = "${profiles.size} de 3",
+                            text = if (AppStrings.isEnglish) "${profiles.size} of 3" else "${profiles.size} de 3",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = ParentsInkMuted
@@ -347,19 +349,20 @@ fun ParentsZoneScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .height(172.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        profiles.forEach { profile ->
+                        profiles.forEachIndexed { index, profile ->
                             val isActive = profile.id == activeProfileId
+                            val accent = profileAccent(index)
                             Surface(
                                 shape = RoundedCornerShape(24.dp),
                                 color = Color.White,
                                 border = BorderStroke(
                                     width = if (isActive) 2.5.dp else 1.5.dp,
-                                    color = if (isActive) ParentsCoral else ParentsCardBorder
+                                    color = if (isActive) accent else ParentsCardBorder
                                 ),
-                                shadowElevation = 2.dp,
+                                shadowElevation = 3.dp,
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
@@ -373,56 +376,65 @@ fun ParentsZoneScreen(
                                         }
                                     )
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 8.dp, vertical = 10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
+                                Box(modifier = Modifier.fillMaxSize()) {
                                     Box(
                                         modifier = Modifier
-                                            .size(60.dp)
-                                            .clip(CircleShape)
-                                            .background(ParentsCoralSoft),
-                                        contentAlignment = Alignment.Center
+                                            .fillMaxWidth()
+                                            .height(44.dp)
+                                            .background(Brush.linearGradient(listOf(accent, accent.copy(alpha = 0.6f))))
+                                    )
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(top = 12.dp, start = 8.dp, end = 8.dp, bottom = 10.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Text(text = profile.avatar, fontSize = 32.sp)
-                                    }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(64.dp)
+                                                .shadow(elevation = 4.dp, shape = CircleShape)
+                                                .clip(CircleShape)
+                                                .background(Color.White)
+                                                .border(3.dp, accent, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(text = profile.avatar, fontSize = 34.sp)
+                                        }
 
-                                    Spacer(modifier = Modifier.height(6.dp))
+                                        Spacer(modifier = Modifier.height(6.dp))
 
-                                    Text(
-                                        text = profile.name,
-                                        fontFamily = TitleFont(),
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ParentsInkDark,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                        Text(
+                                            text = profile.name,
+                                            fontFamily = TitleFont(),
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ParentsInkDark,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${profile.age} ${AppStrings.yearsOld}",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = ParentsInkMuted
+                                        )
 
-                                    Spacer(modifier = Modifier.height(2.dp))
+                                        Spacer(modifier = Modifier.weight(1f))
 
-                                    Text(
-                                        text = "${profile.age} ${AppStrings.yearsOld}",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ParentsInkMuted
-                                    )
-
-                                    if (isActive) {
-                                        Spacer(modifier = Modifier.height(5.dp))
                                         Surface(
                                             shape = RoundedCornerShape(50.dp),
-                                            color = ParentsCoralSoft
+                                            color = if (isActive) accent.copy(alpha = 0.14f) else Color(0xFFF4F1EC)
                                         ) {
                                             Text(
-                                                text = if (AppStrings.isEnglish) "Active" else "Activo",
+                                                text = if (isActive) {
+                                                    if (AppStrings.isEnglish) "● Active" else "● Activo"
+                                                } else {
+                                                    if (AppStrings.isEnglish) "Edit" else "Editar"
+                                                },
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = ParentsCoral,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                color = if (isActive) accent else ParentsInkMuted,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                                             )
                                         }
                                     }
@@ -433,11 +445,8 @@ fun ParentsZoneScreen(
                         // Add Profile Card if fewer than 3
                         if (profiles.size < 3) {
                             val freeSlots = 3 - profiles.size
-                            Surface(
-                                shape = RoundedCornerShape(24.dp),
-                                color = Color.White,
-                                border = BorderStroke(2.dp, ParentsCoralBorder),
-                                shadowElevation = 0.dp,
+                            Box(
+                                contentAlignment = Alignment.Center,
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
@@ -450,42 +459,43 @@ fun ParentsZoneScreen(
                                             onAddProfileClick()
                                         }
                                     )
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(Color.White.copy(alpha = 0.6f))
+                                    .drawBehind {
+                                        drawRoundRect(
+                                            color = ParentsCoral.copy(alpha = 0.5f),
+                                            cornerRadius = CornerRadius(24.dp.toPx()),
+                                            style = Stroke(
+                                                width = 2.dp.toPx(),
+                                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx()))
+                                            )
+                                        )
+                                    }
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 8.dp, vertical = 10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Box(
                                         modifier = Modifier
-                                            .size(60.dp)
+                                            .size(56.dp)
                                             .clip(CircleShape)
                                             .background(ParentsCoralSoft),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = "+",
-                                            fontSize = 32.sp,
+                                            fontSize = 30.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = ParentsCoral
                                         )
                                     }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
+                                    Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = if (AppStrings.isEnglish) "Add profile" else "Añadir perfil",
                                         fontFamily = TitleFont(),
-                                        fontSize = 14.5.sp,
+                                        fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ParentsCoral,
                                         textAlign = TextAlign.Center
                                     )
-
-                                    Spacer(modifier = Modifier.height(2.dp))
-
                                     Text(
                                         text = if (freeSlots == 1) {
                                             if (AppStrings.isEnglish) "1 free slot" else "1 plaza libre"
@@ -501,6 +511,9 @@ fun ParentsZoneScreen(
                         }
                     }
                 }
+
+                // 2C. FAMILY ACTIVITY: what the children have made so far
+                FamilyActivityCard(modifier = Modifier.fillMaxWidth())
             }
 
             // RIGHT COLUMN (Ajustes Card)
@@ -673,6 +686,7 @@ fun ParentsZoneScreen(
             Spacer(modifier = Modifier.width(28.dp))
             HintChip(label = "↩", text = if (AppStrings.isEnglish) "Back" else "Volver")
         }
+    }
     }
 
     // =============================================================
@@ -1911,5 +1925,67 @@ private fun HintChip(
             fontWeight = FontWeight.SemiBold,
             color = ParentsInkMuted
         )
+    }
+}
+
+/** Totals across every child profile, so grown-ups see what the family has made at a glance. */
+@Composable
+private fun FamilyActivityCard(modifier: Modifier = Modifier) {
+    val stories = StoryRepository.savedStories
+    val storyCount = stories.size
+    val friendCount = remember(storyCount) {
+        stories
+            .flatMap { story -> listOfNotNull(story.character, story.continuation?.effectiveHero) }
+            .filter { it.name.isNotBlank() }
+            .distinctBy { it.name.trim().lowercase() }
+            .size
+    }
+    val sagaCount = remember(storyCount) {
+        stories.groupBy { it.effectiveSagaId }.count { it.value.size > 1 }
+    }
+    val en = AppStrings.isEnglish
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.92f),
+        border = BorderStroke(1.5.dp, ParentsCardBorder),
+        shadowElevation = 2.dp,
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Text(
+                text = if (en) "📊 WHAT THE FAMILY HAS CREATED" else "📊 LO QUE HA CREADO LA FAMILIA",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.5.sp,
+                color = ParentsInkMuted
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                listOf(
+                    Triple("$storyCount", if (en) "stories" else "cuentos", ParentsCoral),
+                    Triple("$friendCount", if (en) "friends" else "amigos", ParentsMint),
+                    Triple("$sagaCount", if (en) "sagas" else "sagas", Color(0xFF7C5CE0))
+                ).forEach { (value, label, color) ->
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = value,
+                            fontFamily = TitleFont(),
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = color
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = label,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ParentsInkDark,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
     }
 }

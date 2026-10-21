@@ -464,8 +464,12 @@ function renderExpiredSessionHtml(): string {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: radial-gradient(circle at 50% 20%, #FFFDF9 0%, #FFFBF5 60%, #F7EFE4 100%);
-      color: #2B253A;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(255, 138, 128, 0.24), transparent 42%),
+        radial-gradient(circle at 100% 6%, rgba(255, 209, 102, 0.32), transparent 40%),
+        radial-gradient(circle at 100% 100%, rgba(111, 211, 181, 0.26), transparent 45%),
+        linear-gradient(180deg, #FFFBF5 0%, #FFF3E6 100%);
+      color: #2B2340;
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -474,9 +478,9 @@ function renderExpiredSessionHtml(): string {
       text-align: center;
     }
     .card {
-      background: #FFFDF9;
-      border: 2px solid #EDE3D5;
-      border-radius: 28px;
+      background: linear-gradient(180deg, #FDECE9 0%, #FFFFFF 40%);
+      border: 1.5px solid #EDE8E1;
+      border-radius: 32px;
       padding: 32px 24px;
       max-width: 420px;
       width: 100%;
@@ -520,16 +524,19 @@ function renderMobileUploadHtml(session: TvSession): string {
   <style>
     :root {
       --cream: #FFFBF5;
-      --paper: #FFFDF9;
-      --warm-card: #F7EFE4;
+      --paper: #FFFFFF;
+      --warm-card: #FFF6EC;
       --coral: #D9384A;
       --coral-light: #FF6B6B;
+      --coral-soft: #FDECE9;
       --gold: #FFD166;
+      --gold-text: #9E6700;
       --mint: #0E7F64;
-      --mint-soft: #E5F9F5;
-      --text-primary: #2B253A;
-      --text-secondary: #655B7C;
-      --border: #EDE3D5;
+      --mint-soft: #E4F6F0;
+      --violet: #7C5CE0;
+      --text-primary: #2B2340;
+      --text-secondary: #6B6480;
+      --border: #EDE8E1;
     }
     * {
       box-sizing: border-box;
@@ -539,14 +546,30 @@ function renderMobileUploadHtml(session: TvSession): string {
     }
     body {
       font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: radial-gradient(circle at 50% 12%, #FFF3E3 0%, var(--cream) 55%, #F7EFE4 100%);
+      background:
+        radial-gradient(circle at 0% 0%, rgba(255, 138, 128, 0.24), transparent 42%),
+        radial-gradient(circle at 100% 6%, rgba(255, 209, 102, 0.32), transparent 40%),
+        radial-gradient(circle at 100% 100%, rgba(111, 211, 181, 0.26), transparent 45%),
+        radial-gradient(circle at 0% 100%, rgba(185, 166, 245, 0.24), transparent 42%),
+        linear-gradient(180deg, #FFFBF5 0%, #FFF3E6 100%);
+      background-attachment: fixed;
       color: var(--text-primary);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       padding: 18px 16px 36px;
+      position: relative;
+      overflow-x: hidden;
     }
+    .sparkle {
+      position: fixed;
+      pointer-events: none;
+      font-size: 18px;
+      opacity: 0.5;
+      z-index: 0;
+    }
+    .top-bar, .card, .tips, .footer-note { position: relative; z-index: 1; }
     .top-bar {
       width: 100%;
       max-width: 440px;
@@ -560,10 +583,19 @@ function renderMobileUploadHtml(session: TvSession): string {
       align-items: center;
       gap: 8px;
       background: var(--paper);
-      border: 2px solid var(--gold);
       border-radius: 999px;
-      padding: 6px 14px;
-      box-shadow: 0 4px 12px rgba(217, 56, 74, 0.08);
+      padding: 7px 14px 7px 8px;
+      box-shadow: 0 6px 16px rgba(43, 35, 64, 0.08);
+    }
+    .brand-logo {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--coral), #FF8A80);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
     }
     .brand-title {
       font-family: 'Fredoka', sans-serif;
@@ -571,6 +603,7 @@ function renderMobileUploadHtml(session: TvSession): string {
       font-size: 17px;
       color: var(--coral);
     }
+    .brand-title b { color: var(--mint); font-weight: 700; }
     .session-badge {
       font-size: 12px;
       font-weight: 800;
@@ -581,32 +614,32 @@ function renderMobileUploadHtml(session: TvSession): string {
     }
     .lang-toggle {
       background: var(--paper);
-      border: 1.5px solid var(--border);
+      border: none;
       border-radius: 999px;
-      padding: 6px 12px;
+      padding: 8px 12px;
       font-family: 'Nunito', sans-serif;
       font-weight: 800;
       font-size: 13px;
       color: var(--text-primary);
       cursor: pointer;
+      box-shadow: 0 6px 16px rgba(43, 35, 64, 0.08);
     }
     .card {
       width: 100%;
       max-width: 440px;
-      background: var(--paper);
-      border: 2.5px solid var(--border);
-      border-radius: 28px;
-      padding: 24px 20px;
-      box-shadow: 0 14px 34px rgba(43, 37, 58, 0.08);
+      background: linear-gradient(180deg, var(--coral-soft) 0%, #FFFFFF 34%);
+      border: 1.5px solid var(--border);
+      border-radius: 32px;
+      padding: 22px 20px 24px;
+      box-shadow: 0 18px 40px rgba(43, 35, 64, 0.10);
       text-align: center;
-      position: relative;
       overflow: hidden;
     }
     .tv-connected-banner {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: var(--mint-soft);
+      background: var(--paper);
       color: var(--mint);
       border: 1.5px solid rgba(14, 127, 100, 0.25);
       border-radius: 999px;
@@ -628,24 +661,47 @@ function renderMobileUploadHtml(session: TvSession): string {
     }
     h1 {
       font-family: 'Fredoka', sans-serif;
-      font-size: 25px;
-      line-height: 1.2;
+      font-size: 27px;
+      line-height: 1.15;
       color: var(--text-primary);
       margin-bottom: 8px;
     }
     .subtitle {
-      font-size: 15px;
+      font-size: 15.5px;
       line-height: 1.45;
       color: var(--text-secondary);
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
+    .steps {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      background: var(--paper);
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      padding: 8px 10px;
+      min-width: 86px;
+      font-size: 12.5px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+    .step span:first-child { font-size: 20px; }
+    .step-arrow { color: var(--text-secondary); font-weight: 800; }
     .drawing-frame {
       width: 100%;
       aspect-ratio: 4 / 3;
       max-height: 240px;
-      background: var(--warm-card);
-      border: 3px dashed var(--gold);
-      border-radius: 22px;
+      background: #FFFFFF;
+      border: 3px dashed rgba(217, 56, 74, 0.45);
+      border-radius: 24px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -659,14 +715,22 @@ function renderMobileUploadHtml(session: TvSession): string {
       height: 100%;
       object-fit: contain;
       display: none;
-      background: #FFFDF9;
+      background: #FFFFFF;
     }
     .placeholder-icon {
-      font-size: 46px;
-      margin-bottom: 8px;
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      background: var(--coral-soft);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      margin: 0 auto 10px;
+      transform: rotate(-6deg);
     }
     .placeholder-hint {
-      font-size: 14px;
+      font-size: 14.5px;
       font-weight: 700;
       color: var(--text-secondary);
       padding: 0 16px;
@@ -678,11 +742,12 @@ function renderMobileUploadHtml(session: TvSession): string {
     }
     .btn {
       width: 100%;
+      min-height: 58px;
       border: none;
-      border-radius: 18px;
+      border-radius: 999px;
       padding: 16px 20px;
       font-family: 'Fredoka', sans-serif;
-      font-size: 18px;
+      font-size: 19px;
       font-weight: 600;
       display: flex;
       align-items: center;
@@ -692,24 +757,24 @@ function renderMobileUploadHtml(session: TvSession): string {
       transition: transform 0.12s ease, opacity 0.15s ease;
     }
     .btn:active {
-      transform: scale(0.98);
+      transform: scale(0.97);
     }
     .btn-primary {
       background: linear-gradient(135deg, var(--coral) 0%, var(--coral-light) 100%);
       color: #FFFFFF;
-      box-shadow: 0 8px 20px rgba(217, 56, 74, 0.28);
+      box-shadow: 0 10px 24px rgba(217, 56, 74, 0.30);
     }
     .btn-secondary {
       background: var(--paper);
       color: var(--mint);
-      border: 2.5px solid var(--mint);
+      border: 2.5px solid rgba(14, 127, 100, 0.55);
     }
     .status-box {
       display: none;
       margin-top: 16px;
       padding: 16px;
-      border-radius: 18px;
-      font-weight: 700;
+      border-radius: 20px;
+      font-weight: 800;
       font-size: 15px;
       line-height: 1.4;
     }
@@ -724,6 +789,7 @@ function renderMobileUploadHtml(session: TvSession): string {
       background: var(--mint-soft);
       border: 2px solid var(--mint);
       color: var(--mint);
+      font-size: 16.5px;
     }
     .status-error {
       display: block;
@@ -740,19 +806,51 @@ function renderMobileUploadHtml(session: TvSession): string {
     input[type="file"] {
       display: none;
     }
+    .tips {
+      width: 100%;
+      max-width: 440px;
+      margin-top: 14px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1.5px solid var(--border);
+      border-radius: 24px;
+      padding: 14px 18px;
+      text-align: left;
+    }
+    .tips-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: var(--gold-text);
+      margin-bottom: 8px;
+    }
+    .tip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+      padding: 3px 0;
+    }
     .footer-note {
-      margin-top: 18px;
-      font-size: 13px;
+      margin-top: 16px;
+      font-size: 13.5px;
+      font-weight: 700;
       color: var(--text-secondary);
       text-align: center;
     }
   </style>
 </head>
 <body>
+  <span class="sparkle" style="top: 9%; left: 4%; color: #F2B630;">✦</span>
+  <span class="sparkle" style="top: 34%; right: 3%; color: #E0485A;">✦</span>
+  <span class="sparkle" style="bottom: 18%; left: 5%; color: #14A37F;">✦</span>
+  <span class="sparkle" style="bottom: 6%; right: 9%; color: #7C5CE0;">✦</span>
+
   <div class="top-bar">
     <div class="brand-pill">
-      <span>✨</span>
-      <span class="brand-title">WonderLoop TV</span>
+      <span class="brand-logo">✨</span>
+      <span class="brand-title">Wonder<b>Loop</b></span>
       <span class="session-badge">${session.shortCode}</span>
     </div>
     <button type="button" class="lang-toggle" id="langBtn">🇪🇸 ES / 🇬🇧 EN</button>
@@ -767,9 +865,17 @@ function renderMobileUploadHtml(session: TvSession): string {
     <h1 id="titleText">¡Envía tu dibujo a la tele!</h1>
     <p class="subtitle" id="subtitleText">Haz una foto al dibujo en papel de tu peque y mira cómo cobra vida en la pantalla del salón.</p>
 
+    <div class="steps">
+      <div class="step"><span>📸</span><span id="step1Text">Foto</span></div>
+      <span class="step-arrow">›</span>
+      <div class="step"><span>📤</span><span id="step2Text">Envío</span></div>
+      <span class="step-arrow">›</span>
+      <div class="step"><span>📺</span><span id="step3Text">¡A la tele!</span></div>
+    </div>
+
     <div class="drawing-frame" id="previewFrame">
       <div id="placeholderContent">
-        <div class="placeholder-icon">🎨🖍️</div>
+        <div class="placeholder-icon">🖍️</div>
         <div class="placeholder-hint" id="placeholderHint">Coloca el dibujo sobre una mesa bien iluminada</div>
       </div>
       <img id="previewImg" alt="Vista previa del dibujo" />
@@ -791,6 +897,13 @@ function renderMobileUploadHtml(session: TvSession): string {
     <!-- Hidden file inputs for Camera and Gallery -->
     <input type="file" id="cameraInput" accept="image/*" capture="environment" />
     <input type="file" id="galleryInput" accept="image/*" />
+  </div>
+
+  <div class="tips">
+    <div class="tips-title" id="tipsTitle">💡 PARA UNA FOTO MÁGICA</div>
+    <div class="tip"><span>☀️</span><span id="tip1Text">Con buena luz, mejor cerca de una ventana</span></div>
+    <div class="tip"><span>📄</span><span id="tip2Text">Que salga el papel entero, de frente</span></div>
+    <div class="tip"><span>✋</span><span id="tip3Text">Sin sombras ni dedos encima del dibujo</span></div>
   </div>
 
   <p class="footer-note" id="footerNote">✨ La magia comenzará automáticamente en tu televisor</p>
@@ -815,7 +928,14 @@ function renderMobileUploadHtml(session: TvSession): string {
           retryBtn: "Repetir foto del dibujo",
           errorGeneric: "No se pudo enviar el dibujo. Inténtalo de nuevo.",
           sessionExpired: "📺 Tu televisor ha renovado el código QR. Apunta tu cámara a la tele para reconectar.",
-          footer: "✨ La magia comenzará automáticamente en tu televisor"
+          footer: "✨ La magia comenzará automáticamente en tu televisor",
+          step1: "Foto",
+          step2: "Envío",
+          step3: "¡A la tele!",
+          tipsTitle: "💡 PARA UNA FOTO MÁGICA",
+          tip1: "Con buena luz, mejor cerca de una ventana",
+          tip2: "Que salga el papel entero, de frente",
+          tip3: "Sin sombras ni dedos encima del dibujo"
         },
         en: {
           tvBadge: "Connected to your Fire TV",
@@ -831,7 +951,14 @@ function renderMobileUploadHtml(session: TvSession): string {
           retryBtn: "Retake drawing photo",
           errorGeneric: "Could not send the drawing. Please try again.",
           sessionExpired: "📺 Your TV has generated a new QR code. Point your camera at the TV to reconnect.",
-          footer: "✨ The magic will start automatically on your TV"
+          footer: "✨ The magic will start automatically on your TV",
+          step1: "Photo",
+          step2: "Send",
+          step3: "On the TV!",
+          tipsTitle: "💡 FOR A MAGICAL PHOTO",
+          tip1: "Good light, ideally near a window",
+          tip2: "Fit the whole sheet in the photo, straight on",
+          tip3: "No shadows or fingers over the drawing"
         }
       };
 
@@ -862,6 +989,10 @@ function renderMobileUploadHtml(session: TvSession): string {
         cameraBtnText.textContent = t.cameraBtn;
         galleryBtnText.textContent = t.galleryBtn;
         footerNote.textContent = t.footer;
+        ['step1', 'step2', 'step3', 'tip1', 'tip2', 'tip3'].forEach(function(key) {
+          document.getElementById(key + 'Text').textContent = t[key];
+        });
+        document.getElementById('tipsTitle').textContent = t.tipsTitle;
         langBtn.textContent = currentLang === 'es' ? '🇪🇸 ES | 🇬🇧 EN' : '🇬🇧 EN | 🇪🇸 ES';
       }
 
@@ -889,6 +1020,7 @@ function renderMobileUploadHtml(session: TvSession): string {
 
       function showStatus(type, text) {
         statusBox.className = 'status-box status-' + type;
+        statusBox.style.display = '';
         statusBox.textContent = text;
       }
 

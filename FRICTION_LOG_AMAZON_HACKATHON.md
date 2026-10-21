@@ -41,18 +41,18 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
 
 ---
 
-### 🔴 Friction 2: Amazon Appstore Leanback Traps & Exit Confirmation Dialogs
+### 🟡 Friction 2: Contradictory BACK-Button Guidance (Android TV vs. Fire TV)
 * **Category:** Certification & OS Guidelines  
-* **Severity:** **HIGH** (Friction Rating: 4 / 5)  
-* **Context:** In mobile Android apps, standard convention is to intercept the system `BACK` button on the home screen and show a confirmation dialog (*"¿Seguro que quieres salir?"*).
+* **Severity:** **MEDIUM** (Friction Rating: 3 / 5)  
+* **Task attempted:** Decide what `BACK` should do on the app's main screen: exit straight to the launcher, or ask *"¿Seguro que quieres salir?"* first.
 * **The Struggle:**
-  - On Amazon Fire TV, displaying an exit confirmation dialog when pressing `BACK` on the home screen is one of the **#1 reasons for Appstore submission rejection**.
-  - Fire TV guidelines mandate that pressing `BACK` from any root destination must exit immediately to the Fire TV launcher (`finish()`), allowing users to return to their streaming dashboard with zero friction.
-  - Mobile developers migrating to Fire TV without specialized guidance routinely fall into this trap.
+  - Google's Android TV navigation guide says the BACK button should not be "gated by confirmation screens".
+  - Amazon's Fire TV [Controller Behavior Guidelines](https://developer.amazon.com/docs/fire-tv/controller-behavior-guidelines.html) recommend the opposite: on the main screen, capture BACK to show an *"Are you sure you want to exit the XYZ app?"* dialog (while avoiding a close/reopen loop).
+  - Because Fire OS is an Android fork, most Compose/TV material we found online follows Google's rule. We first removed our exit dialog believing it was an Appstore rejection risk, and only later found Amazon's own guideline recommending it.
 * **Resolution:**
-  - We refactored `App.kt` to eliminate `showExitConfirmDialog` and bound root back navigation directly to `onExitApp = { finish() }`.
+  - `BACK` on the home screen (and on the root profile picker) opens a child-friendly exit dialog with focus on **"Keep creating"**, so an accidental BACK + OK never closes the app. BACK inside the dialog only closes it, so there is no loop. The splash screen still exits directly.
 * **Actionable Feedback for Amazon:**
-  > **Tooling Suggestion:** Add a pre-certification check in the Amazon Developer Console or Gradle plugin that scans the navigation graph and warns developers if an exit confirmation dialog is bound to `KeyEvent.KEYCODE_BACK` on root activities.
+  > **Docs:** Add a short "Fire TV vs. Android TV differences" box to the controller guidelines (BACK on the main screen, exit dialogs, Menu key), so developers arriving from Google's docs know which rule applies on Fire OS.
 
 ---
 
@@ -185,7 +185,6 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
 * **Resolution:** We borrowed the **Fire TV video player conventions** instead of inventing new ones:
   - Film-style subtitles (1–2 sentences, 28 sp, gold highlight on the word being narrated) synced to Amazon Polly speech marks, covering ~20 % of the frame.
   - Controls in a vertical rail that fades out while the narrator reads and returns on any key; OK pauses, like in a video app. ◀ ▶ always turn the page; a "Read it myself" mode shows the full text for a grown-up.
-  - The image prompt now keeps characters in the upper two-thirds of the frame so subtitles never cover a face.
 * **Actionable Feedback for Amazon:**
   > **Docs:** Add a "reading & subtitle-style text over full-screen art" pattern to the Fire TV design guidelines (safe text band, minimum size, auto-hiding overlays, select-to-pause), so book, education and karaoke apps converge on the same remote behaviour.
 
@@ -226,7 +225,7 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
 |:---:|---|---|---|
 | **#1** | **Amazon Fire TV Mobile Companion SDK** | Any TV app requiring mobile text, payment, or photo input | Eliminates 80% of cross-device pairing boilerplate for 3P developers. |
 | **#2** | **Fire TV D-Pad Focus Visualizer (ADB CLI)** | Jetpack Compose / Flutter / React Native developers | Live overlay highlighting focusable elements, focus traps, and inaccessible UI nodes on the TV screen. |
-| **#3** | **Pre-flight Appstore Certification Linter** | All Fire TV developers prior to submission | Scans for exit confirmation dialogs, missing Leanback launchers, and unshielded cleartext traffic before submission. |
+| **#3** | **Pre-flight Appstore Certification Linter** | All Fire TV developers prior to submission | Scans for BACK loops, missing Leanback launchers, and unshielded cleartext traffic before submission. |
 | **#4** | **Structured outputs for Amazon Nova 2 Lite** (Important) | Any Bedrock app that parses model output | Removes the need for forced-tool workarounds and makes JSON pipelines reliable in every language. |
 | **#5** | **GA Amazon image model + lifecycle banners on model docs** (Critical for us) | Creative / family apps on Bedrock | A supported Nova Canvas successor with reference-image consistency would let apps like WonderLoop run 100% on AWS. |
 | **#6** | **Fire TV guidance for Compose Multiplatform + reading-style UIs** | KMP teams; book, education and karaoke apps | One reference for TV focus components from shared code and for text over full-screen art (Frictions 10–11). |
