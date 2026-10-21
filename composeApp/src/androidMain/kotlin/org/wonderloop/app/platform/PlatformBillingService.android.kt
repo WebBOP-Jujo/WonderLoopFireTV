@@ -28,6 +28,12 @@ actual object PlatformBillingService {
      */
     const val DEFAULT_REVENUECAT_API_KEY = "test_jDMCrbZtrDrCuEtVNXWZQDoQNWJ"
 
+    /**
+     * Off in the Fire TV hackathon build: every story is free, so the kids' app makes no network calls to any
+     * third-party SDK. Turn on together with Amazon Appstore in-app purchasing for a production release.
+     */
+    private const val BILLING_ENABLED = false
+
     private var activityRef: WeakReference<Activity>? = null
 
     fun attachActivity(activity: Activity) {
@@ -36,7 +42,7 @@ actual object PlatformBillingService {
 
     fun configureIfNeeded(activity: Activity, apiKeyOverride: String? = null) {
         attachActivity(activity)
-        if (Purchases.isConfigured) return
+        if (!BILLING_ENABLED || Purchases.isConfigured) return
 
         val savedKey = PlatformStorage.getString("revenuecat_api_key", "").trim()
         val apiKey = (apiKeyOverride?.trim()?.takeIf { it.isNotBlank() }

@@ -59,7 +59,7 @@ Amazon's judging criteria for the **Fire TV Track** explicitly emphasizes four c
    │         (Express + TypeScript + Sharp Image Pipeline)            │
    │  • Rate Limiting & Helmet Security                               │
    │  • Ephemeral Token Pairing (15-min TTL)                          │
-   │  • Strict COPPA Memory Purge (Zero Child PII Retention)          │
+   │  • No database: drawing purged from memory on pickup             │
    └───────────────────────────────┬──────────────────────────────────┘
                                    │
                                    ▼
@@ -104,13 +104,17 @@ WonderLoop TV is **not** a scaled-up mobile app. It was designed and built from 
 
 ---
 
-## 🔒 Child Safety & Privacy by Design (COPPA Compliant)
+## 🔒 Child Safety & Privacy by Design
 
-Children's safety and privacy are paramount:
-* **Zero Child PII Storage:** No personal data, real names, or geolocation are ever saved.
-* **Ephemeral Second-Screen Sessions:** QR codes generate temporary sessions valid for 15 minutes that automatically expire.
-* **Immediate In-Memory Buffer Purge:** As soon as the Fire TV retrieves the photo, the image buffer is purged from server memory (`session.imageBase64 = undefined`), ensuring drawings are not retained or exposed.
-* **No Telemetry / Trackers:** Devoid of ad networks, tracking SDKs, or third-party analytical beacons.
+WonderLoop is built on **data minimisation**, the core principle behind COPPA and GDPR-K: we only touch what a bedtime story needs, and we keep almost nothing.
+
+* **Nothing to sign up for:** no accounts, no email, no passwords, no location, no contacts, no microphone, no camera on the TV.
+* **The family's data stays in the living room:** a child profile is just a first name, an age and an emoji avatar, stored **only on the Fire TV**. Stories and drawn friends are saved on the device too. Grown-ups can edit or delete any profile or book behind the parental gate.
+* **No database on the server:** the backend never writes anything about a child to disk. The drawing photo lives **in memory only**, inside a QR session that expires after 15 minutes, and is purged the moment the TV picks it up (`session.imageBase64 = undefined`).
+* **Only what the story needs reaches the AI:** the drawing, the child's first name and age. No surname, no voice, no face, no device identifier tied to the child. Requests go to **Amazon Bedrock**, which does not store prompts or use them to train models, and to the **Gemini API under its paid-service terms**, which also excludes training on customer content.
+* **No ads, no analytics, no tracking SDKs:** the only identifier is a random install ID used for rate limiting, and the in-app purchase SDK is switched off in this free build, so the app talks to no third-party SDK at all.
+* **Clean logs:** server logs never contain the child's name.
+* **Grown-ups stay in charge:** settings, profiles, deleting books and leaving the app are behind a parental gate or a confirmation dialog, never one accidental click away.
 
 ---
 
