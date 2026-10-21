@@ -46,3 +46,6 @@ node_modules/
 # OS Specific
 .DS_Store
 Thumbs.db
+
+# Local TTS voice samples
+polly-samples/

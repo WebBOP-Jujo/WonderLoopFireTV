@@ -16,6 +16,20 @@ export function safeParseJson<T = any>(raw: string, fallback?: T): T {
   try {
     return JSON.parse(clean);
   } catch (err1) {
+    // 2b. Some models (e.g. Amazon Nova) occasionally delimit values with typographic quotes: "key": “value”.
+    // Re-delimit them with ASCII quotes (escaping inner ones) and keep the result for the next fallbacks.
+    const retyped = clean.replace(/([:\[,]\s*)[“«]([^“”«»]*)[”»](?=\s*[,}\]])/g, (_m, prefix: string, inner: string) => {
+      return `${prefix}"${inner.replace(/\\?"/g, '\\"')}"`;
+    });
+    if (retyped !== clean) {
+      clean = retyped;
+      try {
+        return JSON.parse(clean);
+      } catch {
+        // continue with the generic repairs below
+      }
+    }
+
     // 3. First fallback: escape literal newlines and control characters inside double quotes
     try {
       const fixedQuotes = clean.replace(/"((?:[^"\\]|\\.)*)"/gs, (match) => {

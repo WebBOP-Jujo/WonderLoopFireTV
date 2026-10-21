@@ -1,0 +1,45 @@
+# WonderLoop TV backend on a single Amazon EC2 instance.
+# - backend: the Express gateway (QR sessions live in memory, so exactly ONE replica).
+# - caddy:   public HTTPS on :443 with an automatic Let's Encrypt / ZeroSSL certificate.
+# AWS credentials come from the EC2 instance role (IMDS); none are stored on disk.
+
+services:
+  backend:
+    build: ..
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      PORT: "8080"
+      TRUST_PROXY: "1" # exactly one proxy hop (Caddy) in front of the app
+    expose:
+      - "8080"
+    mem_limit: 1200m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS must be set in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:

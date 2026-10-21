@@ -1,6 +1,6 @@
 # ==============================================================================
 # WonderLoop — Despliegue Automatizado en Google Cloud Run
-# RevenueCat Shipaton 2026
+# Amazon Developer Hackathon 2026
 # ==============================================================================
 
 param(

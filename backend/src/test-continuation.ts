@@ -1,13 +1,13 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { GeminiStoryAdapter } from './adapters/story.adapter.js';
+import { LlmStoryAdapter } from './adapters/story.adapter.js';
 import { CharacterProfile, StoryContinuationContext } from './types/story.types.js';
 
 async function testContinuation() {
   console.log('🧪 Testing Story Continuation Pipeline...');
 
-  const storyAdapter = new GeminiStoryAdapter();
+  const storyAdapter = new LlmStoryAdapter();
 
   const originalHero: CharacterProfile = {
     name: 'Barquito Tim',

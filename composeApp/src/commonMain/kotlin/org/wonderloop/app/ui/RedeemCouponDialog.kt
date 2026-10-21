@@ -103,7 +103,7 @@ fun RedeemCouponDialog(
                     },
                     placeholder = {
                         Text(
-                            text = "Ej. SHIPATON2026",
+                            text = "Ej. HACKATHON2026",
                             color = CouponInkMuted.copy(alpha = 0.65f),
                             fontWeight = FontWeight.SemiBold
                         )

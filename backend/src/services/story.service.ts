@@ -1,15 +1,15 @@
-import { IVisionAdapter, GeminiVisionAdapter } from '../adapters/vision.adapter.js';
-import { IStoryAdapter, GeminiStoryAdapter } from '../adapters/story.adapter.js';
+import { IVisionAdapter, LlmVisionAdapter } from '../adapters/vision.adapter.js';
+import { IStoryAdapter, LlmStoryAdapter } from '../adapters/story.adapter.js';
 import { IImageAdapter, NanobananaImageAdapter } from '../adapters/image.adapter.js';
-import { IAudioAdapter, GeminiAudioAdapter, VoiceStyle } from '../adapters/audio.adapter.js';
+import { IAudioAdapter, createAudioAdapter, VoiceStyle } from '../adapters/audio.adapter.js';
 import { ArtStyle, CharacterProfile, FullStoryResponse, StoryContinuationContext, StoryScene } from '../types/story.types.js';
 
 export class StoryOrchestratorService {
   constructor(
-    private visionAdapter: IVisionAdapter = new GeminiVisionAdapter(),
-    private storyAdapter: IStoryAdapter = new GeminiStoryAdapter(),
+    private visionAdapter: IVisionAdapter = new LlmVisionAdapter(),
+    private storyAdapter: IStoryAdapter = new LlmStoryAdapter(),
     private imageAdapter: IImageAdapter = new NanobananaImageAdapter(),
-    private audioAdapter: IAudioAdapter = new GeminiAudioAdapter()
+    private audioAdapter: IAudioAdapter = createAudioAdapter()
   ) {}
 
   /**

@@ -20,13 +20,14 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.wonderloop.app.platform.PlatformStorage
 import org.wonderloop.app.platform.platformAppSecretKey
+import org.wonderloop.app.platform.platformDefaultBackendUrl
 import org.wonderloop.app.theme.AppStrings
 
 class BackendOfflineException(message: String) : Exception(message)
 
 class WonderLoopApi(
-    // Default to local Wi-Fi LAN IP for physical Fire TV Stick 4K or emulator fallback
-    var baseUrl: String = "http://192.168.0.35:3000"
+    // Build-time default: the public HTTPS backend on Amazon EC2 (override with wonderloop.backendUrl)
+    var baseUrl: String = platformDefaultBackendUrl()
 ) {
     var appUserId: String = getOrCreateAppUserId()
     private val appSecretKey: String = platformAppSecretKey()
@@ -41,7 +42,12 @@ class WonderLoopApi(
     fun updateCustomBackendUrl(newUrl: String) {
         val normalized = newUrl.trim().trimEnd('/').let {
             if (it.isNotBlank() && !it.startsWith("http://") && !it.startsWith("https://")) {
-                if (it.contains(":")) "http://$it" else "http://$it:3000"
+                val isLanAddress = Regex("""^(\d{1,3}(\.\d{1,3}){3}|localhost)(:\d+)?$""").matches(it)
+                when {
+                    !isLanAddress -> "https://$it" // a hostname (e.g. the public EC2 backend) is served over HTTPS
+                    it.contains(":") -> "http://$it"
+                    else -> "http://$it:3000"
+                }
             } else {
                 it
             }
@@ -106,7 +112,7 @@ class WonderLoopApi(
         val candidates = buildList {
             if (savedRemote.isNotBlank()) add(savedRemote.trimEnd('/'))
             if (baseUrl.isNotBlank()) add(baseUrl.trimEnd('/'))
-            add("http://192.168.0.35:3000")
+            add(platformDefaultBackendUrl())
             add("http://10.0.2.2:3000")
             add("http://localhost:3000")
         }.distinct()

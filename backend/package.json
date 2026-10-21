@@ -1,7 +1,7 @@
 {
   "name": "wonderloop-backend",
   "version": "1.0.0",
-  "description": "Backend Gateway for WonderLoop (RevenueCat Shipaton 2026)",
+  "description": "Backend Gateway for WonderLoop (Amazon Developer Hackathon 2026)",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
@@ -11,6 +11,8 @@
     "test:pipeline": "tsx src/test-pipeline.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1154.0",
+    "@aws-sdk/client-polly": "^3.1154.0",
     "@breezystack/lamejs": "^1.2.7",
     "@google/genai": "^2.24.0",
     "compression": "^1.8.2",

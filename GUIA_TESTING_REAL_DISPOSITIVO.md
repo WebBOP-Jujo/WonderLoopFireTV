@@ -1,283 +1,241 @@
 # 📺 Guía de Pruebas WonderLoop TV en Amazon Fire TV Stick 4K (y Móvil Companion QR)
 
-**WonderLoop TV** está optimizado para ejecutarse en **Amazon Fire TV Stick 4K** con navegación 100% por mando a distancia (D-Pad) y escaneo de dibujos infantiles desde cualquier smartphone a través de un puente QR en red local Wi-Fi.
+**WonderLoop TV** está optimizado para ejecutarse en **Amazon Fire TV Stick 4K** con navegación 100% por mando a distancia (D-Pad) y escaneo de dibujos infantiles desde cualquier smartphone a través de un puente QR.
+
+**Backend de producción (por defecto en la app):** `https://13-217-171-0.sslip.io`, en **Amazon EC2** (`t3.small`, `us-east-1`) detrás de Caddy (HTTPS automático). Con él **no hace falta arrancar nada en el PC**: basta con instalar el APK. El backend local (secciones 2–5) solo se necesita para desarrollar.
+
+**Proveedores de IA actuales:**
+- Visión del dibujo y texto del cuento → **Amazon Nova 2 Lite (Amazon Bedrock)**, con fallback automático a Gemini.
+- Narración → **Amazon Polly** (Lucia `es-ES` / Ruth `en-US`), con fallback por página a Gemini TTS.
+- Ilustraciones (retrato 1:1 + 5 escenas 16:9) → Gemini.
 
 ---
 
-## ⚡ 1. Despliegue Rápido en Amazon Fire TV Stick 4K (Vía Wi-Fi ADB)
+## 📋 Índice
+0. [Prueba rápida con el backend de AWS](#0-prueba-rápida-con-el-backend-de-aws)
+1. [Arquitectura y flujo de datos](#1-arquitectura-y-flujo-de-datos)
+2. [Configuración del backend (`backend/.env`)](#2-configuración-del-backend-backendenv)
+3. [Credenciales de AWS para pruebas locales](#3-credenciales-de-aws-para-pruebas-locales)
+4. [Clave de la app (`local.properties`)](#4-clave-de-la-app-localproperties)
+5. [Arranque del backend](#5-arranque-del-backend)
+6. [Compilación e instalación en el Fire TV](#6-compilación-e-instalación-en-el-fire-tv)
+7. [Checklist de pruebas E2E](#7-checklist-de-pruebas-e2e)
+8. [Resolución de problemas](#8-resolución-de-problemas)
+9. [Despliegue del backend en AWS EC2](#9-despliegue-del-backend-en-aws-ec2)
 
-### Requisitos:
-- **Dispositivo Fire TV Stick 4K** encendido y conectado a la misma red Wi-Fi que el PC (ej. IP `192.168.0.38`).
-- En el Fire TV: **Opciones para desarrolladores** activadas (*Depuración ADB* y *Apps de fuentes desconocidas* en `ON`).
-- Backend Node.js de WonderLoop corriendo en el PC en el puerto 3000 (`npm run dev`).
+---
 
-### 🚀 Comandos de Despliegue en 3 Pasos (PowerShell):
+## 0. Prueba rápida con el backend de AWS
+
+1. Compila el APK con la clave en `local.properties` (sección 4) e instálalo (sección 6). La URL del backend de AWS ya va incluida por defecto.
+2. Abre la app → *Crear un nuevo cuento* → escanea el QR con **cualquier móvil**, aunque no esté en tu Wi-Fi: el enlace es `https://13-217-171-0.sslip.io/upload/<sessionId>`.
+3. Comprobación del servidor desde el navegador: `https://13-217-171-0.sslip.io/` (proveedores activos) y `https://13-217-171-0.sslip.io/api/story/health`.
+
+---
+
+## 1. Arquitectura y flujo de datos
+
+```text
+[ Móvil (navegador, sin app) ] --escanea QR--> http://<IP_PC>:3000/upload/<sessionId>
+        │ sube la foto del dibujo (comprimida a 1024px en <canvas>)
+        ▼
+[ Backend Gateway (PC, puerto 3000) ] <──polling cada 1,2 s── [ Fire TV Stick 4K (app Compose) ]
+        │
+        ├──► Amazon Bedrock · Nova 2 Lite ──► analiza el dibujo (nombre, especie, colores HEX)
+        ├──► Gemini Image                 ──► retrato 1:1 del héroe
+        ├──► Amazon Bedrock · Nova 2 Lite ──► cuento de 5 escenas + reto de dibujo
+        ├──► Gemini Image                 ──► 5 ilustraciones 16:9
+        └──► Amazon Polly                 ──► narración MP3 por página
+             (cada llamada a AWS cae a Gemini automáticamente si falla)
+```
+
+---
+
+## 2. Configuración del backend (`backend/.env`)
+
 ```powershell
-# Paso 1: Conectar ADB por Wi-Fi al Fire TV Stick 4K
+cd backend
+npm install
+copy .env.example .env
+```
+
+Variables mínimas en `backend/.env` (el fichero está en `.gitignore`):
+
+```env
+PORT=3000
+NODE_ENV=production
+
+# Obligatoria: el servidor NO arranca sin ella (mín. 32 caracteres)
+# Generar: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+APP_SECRET_KEY=<secreto_aleatorio>
+
+# Ilustraciones + fallback de visión, cuento y voz
+GEMINI_API_KEY=<clave_de_Google_AI_Studio>
+
+# AWS (ver sección 3)
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=<solo_para_pruebas_locales>
+AWS_SECRET_ACCESS_KEY=<solo_para_pruebas_locales>
+LLM_PROVIDER=bedrock
+TTS_PROVIDER=polly
+
+# 0 en red local; 1 si hay un proxy / balanceador delante
+TRUST_PROXY=0
+```
+
+> Para desactivar AWS temporalmente: `LLM_PROVIDER=gemini` y/o `TTS_PROVIDER=gemini`.
+
+---
+
+## 3. Credenciales de AWS para pruebas locales
+
+En producción (EC2) se usará un **rol IAM de instancia** y no hará falta ninguna clave. Para probar en el PC:
+
+1. Consola de AWS → **IAM → Usuarios → "Crear persona"** (así se llama el botón en la consola en español) → nombre `wonderloop-local`, **sin** acceso a la consola.
+2. En el usuario → pestaña **Permisos → Agregar permisos → Crear política insertada → JSON** → pegar [`backend/aws/wonderloop-iam-policy.json`](backend/aws/wonderloop-iam-policy.json) (solo `polly:SynthesizeSpeech` y `bedrock:InvokeModel` sobre Nova 2 Lite).
+3. Pestaña **Credenciales de seguridad → Crear clave de acceso → "Código local"** → copiar ambas claves a `backend/.env`. La clave secreta solo se muestra una vez.
+4. **Nunca** pegues las claves en el código, en un chat ni en un commit.
+
+---
+
+## 4. Clave de la app (`local.properties`)
+
+La app Fire TV envía la cabecera `X-WonderLoop-Key`, cuyo valor se inyecta al compilar. Añade a `local.properties` (raíz del proyecto, fuera de git) **el mismo valor** que `APP_SECRET_KEY`:
+
+```properties
+wonderloop.appKey=<mismo_valor_que_APP_SECRET_KEY>
+```
+
+Si cambias el secreto, **recompila y reinstala el APK**: un APK antiguo recibirá `401 UNAUTHORIZED`.
+
+Por defecto la app apunta al backend de AWS. Para usar un backend en tu PC durante el desarrollo, añade también:
+
+```properties
+wonderloop.backendUrl=http://192.168.0.35:3000
+```
+
+También se puede cambiar en tiempo de ejecución desde el diálogo de servidor de la pantalla QR: una IP se convierte en `http://<ip>:3000` y un nombre de dominio en `https://<dominio>`.
+
+---
+
+## 5. Arranque del backend
+
+```powershell
+cd backend
+npm run build
+npm run dev
+```
+
+El banner de arranque muestra la IP LAN y los proveedores activos, por ejemplo:
+
+```text
+🤖 AI Models:
+   - Text & Vision: Amazon Bedrock (us.amazon.nova-2-lite-v1:0) -> fallback Gemini (gemini-3.5-flash-lite)
+   - Image Gen:     gemini-3.1-flash-lite-image (16:9 Scenes / 1:1 Portraits)
+   - Speech (TTS):  Amazon Polly (neural, us-east-1) -> fallback gemini-3.8-flash-lite-tts
+```
+
+Comprobación rápida desde el navegador del PC: `http://localhost:3000/api/story/health` debe devolver `{"status":"ok",...}`, y `http://localhost:3000/` devuelve los proveedores activos.
+
+---
+
+## 6. Compilación e instalación en el Fire TV
+
+Requisitos en el Fire TV: **Ajustes → Mi Fire TV → Opciones para desarrolladores** con *Depuración ADB* y *Apps de fuentes desconocidas* activadas, y el Fire TV en la misma Wi-Fi que el PC.
+
+```powershell
+# 1. Compilar el APK (JDK 21)
+.\gradlew.bat :composeApp:assembleDebug
+
+# 2. Conectar ADB por Wi-Fi (IP actual del Fire TV Stick: 192.168.0.38)
 adb connect 192.168.0.38:5555
 
-# Paso 2: Instalar o actualizar el APK de WonderLoop TV
+# 3. Instalar o actualizar el APK
 adb -s 192.168.0.38:5555 install -r composeApp\build\outputs\apk\debug\composeApp-debug.apk
 
-# Paso 3: Arrancar la app en la pantalla del televisor
+# 4. Arrancar la app en el televisor
 adb -s 192.168.0.38:5555 shell am start -n org.wonderloop.app/.MainActivity
 ```
 
-### 🎮 Cómo Probar la Experiencia Completa de Salón:
-1. **Navegación con Mando D-Pad:**
-   - La pantalla de inicio enfoca automáticamente el botón principal *"Crear un nuevo cuento mágico"*.
-   - Explora las tarjetas 10-foot *"Ver Biblioteca"* (colección de cuentos) y *"Ver todos"* (galería de amigos) usando la cruceta del mando Fire TV.
-2. **Escaneo de Dibujo vía Código QR:**
-   - Pulsa el botón central del mando en *"Crear un nuevo cuento"*.
-   - Aparece la pantalla `QrScanScreen` con un código QR gigante y nítido.
-   - Con cualquier teléfono móvil conectado a la misma Wi-Fi, abre la cámara y escanea el QR (`http://<IP_PC>:3000/upload/<sessionId>`).
-   - Sube una foto de un dibujo en papel. El televisor reacciona automáticamente sin tocar nada más, generando el cuento de 5 escenas 16:9 ilustradas y narradas.
-3. **¿Sin móvil a mano? (Modo Demo con Mando):**
-   - En `QrScanScreen`, baja con el D-Pad a la sección *"¿Sin móvil a mano? Elige un dibujo de prueba con el mando"*.
-   - Elige entre los 4 dibujos de prueba precargados (*Dragón Nilo*, *Robot Sparky*, *Perrito Toby*, *Monstruo Chomp*) pulsando el botón central del mando.
+Si la app no encuentra el backend, revisa la dirección del servidor en el diálogo de la pantalla QR (navegable con el D-Pad). La app prueba, por este orden: la dirección guardada en ese diálogo, la de compilación (`wonderloop.backendUrl` o el backend de AWS), `10.0.2.2:3000` (emulador) y `localhost:3000`.
 
 ---
 
-## 📋 Índice para Modo Real (Sin Mocks)
-1. [Resumen de Arquitectura y Flujo de Datos](#1-resumen-de-arquitectura-y-flujo-de-datos)
-2. [Obtención y Configuración de API Keys Reales](#2-obtención-y-configuración-de-api-keys-reales)
-   - [A. Google Gemini IA (Visión y Narrativa)](#a-google-gemini-ia-visión-y-narrativa)
-   - [B. RevenueCat (Monetización y Paywall)](#b-revenuecat-monetización-y-paywall)
-   - [C. OneSignal (Notificaciones de Retención)](#c-onesignal-notificaciones-de-retención)
-3. [Preparación del Dispositivo Móvil Android](#3-preparación-del-dispositivo-móvil-android)
-4. [Puente de Red USB (adb reverse)](#4-puente-de-red-usb-adb-reverse)
-5. [Arranque del Backend en Modo Real](#5-arranque-del-backend-en-modo-real)
-6. [Compilación e Instalación del APK](#6-compilación-e-instalación-del-apk)
-7. [Checklist de Pruebas de Extremo a Extremo (E2E)](#7-checklist-de-pruebas-de-extremo-a-extremo-e2e)
-8. [Resolución de Problemas Frecuentes](#8-resolución-de-problemas-frecuentes)
+## 7. Checklist de pruebas E2E
+
+### 🟢 1. Navegación con mando D-Pad
+- La pantalla de inicio enfoca automáticamente el botón principal *"Crear un nuevo cuento mágico"*.
+- Las tarjetas *"Ver Biblioteca"* y *"Ver todos"* se recorren con la cruceta y muestran el halo dorado de foco.
+- `BACK` en la pantalla de inicio sale directamente al launcher del Fire TV (sin diálogo de confirmación).
+
+### 🟢 2. Escaneo del dibujo vía QR
+1. Pulsa *"Crear un nuevo cuento"* → aparece `QrScanScreen` con un QR grande.
+2. Escanéalo con un móvil en la misma Wi-Fi → se abre la web de subida (`/upload/<sessionId>`).
+3. Haz una foto al dibujo o elígelo de la galería → el TV pasa por *Móvil conectado → Subiendo dibujo → ¡Dibujo recibido!* sin tocar el mando.
+4. **Sin móvil:** baja con el D-Pad a *"¿Sin móvil a mano?"* y elige uno de los 4 dibujos de prueba precargados.
+
+### 🟢 3. Héroe generado (visión con Nova 2 Lite)
+- La pantalla de confirmación muestra nombre, especie y colores coherentes con el dibujo y el retrato en el estilo elegido.
+- En la consola del backend debe aparecer: `✅ [Bedrock] Drawing Vision Analysis via us.amazon.nova-2-lite-v1:0 (tool-use) in ~2s`.
+
+### 🟢 4. Cuento ilustrado y narrado (Nova 2 Lite + Gemini Image + Polly)
+1. Confirma el héroe y elige idioma (`es` / `en`) → pantalla de generación.
+2. Consola del backend:
+   - `✅ [Bedrock] Story Text Generation (...) via us.amazon.nova-2-lite-v1:0 (tool-use) in ~5-6s`
+   - `✅ [PollyAudioAdapter] Page N synthesized ... (Lucia/neural ...)` (o `Ruth` en inglés) para las 5 páginas.
+3. En el lector: pasa de página con `DPAD_RIGHT` / `DPAD_LEFT` (o avance/retroceso rápido) y activa la narración con `PLAY_PAUSE`. La voz debe ser Lucia (español) o Ruth (inglés).
+4. El texto no debe mostrar asteriscos (`*Plof!*`).
+
+### 🟢 5. Bucle creativo (sagas)
+1. Al final de la página 5 aparece el **reto de dibujo**.
+2. Escanea un nuevo dibujo → se genera el **Capítulo 2**, con el héroe original y el nuevo compañero, y la página de celebración entre capítulos.
+
+### 🟢 6. Fallback a Gemini (opcional)
+- Arranca el backend con credenciales de AWS inválidas o sin ellas: la consola muestra `⚠️ [Bedrock] Credentials/permissions/model access problem ... Bedrock paused for 5 min` y `🔁 [LLM] ... Using Gemini`, y la historia se genera igualmente.
+
+### 🟢 7. Zona de Padres
+- Se protege con una operación aritmética (puerta parental). Desde ahí se gestionan perfiles, idioma, estilo y efectos de sonido.
+- Cupones locales válidos: `AMAZON2026`, `HACKATHON2026`, `DEVPOSTVIP`, `WONDERVIP` (en modo hackathon la cuota ya es ilimitada).
 
 ---
 
-## 1. Resumen de Arquitectura y Flujo de Datos
+## 8. Resolución de problemas
 
-```text
-[ Teléfono Android Físico ]
-  │
-  ├─► Cámara Nativa (Foto de dibujo real en papel)
-  │
-  ├─► WonderLoop App (Compose Multiplatform)
-  │    │
-  │    ├──► OneSignal SDK ──(Push Tags: last_hero, pending_challenge)──► OneSignal Cloud
-  │    │
-  │    └──► RevenueCat SDK ──(Compras & Entitlements)──► RevenueCat API
-  │
-  ▼ (Conexión USB / adb reverse tcp:3000 tcp:3000)
-[ Backend Gateway (PC Local: Puerto 3000) ]
-  │
-  ├──► Gemini 3.8 / 2.5 Flash Vision (Analiza dibujo físico) ──► Google AI Studio
-  │
-  ├──► Gemini Story Engine (Crea cuento de 5 páginas + Reto) ──► Google AI Studio
-  │
-  └──► RevenueCat REST API (Validación de cuotas de servidor) ──► RevenueCat Cloud
-```
-
----
-
-## 2. Obtención y Configuración de API Keys Reales
-
-### A. Google Gemini IA (Visión y Narrativa)
-El backend utiliza los modelos multimodales de Google para interpretar el dibujo del niño y redactar el libro digital.
-
-1. Entra en [Google AI Studio](https://aistudio.google.com/).
-2. Inicia sesión con tu cuenta de Google y pulsa en **"Get API key"** ➔ **"Create API key"**.
-3. Copia tu clave (comienza por `AIzaSy...`).
-4. Abre el archivo `backend/.env` en tu proyecto:
-   ```env
-   PORT=3000
-   NODE_ENV=production
-   GEMINI_API_KEY=AIzaSyTuClaveRealAqui
-   MOCK_AI_SERVICES=false
-   ```
-   > 💡 Al fijar `MOCK_AI_SERVICES=false`, el backend deja de devolver datos simulados y llamará a Gemini directamente en cada petición.
-
----
-
-### B. RevenueCat (Monetización y Paywall)
-RevenueCat gestiona las suscripciones (Anual Familiar, Mensual Creador y Pack Consumible).
-
-1. Entra en el [Dashboard de RevenueCat](https://app.revenuecat.com/) y crea un proyecto llamado `WonderLoop`.
-2. **Configura los Entitlements:**
-   - Ve a **Entitlements** y crea:
-     - Identificador: `premium_access` (acceso a cuentos ilimitados).
-     - Identificador: `family_tier` (acceso multiperfil).
-3. **Configura el Offering ("default"):**
-   - Crea los siguientes paquetes vinculados a tus identificadores:
-     - `wonderloop_annual_family` (Plan Anual - 39,99 €)
-     - `wonderloop_monthly_single` (Plan Mensual - 4,99 €)
-     - `wonderloop_pack_10` (Pack 10 Cuentos - 2,99 €)
-4. **Obtén las Claves:**
-   - **Clave Secreta (Backend):** Ve a *Project Settings ➔ API Keys* y copia la clave secreta `sk_...`.
-     - En `backend/.env`:
-       ```env
-       REVENUECAT_SECRET_KEY=sk_tu_clave_secreta_aqui
-       MOCK_REVENUECAT=false
-       ```
-   - **Clave Pública de Android (App):** En *Project Settings ➔ API Keys*, copia la clave pública de Google Play (comienza por `goog_...`).
-     - Abre `composeApp/src/androidMain/kotlin/org/wonderloop/app/MainActivity.kt`:
-     - Sustituye `"goog_placeholder_api_key"` por tu clave real:
-       ```kotlin
-       Purchases.configure(
-           PurchasesConfiguration.Builder(this, "goog_tu_clave_publica_aqui")
-               .build()
-       )
-       ```
-
----
-
-### C. OneSignal (Notificaciones de Retención)
-OneSignal activa las notificaciones personalizadas para optar al premio de **$25,000 ("Keep Them Coming Back")**.
-
-1. Regístrate o inicia sesión en [OneSignal Dashboard](https://dashboard.onesignal.com/).
-2. Pulsa en **"New App/Website"**:
-   - Nombre: `WonderLoop`.
-   - Plataforma: **Google Android (FCM)**.
-3. En *Settings ➔ Keys & IDs*, copia tu **OneSignal App ID** (formato UUID: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
-4. Abre `composeApp/src/androidMain/kotlin/org/wonderloop/app/MainActivity.kt`:
-   - Sustituye `"onesignal_app_id_placeholder"` por tu ID real:
-     ```kotlin
-     OneSignal.initWithContext(this, "tu-app-id-de-onesignal")
-     ```
-
----
-
-## 3. Preparación del Dispositivo Móvil Android
-
-1. **Activar Opciones de Desarrollador:**
-   - En tu teléfono Android, ve a: **Ajustes ➔ Información del teléfono**.
-   - Busca **"Número de compilación"** y púlsalo **7 veces seguidas** hasta que aparezca el mensaje: *"¡Ahora eres desarrollador!"*.
-2. **Activar Depuración por USB:**
-   - Ve a: **Ajustes ➔ Sistema (o Ajustes adicionales) ➔ Opciones de desarrollador**.
-   - Activa el interruptor **"Depuración por USB"**.
-3. **Conectar el Teléfono:**
-   - Conecta el teléfono a tu ordenador mediante un cable USB de datos.
-   - En la pantalla del móvil aparecerá una ventana emergente: *"¿Permitir depuración por USB?"*.
-   - Marca la casilla **"Permitir siempre desde este ordenador"** y pulsa **Aceptar**.
-4. **Verificar que el PC reconoce el dispositivo:**
-   - Abre un terminal de PowerShell en tu PC y ejecuta:
-     ```powershell
-     adb devices
-     ```
-   - Deberás ver tu dispositivo listado como `device`:
-     ```text
-     List of devices attached
-     RFCW10XXXXX    device
-     ```
-
----
-
-## 4. Puente de Red USB (adb reverse)
-
-Cuando la app corre en tu teléfono físico, `localhost` se refiere al propio teléfono, no a tu ordenador donde está el backend. Para que la app hable con el backend en tu PC sin necesidad de configurar redes complejas ni cambiar IPs:
-
-Ejecuta en PowerShell:
-```powershell
-adb reverse tcp:3000 tcp:3000
-```
-
-> ✨ **Nota:** La aplicación WonderLoop incluye detección inteligente de red en `WonderLoopApi.kt`. Al ejecutar este comando, la app detectará automáticamente el túnel y se conectará en milisegundos con el backend.
-
----
-
-## 5. Arranque del Backend en Modo Real
-
-Abre un terminal en la carpeta del backend y arráncalo:
-
-```powershell
-cd c:\Users\jorge.arcicollar\Documents\AppCuentos\backend
-
-# 1. Compilar TypeScript
-npm run build
-
-# 2. Iniciar el servidor
-node dist/server.js
-```
-
-Verás en la consola:
-```text
-✨ WonderLoop Gateway Online!
-===========================================
-📡 Server listening on: http://localhost:3000
-🎯 Target Event: RevenueCat Shipaton 2026
-🤖 AI Engine: Gemini 3.8 Flash + Nanobanana + Gemini 3.1 TTS
-💳 Monetization: RevenueCat (Production ready)
-===========================================
-```
-
-Para verificar que el backend está respondiendo, puedes abrir en el navegador de tu PC:
-`http://localhost:3000/api/story/health`
-Debe devolver: `{"status":"ok","service":"WonderLoop Story Engine",...}`.
-
----
-
-## 6. Compilación e Instalación del APK
-
-Con el backend en marcha y el móvil conectado por USB:
-
-```powershell
-cd c:\Users\jorge.arcicollar\Documents\AppCuentos
-
-# 1. Compilar la última versión del APK (si hiciste cambios en API keys)
-.\gradlew.bat assembleDebug
-
-# 2. Instalar el APK directamente en el teléfono
-adb install -r composeApp\build\outputs\apk\debug\composeApp-debug.apk
-
-# 3. Abrir la app en la pantalla del móvil
-adb shell am start -n org.wonderloop.app/.MainActivity
-```
-
----
-
-## 7. Checklist de Pruebas de Extremo a Extremo (E2E)
-
-Sigue este recorrido completo para probar el producto de principio a fin:
-
-### 🟢 1. Estado de Conexión
-* Al abrir la app, la píldora superior debe mostrar:  
-  **`🟢 Conectado con IA (Gemini 3.8 Flash)`**.
-
-### 🟢 2. Captura Phygital Real
-1. Dibuja en un folio de papel cualquier personaje con colores (ejemplo: un monstruito azul con sombrero verde).
-2. Pulsa **"📸 Escanear Dibujo Ahora"**.
-3. Selecciona la cámara, encuadra el dibujo y haz la foto.
-4. Pulsa **"✨ Analizar con Magia"**.
-5. **Observa el resultado de Gemini Vision:**
-   - La pantalla de confirmación mostrará el nombre inventado, la especie detectada y los colores reales que dibujaste con tus lápices.
-
-### 🟢 3. Creación del Cuento Digital con IA
-1. Pulsa **"📖 ¡Comenzar el Cuento!"**.
-2. Observa la pantalla de generación mientras Gemini escribe la historia personalizada y adapta el vocabulario a la edad seleccionada.
-3. Desliza por las **5 páginas ilustradas** en el visor digital táctil.
-4. Pulsa el icono **🔊** para comprobar la narración con voz.
-
-### 🟢 4. The Creativity Loop (Misión Fuera de Pantalla)
-1. Al llegar a la página 5, pulsa **"🖍️ ¡Ver Reto Físico! ➔"**.
-2. Lee la misión analógica generada por IA (ejemplo: *"Dibuja al mejor amigo de tu personaje en otro papel"*).
-3. Pulsa **"📚 Guardar en Mi Estantería y Salir"**.
-4. Comprueba que el nuevo libro aparece guardado en la estantería de **"Mis Cuentos y Amigos"** en la pantalla principal.
-
-### 🟢 5. Control Parental y Paywall
-1. Pulsa el botón **"⭐ Premium"** en la esquina superior derecha o en el banner principal.
-2. Comprueba que se abre el **Control Parental** con una multiplicación de adultos (ej. `8 × 7 = ?`).
-3. Introduce un valor erróneo: comprueba que no te deja pasar y genera una nueva operación.
-4. Introduce el valor correcto: comprueba que se abre el **Paywall de RevenueCat**.
-5. Explora los 3 planes (Anual con 7 días gratis, Mensual y Pack de 10 cuentos).
-6. Toca **"🎟️ Canjear Código"** e introduce el cupón: `SHIPATON2026`.
-7. Verifica que se activa inmediatamente el estado **`🌟 Premium`**.
-
----
-
-## 8. Resolución de Problemas Frecuentes
-
-| Problema | Causa Posible | Solución |
+| Problema | Causa posible | Solución |
 | :--- | :--- | :--- |
-| La app muestra *"🔴 Modo Local / Sin Conexión"* | El teléfono no alcanza el puerto 3000 del PC | Ejecuta `adb reverse tcp:3000 tcp:3000` en PowerShell con el móvil conectado. |
-| `adb devices` aparece vacío | Cable USB solo de carga o depuración no permitida | Cambia de cable USB, revisa que la Depuración USB esté activa y acepta el mensaje de autorización en la pantalla del teléfono. |
-| Error al analizar dibujo con Gemini | `GEMINI_API_KEY` vacía o inválida | Comprueba que tu API key en `backend/.env` no tiene espacios y que tu cuenta de Google AI Studio tiene cuota activa. |
-| La cámara no se abre | Permiso de cámara revocado | En el teléfono, ve a *Ajustes ➔ Aplicaciones ➔ WonderLoop ➔ Permisos ➔ Cámara ➔ Permitir*. |
-| Ver los logs en tiempo real para depurar | Quieres saber qué está pasando internamente | Ejecuta en terminal: `adb logcat -s WonderLoop:V System.out:V OneSignal:V Purchases:V` |
+| El backend se cierra al arrancar con `🚨 [Security] APP_SECRET_KEY is missing...` | Falta `APP_SECRET_KEY` o tiene menos de 32 caracteres | Genera uno (sección 2) y ponlo también en `local.properties`. |
+| La app recibe `401 UNAUTHORIZED` | `wonderloop.appKey` no coincide con `APP_SECRET_KEY`, o el APK se compiló con la clave antigua | Iguala ambos valores, recompila y reinstala el APK. |
+| Consola: `AccessDeniedException ... bedrock:InvokeModel` | El usuario IAM no tiene la política de Bedrock | Añade [`wonderloop-iam-policy.json`](backend/aws/wonderloop-iam-policy.json) al usuario. Mientras tanto, Gemini cubre la petición. |
+| Consola: `Polly paused for 5 min` | Credenciales de AWS ausentes o sin `polly:SynthesizeSpeech` | Revisa `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` y la política; reinicia el backend. |
+| El QR no abre la web en el móvil | El móvil no está en la misma Wi-Fi o la IP LAN detectada es incorrecta | Conecta el móvil a la misma red o fija `LAN_IP=<ip_del_pc>` en `.env`. |
+| La subida falla con `INVALID_IMAGE_PAYLOAD` | Imagen corrupta o de más de 25 megapíxeles | Usa una foto normal; la web del móvil ya la reduce a 1024 px. |
+| La app muestra *"Sin conexión"* | El Fire TV no alcanza el puerto 3000 del PC | Comprueba la IP en el diálogo de la pantalla QR y el firewall de Windows (puerto 3000). |
+| Ver logs de la app | Depuración en el dispositivo | `adb -s 192.168.0.38:5555 logcat -s System.out:V` |
+
+---
+
+## 9. Despliegue del backend en AWS EC2
+
+Infraestructura actual (región `us-east-1`):
+- Instancia **EC2 `t3.small`** con Amazon Linux 2023, 20 GiB gp3, **IP elástica `13.217.171.0`**.
+- **Rol IAM `wonderloop-backend-role`** con la política [`backend/aws/wonderloop-iam-policy.json`](backend/aws/wonderloop-iam-policy.json): Bedrock y Polly funcionan sin claves de AWS en el servidor.
+- Grupo de seguridad: 22 (solo tu IP), 80 y 443 (abiertos).
+- Contenedores (Docker Compose): `caddy` (HTTPS en :443 con certificado automático para `13-217-171-0.sslip.io`) y `backend` (:8080, una sola réplica porque las sesiones QR viven en memoria).
+
+**Desplegar una versión nueva** (desde la carpeta `backend`, en PowerShell):
+
+```powershell
+.\deploy\deploy-ec2.ps1 -Ip 13.217.171.0 -KeyPath "C:\Users\jorge.arcicollar\Documents\wonderloop-key.pem"
+```
+
+El script genera el `.env` de producción a partir de `backend/.env` **sin las claves de AWS locales**, sube el código por SSH, ejecuta [`deploy/bootstrap.sh`](backend/deploy/bootstrap.sh) (instala Docker y Compose si faltan, swap de 2 GB, `docker compose up -d --build`) y espera a que `/api/story/health` responda por HTTPS.
+
+**Ver los logs del servidor:**
+
+```powershell
+ssh -i "C:\Users\jorge.arcicollar\Documents\wonderloop-key.pem" ec2-user@13.217.171.0 "cd /opt/wonderloop/backend/deploy && sudo docker compose logs -f backend"
+```
+
+En los logs deben aparecer `✅ [Bedrock] ... (tool-use)` y `✅ [PollyAudioAdapter] ...`. Si aparecen `🔁 [LLM] ... Using Gemini` o `Polly paused`, revisa que la instancia tenga asociado el rol IAM.
+
+**Coste aproximado:** ~15 $/mes la `t3.small` más el uso de Bedrock y Polly (céntimos en pruebas). Mantén la alerta de AWS Budgets activa y para o termina la instancia cuando acabe la evaluación (20/11/2026).

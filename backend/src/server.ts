@@ -12,6 +12,8 @@ import { RevenueCatService } from './services/revenuecat.service.js';
 import { createStoryRouter } from './routes/story.routes.js';
 import { createTvSessionApiRouter, createTvUploadWebRouter, detectLanIp } from './routes/tv.routes.js';
 import { assertAppSecretConfigured } from './middleware/auth.middleware.js';
+import { resolveTtsProvider } from './adapters/audio.adapter.js';
+import { getLlmClient } from './adapters/llm.client.js';
 
 try {
   assertAppSecretConfigured();
@@ -19,6 +21,11 @@ try {
   console.error(`🚨 [Security] ${err.message}`);
   process.exit(1);
 }
+
+const SPEECH_PROVIDER_LABEL =
+  resolveTtsProvider() === 'polly'
+    ? `Amazon Polly (${process.env.POLLY_ENGINE || 'neural'}, ${process.env.AWS_REGION || 'us-east-1'}) -> fallback gemini-3.8-flash-lite-tts`
+    : 'gemini-3.8-flash-lite-tts';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -132,9 +139,9 @@ app.get('/', (_req, res) => {
     hackathon: 'Build, Ship, Shape: Amazon Developer Hackathon (Fire TV)',
     lanIp: detectLanIp(),
     models: {
-      language: 'gemini-3.5-flash-lite',
+      language: getLlmClient().name,
       image: 'gemini-3.1-flash-lite-image',
-      speech: 'gemini-3.8-flash-lite-tts'
+      speech: SPEECH_PROVIDER_LABEL
     }
   });
 });
@@ -149,9 +156,9 @@ const server = app.listen(Number(PORT), '0.0.0.0', () => {
   📱 QR Upload Base: http://${lanIp}:${PORT}/upload/<sessionId>
   🎯 Target Event:   Build, Ship, Shape — Amazon Fire TV Hackathon
   🤖 AI Models:
-     - Text & Vision: gemini-3.5-flash-lite
+     - Text & Vision: ${getLlmClient().name}
      - Image Gen:     gemini-3.1-flash-lite-image (16:9 Scenes / 1:1 Portraits)
-     - Speech (TTS):  gemini-3.8-flash-lite-tts
+     - Speech (TTS):  ${SPEECH_PROVIDER_LABEL}
   ===========================================
   `);
 });

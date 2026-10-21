@@ -1,7 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
 import { ArtStyle, ChallengeSubject, CharacterProfile, CreativeChallenge, StoryContinuationContext, StoryScene } from '../types/story.types.js';
-import { withRetry } from '../utils/retry.js';
-import { safeParseJson } from '../utils/safe-json.js';
+import { ILlmClient, getLlmClient } from './llm.client.js';
 
 export interface GeneratedStoryContent {
   title: string;
@@ -21,6 +19,37 @@ export interface IStoryAdapter {
     artStyle?: ArtStyle
   ): Promise<GeneratedStoryContent>;
 }
+
+const STORY_SCHEMA = {
+  type: 'object',
+  properties: {
+    title: { type: 'string' },
+    settingBible: { type: 'string' },
+    scenes: {
+      type: 'array',
+      description: 'Exactly 5 scenes, in order',
+      items: {
+        type: 'object',
+        properties: {
+          pageNumber: { type: 'integer' },
+          textContent: { type: 'string', description: 'Story text in the requested language' },
+          visualPrompt: { type: 'string', description: 'Illustration prompt in English' }
+        },
+        required: ['pageNumber', 'textContent', 'visualPrompt']
+      }
+    },
+    creativeChallenge: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string' },
+        targetSubject: { type: 'string' },
+        encouragement: { type: 'string' }
+      },
+      required: ['prompt', 'targetSubject', 'encouragement']
+    }
+  },
+  required: ['title', 'settingBible', 'scenes', 'creativeChallenge']
+};
 
 interface MagicalWorld {
   id: string;
@@ -183,13 +212,12 @@ function sanitizeString(input?: string, maxLen: number = 80): string {
     .slice(0, maxLen);
 }
 
-export class GeminiStoryAdapter implements IStoryAdapter {
-  private ai: GoogleGenAI;
-
-  constructor() {
-    const apiKey = process.env.GEMINI_API_KEY || '';
-    this.ai = new GoogleGenAI({ apiKey });
-  }
+/**
+ * Story writer: builds the bilingual, age-adapted saga prompt and turns the model's JSON into 5 scenes + a drawing challenge.
+ * The model call goes through ILlmClient (Amazon Nova 2 Lite on Bedrock by default, Gemini as fallback).
+ */
+export class LlmStoryAdapter implements IStoryAdapter {
+  constructor(private llm: ILlmClient = getLlmClient()) {}
 
   async generateStory(
     character: CharacterProfile,
@@ -229,7 +257,7 @@ export class GeminiStoryAdapter implements IStoryAdapter {
     const selectedCategory = CHALLENGE_CATEGORIES[challengeCategoryIndex];
     const challengeExample = isEnglish ? selectedCategory.examplesEn[0] : selectedCategory.examplesEs[0];
 
-    console.log(`📖 [GeminiStoryAdapter] Generating Chapter ${chapterNum} in ${isEnglish ? 'ENGLISH' : 'SPANISH'} for "${sanitizedHeroName}" (World: "${selectedWorld.nameEn}", Challenge Category: "${selectedCategory.category}", Age: ${childAge})...`);
+    console.log(`📖 [StoryAdapter] Generating Chapter ${chapterNum} in ${isEnglish ? 'ENGLISH' : 'SPANISH'} for "${sanitizedHeroName}" (World: "${selectedWorld.nameEn}", Challenge Category: "${selectedCategory.category}", Age: ${childAge})...`);
 
     const ageGuidance = childAge <= 6
       ? (isEnglish
@@ -496,25 +524,15 @@ Devuelve estrictamente un objeto JSON con la siguiente estructura:
 `;
 
     try {
-      const response = await withRetry(
-        () =>
-          this.ai.models.generateContent({
-            model: 'gemini-3.5-flash-lite',
-            contents: prompt,
-            config: {
-              responseMimeType: 'application/json',
-              temperature: 0.65
-            }
-          }),
-        { retries: 2, delayMs: 1200, label: `Story Text Generation (${sanitizedHeroName})` }
-      );
-
-      const responseText = response.text || '{}';
-      const parsed = safeParseJson(responseText);
-
-      if (!parsed.scenes || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
-        throw new Error('La respuesta de Gemini no contiene escenas válidas.');
-      }
+      const parsed = await this.llm.generateJson({
+        prompt,
+        temperature: 0.65,
+        maxTokens: 8000,
+        timeoutMs: 75_000,
+        label: `Story Text Generation (${sanitizedHeroName})`,
+        schema: STORY_SCHEMA,
+        validate: (p) => Array.isArray(p?.scenes) && p.scenes.length > 0 && p.scenes.every((s: any) => typeof s?.textContent === 'string' && s.textContent.trim().length > 0)
+      });
 
       const returnedSettingBible = parsed.settingBible?.trim() || settingBible;
 
@@ -526,7 +544,8 @@ Devuelve estrictamente un objeto JSON con la siguiente estructura:
         }
         return {
           pageNumber: idx + 1,
-          textContent: s.textContent?.trim() || `Página ${idx + 1} de la aventura de ${sanitizedHeroName}.`,
+          // Strip markdown emphasis (*Plof!*) some models add: it would show on screen and confuse TTS
+          textContent: s.textContent?.replace(/\*+/g, '').trim() || `Página ${idx + 1} de la aventura de ${sanitizedHeroName}.`,
           visualPrompt: vPrompt
         };
       });
@@ -548,8 +567,8 @@ Devuelve estrictamente un objeto JSON con la siguiente estructura:
         settingBible: returnedSettingBible
       };
     } catch (error: any) {
-      console.error('⚠️ [GeminiStoryAdapter] Error generating story with gemini-3.5-flash-lite:', error?.message || error);
-      throw new Error(`Fallo en la generación del cuento con Gemini 3.5 Flash-Lite: ${error?.message || 'Error desconocido'}`);
+      console.error(`⚠️ [StoryAdapter] Error generating story with ${this.llm.name}:`, error?.message || error);
+      throw new Error(`Fallo en la generación del cuento: ${error?.message || 'Error desconocido'}`);
     }
   }
 }

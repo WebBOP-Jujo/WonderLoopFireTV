@@ -1,11 +1,33 @@
-import { GoogleGenAI } from '@google/genai';
 import { CharacterProfile, ColorDef } from '../types/story.types.js';
-import { withRetry } from '../utils/retry.js';
-import { safeParseJson } from '../utils/safe-json.js';
+import { ILlmClient, getLlmClient } from './llm.client.js';
 
 export interface IVisionAdapter {
   analyzeDrawing(imageBuffer: Buffer, mimeType: string): Promise<CharacterProfile>;
 }
+
+const CHARACTER_PROFILE_SCHEMA = {
+  type: 'object',
+  properties: {
+    isValidDrawing: { type: 'boolean' },
+    confidence: { type: 'number', description: '0.0 - 1.0' },
+    name: { type: 'string' },
+    namePhonetic: { type: 'string' },
+    species: { type: 'string' },
+    shapeLanguage: { type: 'string' },
+    mood: { type: 'string' },
+    colorPalette: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { name: { type: 'string' }, hex: { type: 'string', description: '#RRGGBB' } },
+        required: ['name', 'hex']
+      }
+    },
+    distinctiveFeatures: { type: 'array', items: { type: 'string' } },
+    personality: { type: 'string' }
+  },
+  required: ['isValidDrawing', 'confidence', 'name', 'species', 'colorPalette', 'distinctiveFeatures', 'personality']
+};
 
 const COLOR_MAP_FALLBACKS: Record<string, string> = {
   azul: '#3A86FF',
@@ -40,16 +62,15 @@ function sanitizeHex(hexCandidate?: string, colorName: string = ''): string {
   return '#3A86FF';
 }
 
-export class GeminiVisionAdapter implements IVisionAdapter {
-  private ai: GoogleGenAI;
-
-  constructor() {
-    const apiKey = process.env.GEMINI_API_KEY || '';
-    this.ai = new GoogleGenAI({ apiKey });
-  }
+/**
+ * Computer-vision step: turns a photo of the child's paper drawing into a structured CharacterProfile.
+ * The model call goes through ILlmClient (Amazon Nova 2 Lite on Bedrock by default, Gemini as fallback).
+ */
+export class LlmVisionAdapter implements IVisionAdapter {
+  constructor(private llm: ILlmClient = getLlmClient()) {}
 
   async analyzeDrawing(imageBuffer: Buffer, mimeType: string): Promise<CharacterProfile> {
-    console.log(`🔍 [GeminiVisionAdapter] Analyzing drawing with gemini-3.5-flash-lite (${imageBuffer.length} bytes, ${mimeType})...`);
+    console.log(`🔍 [VisionAdapter] Analyzing drawing with ${this.llm.name} (${imageBuffer.length} bytes, ${mimeType})...`);
 
     try {
       const prompt = `
@@ -91,29 +112,16 @@ Devuelve estrictamente un objeto JSON válido con la siguiente estructura:
 }
 `;
 
-      const response = await withRetry(
-        () =>
-          this.ai.models.generateContent({
-            model: 'gemini-3.5-flash-lite',
-            contents: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: mimeType || 'image/jpeg',
-                  data: imageBuffer.toString('base64')
-                }
-              }
-            ],
-            config: {
-              responseMimeType: 'application/json',
-              temperature: 0.35
-            }
-          }),
-        { retries: 3, delayMs: 1500, label: 'Drawing Vision Analysis' }
-      );
-
-      const responseText = response.text || '{}';
-      const parsed = safeParseJson(responseText);
+      const parsed = await this.llm.generateJson({
+        prompt,
+        image: { bytes: imageBuffer, mimeType: mimeType || 'image/jpeg' },
+        temperature: 0.35,
+        maxTokens: 1500,
+        timeoutMs: 30_000,
+        label: 'Drawing Vision Analysis',
+        schema: CHARACTER_PROFILE_SCHEMA,
+        validate: (p) => typeof p === 'object' && p !== null && (typeof p.name === 'string' || p.isValidDrawing === false)
+      });
 
       // Process and normalize color palette & hex codes
       const rawPalette: any[] = Array.isArray(parsed.colorPalette) ? parsed.colorPalette : [];
@@ -164,8 +172,8 @@ Devuelve estrictamente un objeto JSON válido con la siguiente estructura:
         originalDrawingBase64: `data:${mimeType};base64,${imageBuffer.toString('base64')}`
       };
     } catch (error: any) {
-      console.error('⚠️ [GeminiVisionAdapter] Error analyzing drawing with gemini-3.5-flash-lite:', error?.message || error);
-      throw new Error(`Fallo en el análisis del dibujo con Gemini 3.5 Flash-Lite: ${error?.message || 'Error desconocido'}`);
+      console.error(`⚠️ [VisionAdapter] Error analyzing drawing with ${this.llm.name}:`, error?.message || error);
+      throw new Error(`Fallo en el análisis del dibujo: ${error?.message || 'Error desconocido'}`);
     }
   }
 }

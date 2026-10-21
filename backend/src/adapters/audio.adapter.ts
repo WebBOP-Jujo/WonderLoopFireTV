@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { Mp3Encoder } from '@breezystack/lamejs';
 import { withRetry } from '../utils/retry.js';
+import { PollyAudioAdapter } from './polly-audio.adapter.js';
 
 export type VoiceStyle = 'soft' | 'normal' | 'lively';
 
@@ -246,5 +247,60 @@ export class GeminiAudioAdapter implements IAudioAdapter {
     console.log(`🎉 [GeminiAudioAdapter] All ${audioMap.size}/${scenes.length} audio tracks synthesized in ${totalSec}s in parallel!`);
     return audioMap;
   }
+}
+
+/**
+ * Tries the primary provider first and asks the fallback only for the pages the primary could not narrate,
+ * so a single throttled or failed page never costs a full re-synthesis.
+ */
+export class FallbackAudioAdapter implements IAudioAdapter {
+  constructor(
+    private primary: IAudioAdapter,
+    private fallback: IAudioAdapter,
+    private label = 'Audio'
+  ) {}
+
+  async generateFullStoryAudio(
+    scenes: Array<{ pageNumber: number; textContent: string }>,
+    language: 'es' | 'en' = 'es',
+    voiceStyle: VoiceStyle = 'soft'
+  ): Promise<Map<number, string>> {
+    let audioMap = new Map<number, string>();
+    try {
+      audioMap = await this.primary.generateFullStoryAudio(scenes, language, voiceStyle);
+    } catch (error: any) {
+      console.warn(`⚠️ [${this.label}] Primary narration provider failed: ${error?.message || error}`);
+    }
+
+    const missing = scenes.filter((s) => s.textContent?.trim() && !audioMap.has(s.pageNumber));
+    if (missing.length === 0) return audioMap;
+
+    console.log(`🔁 [${this.label}] Falling back for ${missing.length} page(s): ${missing.map((s) => `P${s.pageNumber}`).join(', ')}`);
+    try {
+      const fallbackMap = await this.fallback.generateFullStoryAudio(missing, language, voiceStyle);
+      for (const [pageNumber, dataUri] of fallbackMap) {
+        audioMap.set(pageNumber, dataUri);
+      }
+    } catch (error: any) {
+      console.warn(`⚠️ [${this.label}] Fallback narration provider failed: ${error?.message || error}`);
+    }
+    return audioMap;
+  }
+}
+
+export type TtsProvider = 'polly' | 'gemini';
+
+export function resolveTtsProvider(): TtsProvider {
+  return process.env.TTS_PROVIDER?.trim().toLowerCase() === 'gemini' ? 'gemini' : 'polly';
+}
+
+/**
+ * TTS_PROVIDER=polly (default): Amazon Polly first, Gemini TTS for any page Polly could not narrate.
+ * TTS_PROVIDER=gemini: Gemini TTS only.
+ */
+export function createAudioAdapter(): IAudioAdapter {
+  const gemini = new GeminiAudioAdapter();
+  if (resolveTtsProvider() === 'gemini') return gemini;
+  return new FallbackAudioAdapter(new PollyAudioAdapter(), gemini, 'Narration');
 }
 

@@ -9,6 +9,10 @@ val localProperties = Properties().apply {
 val wonderLoopAppKey: String = localProperties.getProperty("wonderloop.appKey")
     ?: System.getenv("WONDERLOOP_APP_KEY")
     ?: ""
+// Public HTTPS backend on Amazon EC2. Override with wonderloop.backendUrl (e.g. http://192.168.0.35:3000 for a LAN backend)
+val wonderLoopBackendUrl: String = (localProperties.getProperty("wonderloop.backendUrl")
+    ?: System.getenv("WONDERLOOP_BACKEND_URL")
+    ?: "https://13-217-171-0.sslip.io").trimEnd('/')
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -62,6 +66,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         buildConfigField("String", "WONDERLOOP_APP_KEY", "\"$wonderLoopAppKey\"")
+        buildConfigField("String", "WONDERLOOP_BACKEND_URL", "\"$wonderLoopBackendUrl\"")
     }
 
     buildFeatures {

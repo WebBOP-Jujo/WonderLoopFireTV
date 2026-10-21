@@ -1,6 +1,6 @@
 # ==========================================
-# WonderLoop Gateway — Google Cloud Run Dockerfile
-# Optimized for RevenueCat Shipaton 2026
+# WonderLoop TV Backend Gateway — container image
+# Amazon Developer Hackathon 2026 (deployed on Amazon EC2 behind Caddy, see deploy/)
 # ==========================================
 
 # Stage 1: Build stage
@@ -26,18 +26,16 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Create non-root app user for container security
-USER node
-
-# Copy production package manifests and install only production dependencies
-COPY --chown=node:node package*.json ./
-RUN npm ci --only=production
+# Install only production dependencies (as root: /app is root-owned; the app only needs read access)
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled JavaScript from builder
-COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --from=builder /app/dist ./dist
 
-# Expose standard Cloud Run port
+# Run as the unprivileged user shipped with the official Node image
+USER node
+
 EXPOSE 8080
 
-# Run the production server
 CMD ["node", "dist/server.js"]

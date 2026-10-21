@@ -185,7 +185,7 @@ object SubscriptionManager {
     }
 
     fun redeemCode(code: String): Boolean {
-        val validCodes = listOf("SHIPATON2026", "DEVPOSTVIP", "WONDERVIP", "HACKATHON2026")
+        val validCodes = listOf("AMAZON2026", "DEVPOSTVIP", "WONDERVIP", "HACKATHON2026")
         val normalized = code.trim().uppercase()
         if (validCodes.contains(normalized)) {
             _activePlan.value = SubscriptionPlan.STAR_ANNUAL

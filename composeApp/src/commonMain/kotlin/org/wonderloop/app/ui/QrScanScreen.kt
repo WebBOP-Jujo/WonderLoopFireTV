@@ -72,7 +72,7 @@ fun QrScanScreen(
     var isLoadingSession by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showIpDialog by remember { mutableStateOf(false) }
-    var customIpInput by remember { mutableStateOf(api.baseUrl.replace("http://", "").replace(":3000", "")) }
+    var customIpInput by remember { mutableStateOf(api.baseUrl.substringAfter("://").removeSuffix(":3000")) }
     var pollTrigger by remember { mutableStateOf(0) }
 
     val retryFocusRequester = remember { FocusRequester() }
@@ -821,7 +821,7 @@ fun QrScanScreen(
                             Text(text = "📶", fontSize = 13.sp)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Wi-Fi · ${api.baseUrl.replace("http://", "").replace(":3000", "")} · ",
+                                text = "Wi-Fi · ${api.baseUrl.substringAfter("://").removeSuffix(":3000")} · ",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF5B5470)

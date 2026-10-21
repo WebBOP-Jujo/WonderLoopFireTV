@@ -1,0 +1,11 @@
+# Public HTTPS entry point. SITE_ADDRESS is a hostname that resolves to the instance's Elastic IP
+# (your own domain, or <ip-with-dashes>.sslip.io). Caddy obtains and renews the TLS certificate itself.
+{$SITE_ADDRESS} {
+	# Story generation can take a while (LLM + 5 illustrations + narration): no short proxy timeouts.
+	reverse_proxy backend:8080 {
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+}

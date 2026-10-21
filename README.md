@@ -34,7 +34,7 @@ Amazon's judging criteria for the **Fire TV Track** explicitly emphasizes four c
 | **Multi-Modal UX** | Blends physical paper drawing, smartphone camera input via ephemeral QR code synchronization, voice narration playback, and TV remote D-Pad navigation. |
 | **Computer Vision** | Vision AI extracts character anatomy, distinctive traits, and color palettes directly from hand-drawn sketches, while filtering out blank sheets and accidental table photos. |
 | **AI-Enhanced Viewing** | Dynamically synthesizes high-resolution **16:9 widescreen cinematic illustrations** and synchronized natural speech narration tailored to the child's age and language. |
-| **AWS Builder Readiness** | Architected with clean adapter abstractions ready for **Amazon Bedrock (Amazon Nova Pro, Nova Lite, Nova Canvas)** and **Amazon Polly**. |
+| **AWS Builder** | Drawing vision and story writing run on **Amazon Nova 2 Lite via Amazon Bedrock** (structured output through the Converse API), and every page is narrated by **Amazon Polly** neural voices — each with an automatic, per-request fallback to Gemini. See [AWS Integration](#️-aws-integration-implemented). |
 
 ---
 
@@ -66,11 +66,18 @@ Amazon's judging criteria for the **Fire TV Track** explicitly emphasizes four c
    ┌──────────────────────────────────────────────────────────────────┐
    │                  Multimodal AI Pipeline                          │
    │                                                                  │
-   │  1. Vision Analysis       ──► Extracts traits, colors & validity │
-   │  2. Character Genesis     ──► 1:1 Portrait in Watercolor / 3D    │
-   │  3. Narrative Engine      ──► 5-page story + Setting Bible       │
-   │  4. Widescreen Art        ──► 5 x 16:9 cinematic TV illustrations│
-   │  5. Voice Synthesis (TTS) ──► Synchronized warm audio narration  │
+   │  1. Vision Analysis    ──► traits, colors & validity             │
+   │                            Amazon Nova 2 Lite (Bedrock)          │
+   │  2. Character Genesis  ──► 1:1 portrait (Watercolor / 3D)        │
+   │                            Gemini image model                    │
+   │  3. Narrative Engine   ──► 5-page story + Setting Bible          │
+   │                            Amazon Nova 2 Lite (Bedrock)          │
+   │  4. Widescreen Art     ──► 5 x 16:9 cinematic TV illustrations   │
+   │                            Gemini image model                    │
+   │  5. Voice Narration    ──► one MP3 per page                      │
+   │                            Amazon Polly (Lucia / Ruth)           │
+   │                                                                  │
+   │  Every AWS call falls back to Gemini automatically on failure.   │
    └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -99,24 +106,66 @@ Children's safety and privacy are paramount:
 
 ---
 
-## ☁️ AWS & Amazon AI Integration Blueprint
+## 🛡️ Backend Security Hardening
 
-WonderLoop TV is architected with modular service adapters, fully ready for the **Amazon AWS AI ecosystem**:
+* **No default secrets:** the server refuses to start without a random `APP_SECRET_KEY` (≥ 32 chars). The Fire TV app receives the same key at build time from the git-ignored `local.properties` (injected through `BuildConfig`), never from source code. Keys are compared in constant time.
+* **Real client IPs behind proxies:** `TRUST_PROXY` makes rate limiting work per client behind a load balancer or reverse proxy, while staying off on a bare LAN server so `X-Forwarded-For` cannot be spoofed.
+* **Abuse protection:** separate rate limits for AI generation, TV session polling and drawing uploads; uploads are decoded with a 25-megapixel cap (`limitInputPixels`) to block decompression-bomb images; strict MIME and size validation.
+* **Minimal attack surface:** unused billing/webhook routes removed; `npm audit` reports 0 vulnerabilities.
+* **Least-privilege AWS access:** the backend only needs `bedrock:InvokeModel` on Nova 2 Lite and `polly:SynthesizeSpeech` — see [`backend/aws/wonderloop-iam-policy.json`](backend/aws/wonderloop-iam-policy.json). Credentials come from the standard AWS provider chain (an instance role in production), never from code.
 
-| Capability | Current Adapter | Amazon AWS Target Adapter |
-| :--- | :--- | :--- |
-| **Vision Analysis** | Multimodal Vision | **Amazon Nova Pro / Nova Lite** via Amazon Bedrock `ConverseCommand` |
-| **Story Generation** | Story Orchestrator | **Amazon Nova Pro** (`amazon.nova-pro-v1:0`) with 300k token context |
-| **Cinematic Art** | 16:9 Image Diffusion | **Amazon Nova Canvas** (`amazon.nova-canvas-v1:0`) with `conditionImage` & 1280x720 output |
-| **Voice Narration** | Audio Synthesizer | **Amazon Polly** (`Lucia` / `Sergio` Neural for ES, `Ruth` Generative for EN) |
+---
+
+## ☁️ AWS Integration (Implemented)
+
+| Capability | Primary provider (AWS) | Fallback | Code |
+| :--- | :--- | :--- | :--- |
+| **Drawing vision** (name, species, hex palette, distinctive features, blank-sheet detection) | **Amazon Nova 2 Lite** on Amazon Bedrock (`us.amazon.nova-2-lite-v1:0`, Converse API, image sent as bytes) | Gemini | [`llm.client.ts`](backend/src/adapters/llm.client.ts), [`vision.adapter.ts`](backend/src/adapters/vision.adapter.ts) |
+| **Story writing** (5 scenes + English illustration prompts + drawing challenge, `es` / `en`) | **Amazon Nova 2 Lite** on Amazon Bedrock | Gemini | [`llm.client.ts`](backend/src/adapters/llm.client.ts), [`story.adapter.ts`](backend/src/adapters/story.adapter.ts) |
+| **Voice narration** (one MP3 per page) | **Amazon Polly** neural voices: `Lucia` (es-ES), `Ruth` (en-US); voice style mapped to SSML speaking rate | Gemini TTS, per page | [`polly-audio.adapter.ts`](backend/src/adapters/polly-audio.adapter.ts), [`audio.adapter.ts`](backend/src/adapters/audio.adapter.ts) |
+| **Illustrations** (1:1 portrait + 5 × 16:9 scenes) | Gemini image model | — | [`image.adapter.ts`](backend/src/adapters/image.adapter.ts) |
+
+**How the integration works**
+* **Structured output with Converse tool use:** each Bedrock request declares the JSON Schema of the expected answer (character profile or storybook) as a forced tool (`toolChoice`). Bedrock returns an already-parsed object, so formatting quirks in free text can never break the pipeline.
+* **Resilience:** any Bedrock error, timeout or schema-invalid answer falls through to Gemini for that request only. Polly failures fall back page by page. After a credentials/permissions error, the AWS client pauses itself for 5 minutes (circuit breaker) instead of slowing every story down.
+* **Switchable providers:** `LLM_PROVIDER=bedrock|gemini` and `TTS_PROVIDER=polly|gemini`; the active providers are printed on startup and returned by `GET /`.
+* **Measured on real calls (us-east-1):** drawing vision ≈ 2 s, full 5-scene story ≈ 5–6 s with Nova 2 Lite; Polly narration ≈ 0.6–1.0 s per page (≈ 60–70 KB MP3).
+
+**Why illustrations still use Gemini:** we evaluated the Amazon image models available on Bedrock. Amazon Nova Canvas reached end of life on September 30, 2026, Titan Image Generator G1 v2 is past its published end-of-life date (Legacy models are not available to new customers), and Amazon Nova 2 Omni is still in limited preview. WonderLoop also needs per-request character consistency from a reference image (the child's drawing), which Titan only offers through fine-tuning. The image adapter is isolated behind `IImageAdapter`, so an Amazon image model can be plugged in as soon as one is generally available.
+
+---
+
+## 🌐 Live Backend on AWS
+
+The production backend runs on **Amazon EC2** (`t3.small`, `us-east-1`) and is publicly reachable over HTTPS:
+
+**`https://13-217-171-0.sslip.io`** — `GET /` lists the active AI providers, `GET /api/story/health` is the health check.
+
+```
+Fire TV app / phone browser ──HTTPS──► EC2 (Elastic IP)
+                                        ├─ Caddy  :443  automatic TLS certificate, HTTP→HTTPS redirect
+                                        └─ backend :8080 Docker container (single replica)
+                                             └─ Amazon Bedrock + Amazon Polly through the EC2 instance role
+                                                (no AWS keys stored on the server)
+```
+
+* The Fire TV app uses this URL **by default** (injected at build time), so the QR upload link works from any phone, on any network.
+* AWS credentials come from an IAM role attached to the instance with the least-privilege policy in [`backend/aws/wonderloop-iam-policy.json`](backend/aws/wonderloop-iam-policy.json).
+* Deployment is one command from a Windows PC — [`backend/deploy/deploy-ec2.ps1`](backend/deploy/deploy-ec2.ps1) packs the source, uploads it over SSH and runs [`deploy/bootstrap.sh`](backend/deploy/bootstrap.sh) (Docker, Compose, Caddy, build, start):
+  ```powershell
+  cd backend
+  .\deploy\deploy-ec2.ps1 -Ip <ELASTIC_IP> -KeyPath <path\to\key.pem> [-Domain api.example.com]
+  ```
+  Without `-Domain`, the free `<ip-with-dashes>.sslip.io` hostname is used, so no domain purchase is needed for HTTPS.
 
 ---
 
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
-* **Android Development:** Android Studio Ladybug / Koala or newer, JDK 17+.
-* **Backend:** Node.js 18+ and npm.
+* **Android Development:** Android Studio Ladybug or newer, **JDK 21**.
+* **Backend:** **Node.js 20.9+** (tested with Node 22) and npm.
+* **AWS account** with access to Amazon Bedrock (Nova 2 Lite) and Amazon Polly in `us-east-1`, plus a **Gemini API key** (illustrations and fallback).
 * **Hardware:** Amazon Fire TV Stick / Fire TV Cube connected to the same local Wi-Fi, or an Android TV emulator (API 28-35).
 
 ---
@@ -131,8 +180,20 @@ npm install
 
 # Configure environment variables
 cp .env.example .env
-# Edit .env with your configuration
+```
 
+Edit `backend/.env` (see the comments in [`.env.example`](backend/.env.example)):
+
+| Variable | Required | Purpose |
+| :--- | :---: | :--- |
+| `APP_SECRET_KEY` | ✅ | Shared key between the Fire TV app and the backend (≥ 32 chars). Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. The server does not start without it. |
+| `GEMINI_API_KEY` | ✅ | Illustrations + automatic fallback for vision, story and narration. |
+| `AWS_REGION` | ✅ | `us-east-1` (Nova 2 Lite geo inference profile + Polly neural voices). |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Local only | An IAM user limited to [`aws/wonderloop-iam-policy.json`](backend/aws/wonderloop-iam-policy.json). On EC2, use an instance role instead and leave these unset. |
+| `LLM_PROVIDER` / `TTS_PROVIDER` | Optional | `bedrock` / `polly` by default; set to `gemini` to bypass AWS. |
+| `TRUST_PROXY` | Optional | `1` when running behind a reverse proxy / load balancer, `0` on a LAN. |
+
+```bash
 # Compile TypeScript
 npm run build
 
@@ -140,7 +201,7 @@ npm run build
 npm run dev
 ```
 
-The server automatically detects your local LAN IP and starts listening on port `3000` (e.g., `http://192.168.1.50:3000`).
+The server automatically detects your local LAN IP and starts listening on port `3000` (e.g., `http://192.168.1.50:3000`). The startup banner shows which providers are active.
 
 ---
 
@@ -157,7 +218,15 @@ The server automatically detects your local LAN IP and starts listening on port 
    # Example: adb connect 192.168.1.38:5555
    ```
 
-3. **Build and Install the Debug APK:**
+3. **Set the app key (and optionally the backend URL):** add to the git-ignored `local.properties` in the project root (or export `WONDERLOOP_APP_KEY` / `WONDERLOOP_BACKEND_URL`):
+   ```properties
+   wonderloop.appKey=<same value as the backend's APP_SECRET_KEY>
+   # Optional: defaults to the public AWS backend. Use your PC's LAN address for a local backend:
+   # wonderloop.backendUrl=http://192.168.1.50:3000
+   ```
+   The backend address can also be changed at runtime from the server dialog on the QR screen (an IP becomes `http://<ip>:3000`, a hostname becomes `https://<hostname>`).
+
+4. **Build and Install the Debug APK:**
    ```bash
    # From the project root
    ./gradlew :composeApp:assembleDebug
@@ -196,13 +265,22 @@ WonderLoopTV/
 │
 ├── backend/                        # Cloud & Local Gateway (Node.js & TypeScript)
 │   ├── src/
-│   │   ├── adapters/               # AI Engine Adapters (Vision, Story, Image, Audio)
-│   │   ├── middleware/             # Rate Limiter, App Secret Auth, Security
+│   │   ├── adapters/               # AI Engine Adapters
+│   │   │   ├── llm.client.ts       # Amazon Bedrock (Nova 2 Lite) + Gemini fallback
+│   │   │   ├── vision.adapter.ts   # Drawing -> CharacterProfile
+│   │   │   ├── story.adapter.ts    # 5-scene saga writer
+│   │   │   ├── polly-audio.adapter.ts # Amazon Polly narration
+│   │   │   ├── audio.adapter.ts    # Gemini TTS + per-page fallback
+│   │   │   └── image.adapter.ts    # Portrait & 16:9 illustrations
+│   │   ├── middleware/             # App Secret Auth & quota guard
 │   │   ├── routes/
 │   │   │   ├── tv.routes.ts        # QR Pairing & Upload Portal
 │   │   │   └── story.routes.ts     # Generation Pipeline REST Endpoints
 │   │   ├── services/               # Story Orchestrator & Session Manager
 │   │   └── server.ts               # Express Entrypoint
+│   ├── aws/wonderloop-iam-policy.json  # Least-privilege IAM policy (Bedrock + Polly)
+│   ├── deploy/                     # EC2 deployment: deploy-ec2.ps1, bootstrap.sh, docker-compose.yml, Caddyfile
+│   ├── Dockerfile                  # Multi-stage Node 22 image (runs as non-root)
 │   ├── package.json
 │   └── tsconfig.json
 │

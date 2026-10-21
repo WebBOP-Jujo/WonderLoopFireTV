@@ -6,3 +6,5 @@ dist
 .gitignore
 npm-debug.log*
 *.log
+deploy
+aws

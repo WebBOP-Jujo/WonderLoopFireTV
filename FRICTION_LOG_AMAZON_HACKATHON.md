@@ -4,7 +4,8 @@
 **Project:** WonderLoop TV — *AI-Powered Illustrated Bedtime Stories for Children on Fire TV*  
 **Developer Persona:** Full-Stack & Mobile Multiplatform Engineer  
 **Target Hardware:** Amazon Fire TV Stick 4K (3rd Gen / Max, Fire OS 7.6 / Fire OS 8, 1.5–2GB RAM)  
-**Host Environment:** Windows 11, VS Code + Antigravity AI Agent, Android SDK API 35 (Android 15), ADB over Wi-Fi  
+**Host Environment:** Windows 11, VS Code + Antigravity AI Agent, Claude Code, Android SDK API 35 (Android 15), ADB over Wi-Fi  
+**AWS Services Used:** Amazon Bedrock (Amazon Nova 2 Lite, Converse API, `us-east-1`), Amazon Polly (neural voices), AWS IAM  
 **Submission Goal:** In-depth Developer Experience (DX) Friction Log (+10% Hackathon Bonus)  
 **Overall DX Score:** **8.8 / 10**
 
@@ -18,6 +19,7 @@ Transitioning this concept to **Amazon Fire TV Stick 4K** presented unique platf
 1. **The TV Camera Dilemma:** Televisions do not have built-in cameras.
 2. **10-Foot UI & Remote Navigation:** Replacing touch-based scrolling with a 3-meter living room D-Pad navigation model.
 3. **Hardware Constraints:** Optimizing audio synthesis, image decoders, and memory consumption on streaming stick SoCs (quad-core ARM, limited thermal and heap envelope).
+4. **Moving the AI pipeline to AWS:** Replacing our original Gemini text, vision and TTS calls with Amazon Bedrock (Nova 2 Lite) and Amazon Polly, while keeping Gemini as an automatic fallback (Frictions 6–9).
 
 This friction log chronicles our end-to-end journey, identifying key stumbling blocks, platform delights, and actionable feedback for Amazon's Developer Tooling team.
 
@@ -97,6 +99,68 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
 
 ---
 
+### 🔴 Friction 6: No Generally Available Amazon Image Model for a New Bedrock Project
+* **Category:** Amazon Bedrock — Model Availability & Lifecycle  
+* **Severity:** **HIGH** (Friction Rating: 4 / 5)  
+* **Task attempted:** Replace our Gemini image model (1:1 hero portrait + five 16:9 scene illustrations that must keep the child's character consistent) with a first-party Amazon model on Bedrock.
+* **Steps taken:**
+  1. Looked up Amazon Nova Canvas, which our design notes had targeted (1280x720 output, `conditionImage`).
+  2. Checked the Bedrock *Model lifecycle (Legacy)* page: Nova Canvas (`amazon.nova-canvas-v1:0`) reached **EOL on September 30, 2026**.
+  3. Evaluated Titan Image Generator G1 v2 (`amazon.titan-image-generator-v2:0`) from its feature page `titan-image-models.html`. The page describes all its features but shows no lifecycle banner; only the lifecycle tables revealed a Legacy date of Dec 30, 2025 and EOL of June 30, 2026 — and Legacy models are not available to new customers.
+  4. Checked Amazon Nova 2 Omni (text + image output): announced in December 2025, still limited preview for Nova Forge customers.
+* **Expected:** At least one GA Amazon image-generation model on Bedrock, or a clearly documented migration path from Nova Canvas.
+* **Actual:** No usable first-party image model for a new account. Feature documentation pages for retired models still read as if the model were available.
+* **Workaround:** Kept Gemini for illustrations behind the `IImageAdapter` interface, so an Amazon image model can be plugged in later without touching the orchestrator. Vision, story and narration did move to AWS (Frictions 7–9).
+* **Actionable Feedback for Amazon:**
+  > **Docs:** Show a lifecycle banner (Legacy / EOL date / recommended replacement) at the top of every model feature page, not only in the lifecycle tables.  
+  > **Product:** Publish a GA replacement for Nova Canvas (with reference-image character consistency) or document the recommended Bedrock image model for new projects.
+
+---
+
+### 🟡 Friction 7: Nova 2 Lite Returns Invalid JSON in Plain-Text Mode
+* **Category:** Amazon Bedrock — Model Output Reliability  
+* **Severity:** **MEDIUM** (Friction Rating: 3.5 / 5)  
+* **Task attempted:** Get a strict JSON object (5-scene storybook / character profile) from `us.amazon.nova-2-lite-v1:0` via the Converse API.
+* **Steps taken:**
+  1. System prompt: "Reply with exactly one valid JSON object… no markdown fences".
+  2. Spanish stories parsed fine, but **3 of 3 English story runs failed to parse**. Logging the raw output showed the JSON wrapped in ```` ```json ```` fences and, more importantly, string values delimited with typographic quotes (`"textContent": “Look for…”`).
+  3. Added an explicit "use straight ASCII double quotes" instruction plus a typographic-quote repair step in our parser — the next 3 English runs still failed.
+  4. Switched to **Converse tool use** with a forced `toolChoice`. With a generic schema (`{"type": "object", "additionalProperties": true}`) the model silently returned an **empty object `{}`** in every call (vision and story).
+  5. Declared the full JSON Schema of each answer (properties + `required`) as the tool's `inputSchema`.
+* **Expected:** Valid JSON when the prompt demands it, or a native structured-output mode. The Nova 2 Lite model card lists *Structured outputs* as **not supported**.
+* **Actual:** Unreliable JSON in text mode; empty tool input with a permissive schema and no warning.
+* **Workaround:** Forced tool use with an explicit schema → **6/6 calls succeeded** (Spanish and English), returning already-parsed objects. Gemini remains as automatic fallback if validation ever fails.
+* **Actionable Feedback for Amazon:**
+  > **Product:** Enable Bedrock *Structured outputs* for Nova 2 Lite.  
+  > **Docs:** In the tool-use guide, warn that a schema without `properties` may produce an empty `toolUse.input`, and show "forced tool as structured output" as an official pattern.
+
+---
+
+### 🟢 Friction 8: IAM Permissions for Cross-Region Inference Profiles
+* **Category:** AWS IAM & Bedrock Onboarding  
+* **Severity:** **LOW** (Friction Rating: 2 / 5)  
+* **Task attempted:** Call Nova 2 Lite from `us-east-1` with a least-privilege IAM user.
+* **Steps taken:** Created an IAM user with only Polly access, then called Bedrock to confirm the fallback path. The error was clear (`AccessDeniedException … not authorized to perform: bedrock:InvokeModel on resource: arn:aws:bedrock:us-east-1:<account>:inference-profile/us.amazon.nova-2-lite-v1:0`).
+* **Expected vs. actual:** Granting the ARN named in the error looks sufficient, but a geo inference profile can route to us-east-1, us-east-2 and us-west-2, so the policy must also allow the underlying `foundation-model/amazon.nova-2-lite-v1:0` ARN in those Regions. Nothing in the error message points to that second requirement.
+* **Workaround:** Wrote a minimal policy granting both the inference-profile ARN and the foundation-model ARN with a Region wildcard ([`backend/aws/wonderloop-iam-policy.json`](backend/aws/wonderloop-iam-policy.json)); it worked on the first try.
+* **Actionable Feedback for Amazon:**
+  > **Console:** Offer a "copy least-privilege policy" button on each model card that already includes the inference-profile and destination-Region foundation-model ARNs.
+
+---
+
+### 🟢 Friction 9: Localized IAM Console Wording ("Crear persona")
+* **Category:** AWS Console UX / Localization  
+* **Severity:** **LOW** (Friction Rating: 1.5 / 5)  
+* **Task attempted:** Create an IAM user for local Bedrock/Polly testing with the console in Spanish.
+* **Steps taken:** Opened IAM → Users. The page title says "Usuarios de IAM", but the action buttons read **"Crear persona"** / **"Eliminar persona"** ("create/delete *person*").
+* **Expected:** "Crear usuario", matching the page title and the documentation.
+* **Actual:** We paused to double-check that "persona" really meant an IAM user and not a different identity type.
+* **Workaround:** Confirmed it was the standard *Create user* flow.
+* **Actionable Feedback for Amazon:**
+  > **Localization:** Use "usuario" consistently in the Spanish IAM console.
+
+---
+
 ## 3. Delights: What Worked Exceptionally Well
 
 1. **`@amazon-devices/amazon-devices-buildertools-mcp` & Skills:**
@@ -105,16 +169,22 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
    - The hardware decoders on the Fire TV Stick 4K handled high-resolution AI watercolor illustrations, Base64 strings, and dynamic TTS narration effortlessly with zero thermal throttling.
 3. **ADB over Wi-Fi:**
    - Pairing the Fire TV Stick via `adb connect 192.168.x.x:5555` allowed near-instant incremental APK installs (`assembleDebug` in <1m 20s) without needing physical USB cables hooked up to the TV.
+4. **Amazon Polly as a drop-in narrator:**
+   - The neural voices `Lucia` (es-ES) and `Ruth` (en-US) sounded natural for bedtime stories on the first try. Each page synthesized in **0.6–1.0 s** as a ~60–70 KB MP3 that our Fire TV player already supported, and SSML `<prosody rate>` + `<break>` mapped cleanly onto our "soft / normal / lively" narration styles.
+5. **Bedrock Converse API with images:**
+   - Sending the child's drawing as raw bytes in a `ContentBlock` (no S3 upload, no base64 juggling) made the vision migration a small change. Nova 2 Lite analyzed a drawing in **~2 s** and wrote a full 5-scene story in **~5–6 s**, with token usage reported in every response.
 
 ---
 
-## 4. Top 3 Feature Requests for the Amazon Developer Tooling Team
+## 4. Feature Requests for the Amazon Developer Tooling & AWS Teams
 
 | Priority | Feature Request | Target Audience | Impact |
 |:---:|---|---|---|
 | **#1** | **Amazon Fire TV Mobile Companion SDK** | Any TV app requiring mobile text, payment, or photo input | Eliminates 80% of cross-device pairing boilerplate for 3P developers. |
 | **#2** | **Fire TV D-Pad Focus Visualizer (ADB CLI)** | Jetpack Compose / Flutter / React Native developers | Live overlay highlighting focusable elements, focus traps, and inaccessible UI nodes on the TV screen. |
 | **#3** | **Pre-flight Appstore Certification Linter** | All Fire TV developers prior to submission | Scans for exit confirmation dialogs, missing Leanback launchers, and unshielded cleartext traffic before submission. |
+| **#4** | **Structured outputs for Amazon Nova 2 Lite** (Important) | Any Bedrock app that parses model output | Removes the need for forced-tool workarounds and makes JSON pipelines reliable in every language. |
+| **#5** | **GA Amazon image model + lifecycle banners on model docs** (Critical for us) | Creative / family apps on Bedrock | A supported Nova Canvas successor with reference-image consistency would let apps like WonderLoop run 100% on AWS. |
 
 ---
 
