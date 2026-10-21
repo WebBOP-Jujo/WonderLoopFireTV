@@ -5,12 +5,19 @@ import { PollyAudioAdapter } from './polly-audio.adapter.js';
 
 export type VoiceStyle = 'soft' | 'normal' | 'lively';
 
+/** Narration of one page: the audio (data URI) and, when the provider supports it, the start time (ms) of every
+ * whitespace-separated word of the page text, used by the TV reader to highlight words as they are spoken. */
+export interface NarrationTrack {
+  audio: string;
+  wordTimingsMs?: number[];
+}
+
 export interface IAudioAdapter {
   generateFullStoryAudio(
     scenes: Array<{ pageNumber: number; textContent: string }>,
     language?: 'es' | 'en',
     voiceStyle?: VoiceStyle
-  ): Promise<Map<number, string>>;
+  ): Promise<Map<number, NarrationTrack>>;
 }
 
 export class GeminiAudioAdapter implements IAudioAdapter {
@@ -222,8 +229,8 @@ export class GeminiAudioAdapter implements IAudioAdapter {
     scenes: Array<{ pageNumber: number; textContent: string }>,
     language: 'es' | 'en' = 'es',
     voiceStyle: VoiceStyle = 'soft'
-  ): Promise<Map<number, string>> {
-    const audioMap = new Map<number, string>();
+  ): Promise<Map<number, NarrationTrack>> {
+    const audioMap = new Map<number, NarrationTrack>();
     if (!scenes || scenes.length === 0) return audioMap;
 
     const pageSummary = scenes.map((s) => `P${s.pageNumber}`).join(', ');
@@ -239,7 +246,7 @@ export class GeminiAudioAdapter implements IAudioAdapter {
 
     for (const { pageNumber, wavDataUri } of results) {
       if (wavDataUri) {
-        audioMap.set(pageNumber, wavDataUri);
+        audioMap.set(pageNumber, { audio: wavDataUri });
       }
     }
 
@@ -264,8 +271,8 @@ export class FallbackAudioAdapter implements IAudioAdapter {
     scenes: Array<{ pageNumber: number; textContent: string }>,
     language: 'es' | 'en' = 'es',
     voiceStyle: VoiceStyle = 'soft'
-  ): Promise<Map<number, string>> {
-    let audioMap = new Map<number, string>();
+  ): Promise<Map<number, NarrationTrack>> {
+    let audioMap = new Map<number, NarrationTrack>();
     try {
       audioMap = await this.primary.generateFullStoryAudio(scenes, language, voiceStyle);
     } catch (error: any) {
@@ -278,8 +285,8 @@ export class FallbackAudioAdapter implements IAudioAdapter {
     console.log(`🔁 [${this.label}] Falling back for ${missing.length} page(s): ${missing.map((s) => `P${s.pageNumber}`).join(', ')}`);
     try {
       const fallbackMap = await this.fallback.generateFullStoryAudio(missing, language, voiceStyle);
-      for (const [pageNumber, dataUri] of fallbackMap) {
-        audioMap.set(pageNumber, dataUri);
+      for (const [pageNumber, track] of fallbackMap) {
+        audioMap.set(pageNumber, track);
       }
     } catch (error: any) {
       console.warn(`⚠️ [${this.label}] Fallback narration provider failed: ${error?.message || error}`);

@@ -1,5 +1,5 @@
 import { PollyClient, SynthesizeSpeechCommand, Engine, VoiceId, LanguageCode } from '@aws-sdk/client-polly';
-import type { IAudioAdapter, VoiceStyle } from './audio.adapter.js';
+import type { IAudioAdapter, NarrationTrack, VoiceStyle } from './audio.adapter.js';
 
 /**
  * Amazon Polly narration adapter.
@@ -22,6 +22,37 @@ const STYLE_RATES: Record<VoiceStyle, string> = {
   normal: '96%',
   lively: '106%'
 };
+
+function normalizeToken(word: string): string {
+  return word.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ]/g, '');
+}
+
+/**
+ * Aligns Polly word speech marks to the words shown on screen (text split on whitespace), so the app can
+ * highlight word i once playback reaches timings[i]. Tokens without a mark (dashes, lone punctuation)
+ * inherit the previous time.
+ */
+export function alignWordTimings(displayText: string, marks: Array<{ time: number; value: string }>): number[] {
+  const words = displayText.split(/\s+/).filter(Boolean);
+  const timings: number[] = [];
+  let next = 0;
+  let last = 0;
+  for (const word of words) {
+    const w = normalizeToken(word);
+    if (w) {
+      for (let k = next; k < Math.min(marks.length, next + 4); k++) {
+        const v = normalizeToken(marks[k].value);
+        if (v && (w === v || w.startsWith(v) || v.startsWith(w) || w.includes(v))) {
+          last = marks[k].time;
+          next = k + 1;
+          break;
+        }
+      }
+    }
+    timings.push(last);
+  }
+  return timings;
+}
 
 function escapeXml(text: string): string {
   return text
@@ -75,7 +106,7 @@ export class PollyAudioAdapter implements IAudioAdapter {
     scene: { pageNumber: number; textContent: string },
     language: 'es' | 'en',
     voiceStyle: VoiceStyle
-  ): Promise<string | undefined> {
+  ): Promise<NarrationTrack | undefined> {
     const rawText = scene.textContent?.trim();
     if (!rawText) return undefined;
     if (rawText.length > MAX_TEXT_CHARS) {
@@ -104,10 +135,36 @@ export class PollyAudioAdapter implements IAudioAdapter {
         return undefined;
       }
 
+      // Word speech marks (same SSML) for karaoke-style highlighting. Optional: narration works without them.
+      let wordTimingsMs: number[] | undefined;
+      try {
+        const marksResponse = await this.client.send(
+          new SynthesizeSpeechCommand({
+            Engine: this.engine,
+            VoiceId: this.voices[language],
+            LanguageCode: (language === 'en' ? 'en-US' : 'es-ES') as LanguageCode,
+            OutputFormat: 'json',
+            SpeechMarkTypes: ['word'],
+            TextType: 'ssml',
+            Text: this.buildSsml(rawText, voiceStyle)
+          })
+        );
+        const raw = Buffer.from((await marksResponse.AudioStream?.transformToByteArray()) || []).toString('utf8');
+        const marks = raw
+          .split('\n')
+          .filter((line) => line.trim())
+          .map((line) => JSON.parse(line))
+          .filter((m) => m.type === 'word')
+          .map((m) => ({ time: Number(m.time) || 0, value: String(m.value || '') }));
+        if (marks.length > 0) wordTimingsMs = alignWordTimings(rawText, marks);
+      } catch (marksError: any) {
+        console.warn(`⚠️ [PollyAudioAdapter] Speech marks unavailable for Page ${scene.pageNumber}: ${marksError?.name || marksError}`);
+      }
+
       const kb = Math.round(bytes.length / 1024);
       const tSec = ((Date.now() - t0) / 1000).toFixed(1);
       console.log(`    ✅ [PollyAudioAdapter] Page ${scene.pageNumber} synthesized in ${tSec}s (${this.voices[language]}/${this.engine}, ${kb} KB MP3)`);
-      return `data:audio/mpeg;base64,${Buffer.from(bytes).toString('base64')}`;
+      return { audio: `data:audio/mpeg;base64,${Buffer.from(bytes).toString('base64')}`, wordTimingsMs };
     } catch (error: any) {
       if (isConfigurationError(error)) {
         this.circuitOpenUntil = Date.now() + CIRCUIT_OPEN_MS;
@@ -123,8 +180,8 @@ export class PollyAudioAdapter implements IAudioAdapter {
     scenes: Array<{ pageNumber: number; textContent: string }>,
     language: 'es' | 'en' = 'es',
     voiceStyle: VoiceStyle = 'soft'
-  ): Promise<Map<number, string>> {
-    const audioMap = new Map<number, string>();
+  ): Promise<Map<number, NarrationTrack>> {
+    const audioMap = new Map<number, NarrationTrack>();
     if (!scenes || scenes.length === 0) return audioMap;
 
     console.log(`🚀 [PollyAudioAdapter] Synthesizing ${scenes.length} pages with Amazon Polly (${this.voices[language]}, ${this.engine}) in ${language.toUpperCase()} [voiceStyle=${voiceStyle}]...`);
@@ -133,12 +190,12 @@ export class PollyAudioAdapter implements IAudioAdapter {
     const results = await Promise.all(
       scenes.map(async (scene) => ({
         pageNumber: scene.pageNumber,
-        dataUri: await this.synthesizeSceneAudio(scene, language, voiceStyle)
+        track: await this.synthesizeSceneAudio(scene, language, voiceStyle)
       }))
     );
 
-    for (const { pageNumber, dataUri } of results) {
-      if (dataUri) audioMap.set(pageNumber, dataUri);
+    for (const { pageNumber, track } of results) {
+      if (track) audioMap.set(pageNumber, track);
     }
 
     const totalSec = ((Date.now() - tStart) / 1000).toFixed(1);

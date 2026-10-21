@@ -1,87 +1,76 @@
 package org.wonderloop.app.ui
 
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.wonderloop.app.data.CharacterProfile
 import org.wonderloop.app.data.FullStoryResponse
+import org.wonderloop.app.data.SagaBook
 import org.wonderloop.app.data.StoryRepository
-import org.wonderloop.app.data.SubscriptionManager
-import org.wonderloop.app.platform.PlatformAudioService
-import org.wonderloop.app.platform.SoundEffect
+import org.wonderloop.app.platform.PlatformStorage
 import org.wonderloop.app.platform.WonderLoopImage
 import org.wonderloop.app.theme.*
-import org.wonderloop.app.ui.components.*
+import org.wonderloop.app.ui.tv.TvClickableSurface
 
-// Design System Colors from wonderloop-firetv.html
-private val TvCreamBg = Color(0xFFFFFBF5)
-private val TvIvoryGlow = Color(0xFFFFF6E3)
-private val TvInkDark = Color(0xFF2B2340)
-private val TvInkMuted = Color(0xFF6B6480)
-private val TvCoral = Color(0xFFD9384A)
-private val TvCoralGradientEnd = Color(0xFFE5566A)
-private val TvCoralSoft = Color(0xFFFCEAE7)
-private val TvCoralBorder = Color(0xFFE8A0A8)
-private val TvTeal = Color(0xFF0E7F64)
-private val TvTealSoft = Color(0xFFDDF5EE)
-private val TvTealBorder = Color(0xFF8FD3C0)
-private val TvGoldSoft = Color(0xFFFFF1CF)
-private val TvGoldText = Color(0xFF6B4A00)
-private val TvTagText = Color(0xFF8A6200)
+private val HomeCream = Color(0xFFFFFBF5)
+private val HomeIvoryGlow = Color(0xFFFFF6E3)
+private val HomeInk = Color(0xFF2B2340)
+private val HomeInkMuted = Color(0xFF6B6480)
+private val HomeCoral = Color(0xFFD9384A)
+private val HomeCoralEnd = Color(0xFFE5566A)
+private val HomeCoralSoft = Color(0xFFFCEAE7)
+private val HomeTeal = Color(0xFF0E7F64)
+private val HomeTealSoft = Color(0xFFDDF5EE)
+private val HomeGold = Color(0xFFFFD166)
+private val HomeCardBorder = Color(0xFFEDE3D5)
 
-/**
- * Helper extension to draw clean dashed borders matching Fire TV HTML specs
- */
-private fun Modifier.tvDashedBorder(
-    width: Dp,
-    color: Color,
-    cornerRadius: Dp,
-    dashLength: Float = 14f,
-    gapLength: Float = 8f
-): Modifier = this.drawBehind {
-    val stroke = Stroke(
-        width = width.toPx(),
-        pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
-    )
-    drawRoundRect(
-        color = color,
-        size = size,
-        cornerRadius = CornerRadius(cornerRadius.toPx()),
-        style = stroke
-    )
+/** Remembers the last element the user opened so BACK returns focus to it (Fire TV focus restoration). */
+private object HomeFocusMemory {
+    var lastKey: String? = null
 }
+
+/** A concrete, drawable idea that changes every day (shown on the "create" card). */
+private val DAILY_IDEAS = listOf(
+    "un león con una gran melena amarilla" to "a lion with a big yellow mane",
+    "un barco pirata con velas de rayas" to "a pirate ship with striped sails",
+    "un robot con ruedas y una antena" to "a robot with wheels and an antenna",
+    "una tortuga con un caparazón de colores" to "a turtle with a colorful shell",
+    "un dragón pequeño con alas verdes" to "a little dragon with green wings",
+    "un cohete que va a la Luna" to "a rocket flying to the Moon",
+    "un gato con botas rojas" to "a cat wearing red boots"
+)
 
 @Composable
 fun HomeScreen(
     childName: String,
+    focusRestoreTick: Int = 0,
     childAvatar: String = "🧒",
     backendOnline: Boolean?,
     onNewAdventureClick: () -> Unit,
@@ -93,23 +82,13 @@ fun HomeScreen(
     onRetryConnection: () -> Unit = {},
     onOpenStory: (FullStoryResponse) -> Unit = {}
 ) {
+    val en = AppStrings.isEnglish
     val profileStories = StoryRepository.getStoriesForProfile()
     val lastReadStory = StoryRepository.getLastReadStoryForProfile()
-    val availableStories by SubscriptionManager.availableStories
-    val mainCtaFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        delay(120)
-        try {
-            mainCtaFocusRequester.requestFocus()
-        } catch (_: Exception) {}
-    }
-
-    // Determine current display story (real last read, first story, or fallback)
+    val sagas = remember(profileStories.size) { StoryRepository.getBookshelfSagas() }
     val displayStory = lastReadStory ?: profileStories.firstOrNull()
 
-    // Determine current display character (or Grisin fallback)
-    val uniqueCharacters = remember(profileStories) {
+    val friends = remember(profileStories) {
         buildList {
             profileStories.forEach { story ->
                 add(story.character)
@@ -119,940 +98,572 @@ fun HomeScreen(
             .filter { it.name.isNotBlank() }
             .distinctBy { it.name.trim().lowercase() }
     }
-    val displayCharacter = uniqueCharacters.firstOrNull()
 
-    // Pulse animation for scan line in Step 2 icon and stroke animation for Step 1 drawing
-    val infiniteTransition = rememberInfiniteTransition(label = "hero_anim")
-    val scanLineOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scan_line"
-    )
-    val drawingProgress by infiniteTransition.animateFloat(
-        initialValue = 0.05f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "drawing_progress"
-    )
+    // One FocusRequester per focusable element, keyed so focus can be restored after BACK
+    val requesters = remember { mutableMapOf<String, FocusRequester>() }
+    fun requester(key: String): FocusRequester = requesters.getOrPut(key) { FocusRequester() }
+    fun remembered(key: String, action: () -> Unit): () -> Unit = {
+        HomeFocusMemory.lastKey = key
+        action()
+    }
 
-    // 100% WIDESCREEN 16:9 CANVAS (1920x1080) - NO VERTICAL SCROLL
+    // Restore focus on entry and whenever a dialog on top (e.g. the parental gate) closes
+    LaunchedEffect(focusRestoreTick) {
+        delay(if (focusRestoreTick == 0) 150 else 250)
+        val restored = HomeFocusMemory.lastKey?.let { key ->
+            requesters.containsKey(key) && runCatching { requesters[key]?.requestFocus() }.isSuccess
+        } ?: false
+        if (!restored) runCatching { requester("create").requestFocus() }
+    }
+
+    val idea = remember {
+        val day = (PlatformStorage.currentTimeMillis() / 86_400_000L).toInt()
+        DAILY_IDEAS[((day % DAILY_IDEAS.size) + DAILY_IDEAS.size) % DAILY_IDEAS.size]
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(TvCreamBg)
+            .background(HomeCream)
             .drawBehind {
                 drawRect(
                     brush = Brush.radialGradient(
-                        colors = listOf(TvIvoryGlow, TvCreamBg),
-                        center = Offset(size.width * 0.72f, size.height * 0.25f),
+                        colors = listOf(HomeIvoryGlow, HomeCream),
+                        center = Offset(size.width * 0.72f, size.height * 0.2f),
                         radius = maxOf(size.width, size.height) * 0.55f
                     )
                 )
             }
-            .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV 5% Safe Zone
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 48.dp, vertical = 22.dp) // Fire TV overscan safe zone
         ) {
-            // =================================================================
-            // 1. TOP BAR (.top)
-            // =================================================================
+            // ============================================================
+            // 1. TOP BAR: logo · profile · parents
+            // ============================================================
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // LOGO: WonderLoop with dual-ring infinity mark
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Canvas(modifier = Modifier.size(width = 46.dp, height = 30.dp)) {
-                        val strokeW = 5.dp.toPx()
-                        val r = 11.dp.toPx()
-                        // Left Coral Ring
-                        drawCircle(
-                            color = Color(0xFFFF6B6B),
-                            radius = r,
-                            center = Offset(14.dp.toPx(), 15.dp.toPx()),
-                            style = Stroke(width = strokeW)
-                        )
-                        // Right Teal Ring
-                        drawCircle(
-                            color = Color(0xFF1FBE9C),
-                            radius = r,
-                            center = Offset(32.dp.toPx(), 15.dp.toPx()),
-                            style = Stroke(width = strokeW)
-                        )
-                    }
-
-                    Row {
-                        Text(
-                            text = "Wonder",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFE5484D)
-                        )
-                        Text(
-                            text = "Loop",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF12A58A)
-                        )
-                    }
-                }
-
-                // RIGHT CHIPS: [🚀 Leo ∨], [👤 Mi Perfil] and [MinimalistLock Padres]
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 1. Profile Switcher Chip (.chip2)
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.White,
-                        shadowElevation = 3.dp,
-                        modifier = Modifier
-                            .height(44.dp)
-                            .tvFocusable(
-                                shape = RoundedCornerShape(24.dp),
-                                focusedScale = 1.05f,
-                                onClick = {
-                                    PlatformAudioService.playSfx(SoundEffect.POP)
-                                    onSwitchProfileClick()
-                                }
-                            )
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(start = 6.dp, end = 14.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFFFE3E0)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (childAvatar.isNotBlank()) childAvatar else "🚀",
-                                    fontSize = 18.sp
-                                )
-                            }
-
-                            Text(
-                                text = if (childName.isNotBlank()) childName else "Leo",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = TvInkDark
-                            )
-
-                            Text(
-                                text = "∨",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TvInkDark
-                            )
-                        }
-                    }
-
-                    // 2. Child Profile Button ("Mi Perfil")
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.White,
-                        shadowElevation = 3.dp,
-                        modifier = Modifier
-                            .height(44.dp)
-                            .tvFocusable(
-                                shape = RoundedCornerShape(24.dp),
-                                focusedScale = 1.05f,
-                                onClick = {
-                                    PlatformAudioService.playSfx(SoundEffect.POP)
-                                    onEditProfileClick()
-                                }
-                            )
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(horizontal = 14.dp)
-                        ) {
-                            Text(text = "👤", fontSize = 16.sp)
-                            Text(
-                                text = if (AppStrings.isEnglish) "Profile" else "Mi Perfil",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = TvInkDark
-                            )
-                        }
-                    }
-
-                    // 3. Parents Chip with Minimalist Lock (.chip2.pd)
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.White,
-                        shadowElevation = 3.dp,
-                        modifier = Modifier
-                            .height(44.dp)
-                            .tvFocusable(
-                                shape = RoundedCornerShape(24.dp),
-                                focusedScale = 1.05f,
-                                onClick = {
-                                    PlatformAudioService.playSfx(SoundEffect.POP)
-                                    onParentsClick()
-                                }
-                            )
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        ) {
-                            MinimalistLockIcon(tint = TvInkDark, size = 18.dp)
-                            Text(
-                                text = if (AppStrings.isEnglish) "Parents" else "Padres",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = TvInkDark
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // =================================================================
-            // 2. HERO BANNER (.hero)
-            // =================================================================
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1.15f)
-                    .clip(RoundedCornerShape(32.dp))
-                    .drawBehind {
-                        drawRect(
-                            brush = Brush.linearGradient(
-                                listOf(TvCoral, TvCoralGradientEnd),
-                                start = Offset.Zero,
-                                end = Offset(size.width, size.height)
-                            )
-                        )
-                    }
-            ) {
-                // Background subtle decorative circle
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.08f),
-                        radius = 180.dp.toPx(),
-                        center = Offset(size.width + 40.dp.toPx(), -20.dp.toPx())
+                WonderLoopLogo()
+                Spacer(modifier = Modifier.weight(1f))
+                if (backendOnline == false) {
+                    HeaderChip(
+                        icon = "⚠️",
+                        label = if (en) "Offline · Retry" else "Sin conexión · Reintentar",
+                        focusRequester = requester("retry"),
+                        onClick = onRetryConnection,
+                        accent = HomeCoral
                     )
+                    Spacer(modifier = Modifier.width(12.dp))
                 }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 34.dp, vertical = 18.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // LEFT COLUMN (.hl): Title, subtitle, CTA Button
-                    Column(
-                        modifier = Modifier
-                            .weight(1.1f)
-                            .fillMaxHeight(),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "Crea tu cuento",
-                            fontSize = 34.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                            lineHeight = 38.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Text(
-                            text = "Dibuja un personaje en un folio y hazle una foto con el móvil",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.95f),
-                            lineHeight = 22.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(18.dp))
-
-                        // CTA Button (.cta) with D-Pad focus halo
-                        Surface(
-                            shape = RoundedCornerShape(26.dp),
-                            color = Color.White,
-                            shadowElevation = 6.dp,
-                            modifier = Modifier
-                                .height(52.dp)
-                                .focusRequester(mainCtaFocusRequester)
-                                .tvFocusable(
-                                    shape = RoundedCornerShape(26.dp),
-                                    focusedScale = 1.05f,
-                                    onClick = {
-                                        PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                        onNewAdventureClick()
-                                    }
-                                )
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.padding(horizontal = 26.dp)
-                            ) {
-                                Text(text = "📱", fontSize = 22.sp)
-                                Text(
-                                    text = "Escanear dibujo con el móvil",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = TvCoral
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(20.dp))
-
-                    // RIGHT COLUMN (.hr): 3 Steps + Idea de hoy pill
-                    Column(
-                        modifier = Modifier
-                            .weight(1.15f)
-                            .fillMaxHeight(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        // 3 Visual Step Boxes - Mathematically Aligned
-                        Row(
-                            verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            // Step 1: Dibuja (Animated Stroke)
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(width = 76.dp, height = 66.dp)
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(Color.White),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Canvas(modifier = Modifier.size(46.dp, 36.dp)) {
-                                        val fullPath = Path().apply {
-                                            moveTo(size.width * 0.15f, size.height * 0.75f)
-                                            cubicTo(
-                                                size.width * 0.25f, size.height * 0.15f,
-                                                size.width * 0.55f, size.height * 0.05f,
-                                                size.width * 0.65f, size.height * 0.45f
-                                            )
-                                            cubicTo(
-                                                size.width * 0.75f, size.height * 0.85f,
-                                                size.width * 0.50f, size.height * 0.95f,
-                                                size.width * 0.85f, size.height * 0.45f
-                                            )
-                                        }
-
-                                        // 1. Faint guideline
-                                        drawPath(
-                                            fullPath,
-                                            color = TvCoral.copy(alpha = 0.2f),
-                                            style = Stroke(
-                                                width = 3.dp.toPx(),
-                                                cap = StrokeCap.Round,
-                                                join = StrokeJoin.Round
-                                            )
-                                        )
-
-                                        // 2. Animated active drawing trace
-                                        val pm = PathMeasure()
-                                        pm.setPath(fullPath, false)
-                                        val animPath = Path()
-                                        val curLen = pm.length * drawingProgress
-                                        pm.getSegment(0f, curLen, animPath, true)
-
-                                        drawPath(
-                                            animPath,
-                                            color = TvCoral,
-                                            style = Stroke(
-                                                width = 3.5.dp.toPx(),
-                                                cap = StrokeCap.Round,
-                                                join = StrokeJoin.Round
-                                            )
-                                        )
-
-                                        // 3. Glowing drawing tip moving along path
-                                        val tip = pm.getPosition(curLen)
-                                        drawCircle(
-                                            color = Color(0xFFFFD166),
-                                            radius = 3.5.dp.toPx(),
-                                            center = tip
-                                        )
-                                        drawCircle(
-                                            color = TvCoral,
-                                            radius = 2.dp.toPx(),
-                                            center = tip
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .width(96.dp)
-                                        .height(38.dp),
-                                    contentAlignment = Alignment.TopCenter
-                                ) {
-                                    Text(
-                                        text = "1 · Dibuja",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-
-                            // Dotted Connector 1
-                            Box(
-                                modifier = Modifier.height(66.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "· · ·",
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-
-                            // Step 2: Foto con el móvil (Phone + Lion + Scan beam)
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(width = 76.dp, height = 66.dp)
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(Color.White),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    // Mini phone frame with 🦁
-                                    Box(
-                                        modifier = Modifier
-                                            .size(width = 32.dp, height = 48.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFFFCEAE7))
-                                            .border(2.5.dp, TvInkDark, RoundedCornerShape(8.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(text = "🦁", fontSize = 16.sp)
-                                        // Red animated scan line
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(2.dp)
-                                                .offset(y = (-14 + (28 * scanLineOffset)).dp)
-                                                .background(TvCoral)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .width(96.dp)
-                                        .height(38.dp),
-                                    contentAlignment = Alignment.TopCenter
-                                ) {
-                                    Text(
-                                        text = "2 · Foto con el móvil",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White,
-                                        textAlign = TextAlign.Center,
-                                        lineHeight = 16.sp,
-                                        maxLines = 2
-                                    )
-                                }
-                            }
-
-                            // Dotted Connector 2
-                            Box(
-                                modifier = Modifier.height(66.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "· · ·",
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-
-                            // Step 3: ¡Magia en la tele!
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(width = 76.dp, height = 66.dp)
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(Color.White),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(text = "📖✨", fontSize = 24.sp)
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .width(96.dp)
-                                        .height(38.dp),
-                                    contentAlignment = Alignment.TopCenter
-                                ) {
-                                    Text(
-                                        text = "3 · ¡Magia en la tele!",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White,
-                                        textAlign = TextAlign.Center,
-                                        lineHeight = 16.sp,
-                                        maxLines = 2
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Idea de hoy pill (.idea)
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = TvGoldSoft
-                        ) {
-                            Text(
-                                text = "💡 Idea de hoy: un león con una gran melena amarilla",
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = TvGoldText,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
+                HeaderChip(
+                    icon = childAvatar.ifBlank { "🧒" },
+                    label = "${childName.ifBlank { if (en) "Explorer" else "Explorador" }}  ∨",
+                    focusRequester = requester("switch"),
+                    onClick = remembered("switch", onSwitchProfileClick),
+                    contentDescription = if (en) "Switch profile" else "Cambiar de perfil"
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                HeaderChip(
+                    icon = "👤",
+                    label = if (en) "My profile" else "Mi perfil",
+                    focusRequester = requester("profile"),
+                    onClick = remembered("profile", onEditProfileClick)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                HeaderChip(
+                    icon = "🔒",
+                    label = if (en) "Parents" else "Padres",
+                    focusRequester = requester("parents"),
+                    onClick = remembered("parents", onParentsClick)
+                )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // =================================================================
-            // 3. BOTTOM BAND (.band): Mis Cuentos & Mis Amigos (Side-by-Side)
-            // =================================================================
+            // ============================================================
+            // 2. HERO ROW: create a story · continue reading
+            // ============================================================
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1.05f),
-                horizontalArrangement = Arrangement.spacedBy(28.dp)
+                    .height(204.dp),
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
             ) {
-                // -------------------------------------------------------------
-                // LEFT GROUP: Mis cuentos (.grp)
-                // -------------------------------------------------------------
-                Column(
-                    modifier = Modifier
-                        .weight(1.35f)
-                        .fillMaxHeight()
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (AppStrings.isEnglish) "My Stories" else "Mis cuentos",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = TvInkDark
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Card 1: Seguir leyendo (.cont)
-                        Surface(
-                            shape = RoundedCornerShape(26.dp),
-                            color = Color.White,
-                            shadowElevation = 3.dp,
-                            modifier = Modifier
-                                .weight(1.4f)
-                                .fillMaxHeight()
-                                .tvFocusable(
-                                    shape = RoundedCornerShape(26.dp),
-                                    focusedScale = 1.04f,
-                                    onClick = {
-                                        PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                        if (displayStory != null) {
-                                            onOpenStory(displayStory)
-                                        } else {
-                                            onNewAdventureClick()
-                                        }
-                                    }
-                                )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(14.dp),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Cover Image (.cv)
-                                Box(
-                                    modifier = Modifier
-                                        .width(96.dp)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(Color(0xFFFCEAE7))
-                                        .shadow(3.dp, RoundedCornerShape(16.dp))
-                                ) {
-                                    val coverUri = displayStory?.scenes?.firstOrNull()?.illustrationUrl
-                                        ?: displayStory?.character?.reinterpretedImageUrl
-                                        ?: DemoGrisinAssets.COVER_BASE64
-
-                                    WonderLoopImage(
-                                        model = coverUri,
-                                        contentDescription = "Portada",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-
-                                // Story Meta & Seguir (.tx)
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    verticalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    // Single Clean Header Tag
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = TvGoldSoft
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                        ) {
-                                            Text(text = "▶", fontSize = 9.sp, color = TvTagText)
-                                            Text(
-                                                text = if (AppStrings.isEnglish) "CONTINUE READING" else "SEGUIR LEYENDO",
-                                                fontSize = 10.5.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = TvTagText,
-                                                letterSpacing = 0.5.sp
-                                            )
-                                        }
-                                    }
-
-                                    // Title - 1 line to prevent vertical overflow
-                                    Text(
-                                        text = displayStory?.title ?: (if (AppStrings.isEnglish) "Grisín and the floating toy rescue" else "Grisín y el gran rescate del peluche flotante"),
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TvInkDark,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    // Meta info
-                                    val pageText = if (displayStory != null && displayStory.scenes.isNotEmpty()) {
-                                        if (AppStrings.isEnglish) "Page 2 of ${displayStory.scenes.size}" else "Página 2 de ${displayStory.scenes.size}"
-                                    } else {
-                                        if (AppStrings.isEnglish) "Page 2 of 5" else "Página 2 de 5"
-                                    }
-                                    val heroName = displayStory?.character?.name?.ifBlank { "Grisín" } ?: "Grisín"
-                                    Text(
-                                        text = "✨ $heroName · $pageText",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = TvInkMuted,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    // Single Clean Coral progress bar (.prog)
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp))
-                                            .background(Color(0xFFF1E3E0))
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth(0.4f)
-                                                .fillMaxHeight()
-                                                .clip(RoundedCornerShape(3.dp))
-                                                .background(TvCoral)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Card 2: Ver Biblioteca
-                        Surface(
-                            shape = RoundedCornerShape(26.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                            shadowElevation = 3.dp,
-                            modifier = Modifier
-                                .weight(0.85f)
-                                .fillMaxHeight()
-                                .tvFocusable(
-                                    shape = RoundedCornerShape(26.dp),
-                                    focusedScale = 1.04f,
-                                    onClick = {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        onNavigateToStories()
-                                    }
-                                )
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFFCEAE7)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "📚",
-                                        fontSize = 24.sp
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Text(
-                                    text = if (AppStrings.isEnglish) "Library" else "Ver Biblioteca",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = TvInkDark
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = TvCoralSoft
-                                ) {
-                                    val countText = if (profileStories.size == 1) {
-                                        if (AppStrings.isEnglish) "1 story →" else "1 cuento →"
-                                    } else {
-                                        if (AppStrings.isEnglish) "${profileStories.size} stories →" else "${profileStories.size} cuentos →"
-                                    }
-                                    Text(
-                                        text = countText,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TvCoral,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // -------------------------------------------------------------
-                // RIGHT GROUP: Mis amigos (.grp)
-                // -------------------------------------------------------------
-                Column(
+                CreateStoryCard(
+                    idea = if (en) idea.second else idea.first,
+                    focusRequester = requester("create"),
+                    onClick = remembered("create", onNewAdventureClick),
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                )
+                if (displayStory != null) {
+                    ContinueReadingCard(
+                        story = displayStory,
+                        focusRequester = requester("continue"),
+                        onClick = remembered("continue") { onOpenStory(displayStory) },
+                        modifier = Modifier
+                            .weight(1.25f)
+                            .fillMaxHeight()
+                    )
+                } else {
+                    WelcomeCard(
+                        modifier = Modifier
+                            .weight(1.25f)
+                            .fillMaxHeight()
+                    )
+                }
+            }
+
+            // ============================================================
+            // 3. RAIL: my stories (16:9 covers from the real illustrations)
+            // ============================================================
+            if (sagas.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(20.dp))
+                RailHeader(
+                    title = if (en) "My stories" else "Mis cuentos",
+                    count = if (en) "${sagas.size} ${if (sagas.size == 1) "book" else "books"}" else "${sagas.size} ${if (sagas.size == 1) "libro" else "libros"}"
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (AppStrings.isEnglish) "My Friends" else "Mis amigos",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = TvInkDark
+                    items(sagas.take(10), key = { it.sagaId }) { saga ->
+                        val key = "story:${saga.sagaId}"
+                        StoryCoverCard(
+                            saga = saga,
+                            focusRequester = requester(key),
+                            onClick = remembered(key) { onOpenStory(saga.latestChapter) }
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Card 1: Polaroid Amigo (.pol)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .graphicsLayer { rotationZ = -1.5f }
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(22.dp),
-                                color = Color.White,
-                                shadowElevation = 3.dp,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .tvFocusable(
-                                        shape = RoundedCornerShape(22.dp),
-                                        focusedScale = 1.04f,
-                                        onClick = {
-                                            PlatformAudioService.playSfx(SoundEffect.POP)
-                                            onNavigateToCharacters()
-                                        }
-                                    )
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    // Character photo
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(Color(0xFFFFF6E3))
-                                    ) {
-                                        val characterUri = displayCharacter?.reinterpretedImageUrl
-                                            ?: displayCharacter?.originalDrawingBase64
-                                            ?: DemoGrisinAssets.POLAROID_BASE64
-
-                                        WonderLoopImage(
-                                            model = characterUri,
-                                            contentDescription = displayCharacter?.name ?: "Grisín",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    Text(
-                                        text = displayCharacter?.name?.ifBlank { "Grisín" } ?: "Grisín",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TvInkDark
-                                    )
-                                }
-                            }
-
-                            // Red pin circle on top center of Polaroid
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .offset(y = (-5).dp)
-                                    .size(13.dp)
-                                    .shadow(2.dp, CircleShape)
-                                    .background(TvCoral, CircleShape)
-                            )
-                        }
-
-                        // Card 2: Ver todos (amigos)
-                        Surface(
-                            shape = RoundedCornerShape(26.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.5.dp, Color(0xFFEDE8E1)),
-                            shadowElevation = 3.dp,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .tvFocusable(
-                                    shape = RoundedCornerShape(26.dp),
-                                    focusedScale = 1.04f,
-                                    onClick = {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        onNavigateToCharacters()
-                                    }
-                                )
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFE4F6F0)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "🎨",
-                                        fontSize = 24.sp
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Text(
-                                    text = if (AppStrings.isEnglish) "All Friends" else "Ver todos",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = TvInkDark
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = TvTealSoft
-                                ) {
-                                    val countText = if (uniqueCharacters.size == 1) {
-                                        if (AppStrings.isEnglish) "1 friend →" else "1 amigo →"
-                                    } else {
-                                        if (AppStrings.isEnglish) "${uniqueCharacters.size} friends →" else "${uniqueCharacters.size} amigos →"
-                                    }
-                                    Text(
-                                        text = countText,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TvTeal,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
+                    item(key = "library") {
+                        SeeAllCard(
+                            icon = "📚",
+                            label = if (en) "Open library" else "Ver biblioteca",
+                            width = 224.dp,
+                            height = 126.dp,
+                            focusRequester = requester("library"),
+                            onClick = remembered("library", onNavigateToStories)
+                        )
                     }
                 }
             }
+
+            // ============================================================
+            // 4. RAIL: my friends (characters drawn by the child)
+            // ============================================================
+            if (friends.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(14.dp))
+                RailHeader(
+                    title = if (en) "My friends" else "Mis amigos",
+                    count = if (en) "${friends.size} ${if (friends.size == 1) "friend" else "friends"}" else "${friends.size} ${if (friends.size == 1) "amigo" else "amigos"}"
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp)
+                ) {
+                    items(friends.take(12), key = { "friend:${it.name.lowercase()}" }) { friend ->
+                        val key = "friend:${friend.name.lowercase()}"
+                        FriendCard(
+                            friend = friend,
+                            focusRequester = requester(key),
+                            onClick = remembered(key) {
+                                val story = profileStories.firstOrNull { s ->
+                                    s.character.name.equals(friend.name, ignoreCase = true) ||
+                                        s.sagaHero.name.equals(friend.name, ignoreCase = true)
+                                }
+                                if (story != null) onOpenStory(story) else onNavigateToCharacters()
+                            }
+                        )
+                    }
+                    item(key = "friends_all") {
+                        SeeAllCard(
+                            icon = "🎨",
+                            label = if (en) "All friends" else "Ver todos",
+                            width = 132.dp,
+                            height = 150.dp,
+                            focusRequester = requester("friends_all"),
+                            onClick = remembered("friends_all", onNavigateToCharacters)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun WonderLoopLogo() {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Canvas(modifier = Modifier.size(width = 46.dp, height = 30.dp)) {
+            val strokeW = 5.dp.toPx()
+            val r = 11.dp.toPx()
+            drawCircle(color = Color(0xFFFF6B6B), radius = r, center = Offset(14.dp.toPx(), 15.dp.toPx()), style = Stroke(width = strokeW))
+            drawCircle(color = Color(0xFF1FBE9C), radius = r, center = Offset(32.dp.toPx(), 15.dp.toPx()), style = Stroke(width = strokeW))
+        }
+        Row {
+            Text(text = "Wonder", fontFamily = TitleFont(), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE5484D))
+            Text(text = "Loop", fontFamily = TitleFont(), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF12A58A))
+        }
+    }
+}
+
+@Composable
+private fun HeaderChip(
+    icon: String,
+    label: String,
+    focusRequester: FocusRequester,
+    onClick: () -> Unit,
+    accent: Color = HomeInk,
+    contentDescription: String? = null
+) {
+    TvClickableSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .height(44.dp)
+            .focusRequester(focusRequester),
+        shape = RoundedCornerShape(50),
+        containerColor = Color.White,
+        borderColor = HomeCardBorder,
+        contentDescription = contentDescription ?: label
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .align(Alignment.Center)
+        ) {
+            Text(text = icon, fontSize = 18.sp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = accent, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun CreateStoryCard(idea: String, focusRequester: FocusRequester, onClick: () -> Unit, modifier: Modifier) {
+    val en = AppStrings.isEnglish
+    TvClickableSurface(
+        onClick = onClick,
+        modifier = modifier.focusRequester(focusRequester),
+        shape = RoundedCornerShape(26.dp),
+        containerColor = HomeCoral,
+        contentColor = Color.White,
+        focusedScale = 1.04f,
+        glowColor = HomeCoral.copy(alpha = 0.4f),
+        contentDescription = if (en) "Create a new story with your drawing" else "Crear un cuento nuevo con tu dibujo"
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(listOf(HomeCoral, HomeCoralEnd)))
+                .padding(horizontal = 22.dp, vertical = 16.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text(
+                        text = if (en) "✏️  NEW STORY" else "✏️  NUEVO CUENTO",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (en) "Turn your drawing into a story" else "Convierte tu dibujo en un cuento",
+                        fontFamily = TitleFont(),
+                        fontSize = 23.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        lineHeight = 27.sp,
+                        maxLines = 2
+                    )
+                }
+                Column {
+                    Text(
+                        text = if (en) "💡 Today's idea: $idea" else "💡 Idea de hoy: $idea",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.95f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.White)
+                            .padding(horizontal = 18.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = if (en) "📱 Scan my drawing" else "📱 Escanear mi dibujo",
+                            fontFamily = TitleFont(),
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = HomeCoral
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinueReadingCard(story: FullStoryResponse, focusRequester: FocusRequester, onClick: () -> Unit, modifier: Modifier) {
+    val en = AppStrings.isEnglish
+    val image = story.scenes.firstOrNull { !it.illustrationUrl.isNullOrBlank() }?.illustrationUrl
+        ?: story.sagaHero.reinterpretedImageUrl
+    TvClickableSurface(
+        onClick = onClick,
+        modifier = modifier.focusRequester(focusRequester),
+        shape = RoundedCornerShape(26.dp),
+        containerColor = Color.White,
+        focusedScale = 1.04f,
+        contentDescription = (if (en) "Continue reading " else "Seguir leyendo ") + story.title
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            WonderLoopImage(model = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.72f)))
+            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(HomeGold)
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (en) "▶  CONTINUE READING" else "▶  SEGUIR LEYENDO",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = HomeInk
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = story.title,
+                    fontFamily = TitleFont(),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    lineHeight = 26.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val chapter = story.chapterIndex ?: 1
+                Text(
+                    text = "✨ ${story.sagaHero.name}" + if (chapter > 1) (if (en) " · Chapter $chapter" else " · Capítulo $chapter") else "",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WelcomeCard(modifier: Modifier) {
+    val en = AppStrings.isEnglish
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(26.dp))
+            .background(Color.White)
+            .padding(24.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Column {
+            Text(text = "🖍️ 📱 📺", fontSize = 30.sp)
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = if (en) "Your first story is waiting" else "Tu primer cuento te espera",
+                fontFamily = TitleFont(),
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = HomeInk
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = if (en) "Draw a character on paper, scan it with any phone and watch it come alive here."
+                else "Dibuja un personaje en un papel, escanéalo con cualquier móvil y míralo cobrar vida aquí.",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HomeInkMuted,
+                lineHeight = 22.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun RailHeader(title: String, count: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(text = title, fontFamily = TitleFont(), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = HomeInk)
+        Spacer(modifier = Modifier.width(12.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(HomeCoralSoft)
+                .padding(horizontal = 12.dp, vertical = 3.dp)
+        ) {
+            Text(text = count, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = HomeCoral)
+        }
+    }
+}
+
+@Composable
+private fun StoryCoverCard(saga: SagaBook, focusRequester: FocusRequester, onClick: () -> Unit) {
+    val en = AppStrings.isEnglish
+    val story = saga.latestChapter
+    val cover = saga.rootStory.scenes.firstOrNull { !it.illustrationUrl.isNullOrBlank() }?.illustrationUrl
+        ?: saga.rootStory.sagaHero.reinterpretedImageUrl
+    TvClickableSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(width = 224.dp, height = 126.dp)
+            .focusRequester(focusRequester),
+        shape = RoundedCornerShape(18.dp),
+        containerColor = Color.White,
+        focusedScale = 1.08f,
+        contentDescription = story.title
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            WonderLoopImage(model = cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.75f)))
+            )
+            if (saga.isMultiChapter) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(HomeGold)
+                        .padding(horizontal = 10.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = if (en) "🌟 ${saga.chapterCount} chapters" else "🌟 ${saga.chapterCount} capítulos",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = HomeInk
+                    )
+                }
+            }
+            Text(
+                text = saga.rootStory.title,
+                fontFamily = TitleFont(),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                lineHeight = 19.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FriendCard(friend: CharacterProfile, focusRequester: FocusRequester, onClick: () -> Unit) {
+    TvClickableSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(width = 132.dp, height = 150.dp)
+            .focusRequester(focusRequester),
+        shape = RoundedCornerShape(20.dp),
+        containerColor = Color.White,
+        borderColor = HomeCardBorder,
+        focusedScale = 1.08f,
+        contentDescription = friend.name
+    ) {
+        Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(112.dp)
+                    .background(Color(0xFFFFF6E3))
+            ) {
+                WonderLoopImage(
+                    model = friend.reinterpretedImageUrl ?: friend.originalDrawingBase64,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = friend.name,
+                    fontFamily = TitleFont(),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HomeInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeeAllCard(
+    icon: String,
+    label: String,
+    width: androidx.compose.ui.unit.Dp,
+    height: androidx.compose.ui.unit.Dp,
+    focusRequester: FocusRequester,
+    onClick: () -> Unit
+) {
+    TvClickableSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(width = width, height = height)
+            // Last card of a rail: RIGHT must not escape diagonally to the top bar
+            .onPreviewKeyEvent { it.key == Key.DirectionRight }
+            .focusRequester(focusRequester),
+        shape = RoundedCornerShape(20.dp),
+        containerColor = Color.White,
+        borderColor = HomeCardBorder,
+        focusedScale = 1.08f,
+        contentDescription = label
+    ) {
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(HomeTealSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = icon, fontSize = 22.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = "$label →", fontFamily = TitleFont(), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = HomeTeal)
         }
     }
 }

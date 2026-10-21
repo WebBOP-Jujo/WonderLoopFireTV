@@ -66,6 +66,8 @@ fun StoryGeneratingScreen(
     onStoryGenerated: (FullStoryResponse) -> Unit,
     onError: (String) -> Unit
 ) {
+    org.wonderloop.app.ui.tv.KeepScreenOn()
+
     val is3D = artStyle == "3d_animation"
     val phrases = remember(AppStrings.isEnglish, character.name, childName, childAge, continuation, is3D) {
         if (continuation != null) {

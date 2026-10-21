@@ -2,7 +2,15 @@ import { IVisionAdapter, LlmVisionAdapter } from '../adapters/vision.adapter.js'
 import { IStoryAdapter, LlmStoryAdapter } from '../adapters/story.adapter.js';
 import { IImageAdapter, NanobananaImageAdapter } from '../adapters/image.adapter.js';
 import { IAudioAdapter, createAudioAdapter, VoiceStyle } from '../adapters/audio.adapter.js';
-import { ArtStyle, CharacterProfile, FullStoryResponse, StoryContinuationContext, StoryScene } from '../types/story.types.js';
+import { ArtStyle, CharacterProfile, CreativeChallenge, FullStoryResponse, StoryContinuationContext, StoryScene } from '../types/story.types.js';
+
+/** Narration track key for the drawing challenge (scene pages are 1..5). */
+const CHALLENGE_AUDIO_PAGE = 0;
+
+function challengeNarrationText(challenge: CreativeChallenge, heroName: string, language: 'es' | 'en'): string {
+  const opener = language === 'en' ? `Help ${heroName}!` : `¡Ayuda a ${heroName}!`;
+  return [opener, challenge.prompt, challenge.encouragement].filter((part) => part?.trim()).join(' ');
+}
 
 export class StoryOrchestratorService {
   constructor(
@@ -18,10 +26,11 @@ export class StoryOrchestratorService {
   async analyzeDrawing(
     imageBuffer: Buffer,
     mimeType: string,
-    artStyle: ArtStyle = 'watercolor'
+    artStyle: ArtStyle = 'watercolor',
+    language: 'es' | 'en' = 'es'
   ): Promise<CharacterProfile> {
     console.log(`🔍 [StoryService] Analyzing drawing (${imageBuffer.length} bytes, ${mimeType}, style: ${artStyle})...`);
-    const profile = await this.visionAdapter.analyzeDrawing(imageBuffer, mimeType);
+    const profile = await this.visionAdapter.analyzeDrawing(imageBuffer, mimeType, language);
 
     const isBlank =
       profile.isValidDrawing === false ||
@@ -77,7 +86,7 @@ export class StoryOrchestratorService {
     const sagaHero = continuation?.originalHero || continuation?.previousCharacter || character;
     const newCompanion = isContinuation ? character : undefined;
 
-    console.log(`📖 [StoryService] Generating story (${language.toUpperCase()}, voice: ${voiceStyle}, style: ${effectiveArtStyle}) for saga hero "${sagaHero.name}" with companion "${newCompanion?.name || 'none'}" (Child: ${childName}, Age: ${childAge}, isContinuation: ${isContinuation})...`);
+    console.log(`📖 [StoryService] Generating story (${language.toUpperCase()}, voice: ${voiceStyle}, style: ${effectiveArtStyle}) for saga hero "${sagaHero.name}" with companion "${newCompanion?.name || 'none'}" (child age: ${childAge}, isContinuation: ${isContinuation})...`);
 
     const t0 = Date.now();
     // 1. Generate text story and creative challenge via LLM (with saga continuity if present)
@@ -107,8 +116,15 @@ export class StoryOrchestratorService {
     const [audioMap, illustrations] = await Promise.all([
       (async () => {
         const tAudioStart = Date.now();
+        // The challenge is narrated too, so pre-readers hear their drawing mission in the same voice
         const res = await this.audioAdapter.generateFullStoryAudio(
-          generated.scenes.map((s) => ({ pageNumber: s.pageNumber, textContent: s.textContent })),
+          [
+            ...generated.scenes.map((s) => ({ pageNumber: s.pageNumber, textContent: s.textContent })),
+            {
+              pageNumber: CHALLENGE_AUDIO_PAGE,
+              textContent: challengeNarrationText(generated.creativeChallenge, sagaHero.name, language)
+            }
+          ],
           language,
           voiceStyle
         );
@@ -127,7 +143,8 @@ export class StoryOrchestratorService {
               companionRefImage,
               effectiveArtStyle,
               generated.settingBible,
-              sagaHero
+              sagaHero,
+              newCompanion
             )
           )
         );
@@ -153,7 +170,8 @@ export class StoryOrchestratorService {
     const enrichedScenes: StoryScene[] = generated.scenes.map((scene, idx) => ({
       ...scene,
       illustrationUrl: illustrations[idx] || characterRefImage || undefined,
-      audioBase64: audioMap.get(scene.pageNumber) || undefined
+      audioBase64: audioMap.get(scene.pageNumber)?.audio || undefined,
+      wordTimingsMs: audioMap.get(scene.pageNumber)?.wordTimingsMs
     }));
 
     const storyId = `story_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -162,6 +180,8 @@ export class StoryOrchestratorService {
       storyId,
       title: generated.title,
       settingBible: generated.settingBible,
+      chapterSummary: generated.chapterSummary,
+      worldId: generated.worldId,
       childName,
       childAge,
       character: {
@@ -171,7 +191,10 @@ export class StoryOrchestratorService {
       },
       companionName: newCompanion?.name,
       scenes: enrichedScenes,
-      creativeChallenge: generated.creativeChallenge,
+      creativeChallenge: {
+        ...generated.creativeChallenge,
+        audioBase64: audioMap.get(CHALLENGE_AUDIO_PAGE)?.audio || undefined
+      },
       createdAt: new Date().toISOString(),
       artStyle: effectiveArtStyle,
       continuation: continuation ? {

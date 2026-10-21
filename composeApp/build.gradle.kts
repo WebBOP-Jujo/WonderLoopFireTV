@@ -50,6 +50,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.revenuecat.purchases)
+            // Compose for TV (Google): focus-aware Surface/Card/Button tuned for D-pad remotes (used via ui/tv primitives)
+            implementation(libs.androidx.tv.material)
             implementation("com.google.zxing:core:3.5.3")
         }
     }

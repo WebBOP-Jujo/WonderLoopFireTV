@@ -2,7 +2,7 @@ import { CharacterProfile, ColorDef } from '../types/story.types.js';
 import { ILlmClient, getLlmClient } from './llm.client.js';
 
 export interface IVisionAdapter {
-  analyzeDrawing(imageBuffer: Buffer, mimeType: string): Promise<CharacterProfile>;
+  analyzeDrawing(imageBuffer: Buffer, mimeType: string, language?: 'es' | 'en'): Promise<CharacterProfile>;
 }
 
 const CHARACTER_PROFILE_SCHEMA = {
@@ -24,29 +24,29 @@ const CHARACTER_PROFILE_SCHEMA = {
       }
     },
     distinctiveFeatures: { type: 'array', items: { type: 'string' } },
-    personality: { type: 'string' }
+    personality: { type: 'string' },
+    visualDescriptionEn: { type: 'string', description: 'English, 20-40 words, what the character looks like' }
   },
-  required: ['isValidDrawing', 'confidence', 'name', 'species', 'colorPalette', 'distinctiveFeatures', 'personality']
+  required: ['isValidDrawing', 'confidence', 'name', 'species', 'colorPalette', 'distinctiveFeatures', 'personality', 'visualDescriptionEn']
 };
 
 const COLOR_MAP_FALLBACKS: Record<string, string> = {
-  azul: '#3A86FF',
-  celeste: '#4CC9F0',
-  turquesa: '#00B4D8',
-  rojo: '#E63946',
+  azul: '#3A86FF', blue: '#3A86FF',
+  celeste: '#4CC9F0', 'light blue': '#4CC9F0', sky: '#4CC9F0',
+  turquesa: '#00B4D8', turquoise: '#00B4D8',
+  rojo: '#E63946', red: '#E63946',
   coral: '#D9384A',
-  rosa: '#FF70A6',
-  verde: '#0E7F64',
-  amarillo: '#FFD166',
-  dorado: '#FFB703',
-  naranja: '#FB8500',
-  morado: '#7209B7',
-  violeta: '#8338EC',
-  blanco: '#F8F9FA',
-  gris: '#ADB5BD',
-  negro: '#212529',
-  marron: '#8D5B4C',
-  marrón: '#8D5B4C'
+  rosa: '#FF70A6', pink: '#FF70A6',
+  verde: '#0E7F64', green: '#0E7F64',
+  amarillo: '#FFD166', yellow: '#FFD166',
+  dorado: '#FFB703', gold: '#FFB703',
+  naranja: '#FB8500', orange: '#FB8500',
+  morado: '#7209B7', purple: '#7209B7',
+  violeta: '#8338EC', violet: '#8338EC',
+  blanco: '#F8F9FA', white: '#F8F9FA',
+  gris: '#ADB5BD', gray: '#ADB5BD', grey: '#ADB5BD', silver: '#ADB5BD', plateado: '#ADB5BD',
+  negro: '#212529', black: '#212529',
+  marron: '#8D5B4C', marrón: '#8D5B4C', brown: '#8D5B4C'
 };
 
 function sanitizeHex(hexCandidate?: string, colorName: string = ''): string {
@@ -62,6 +62,30 @@ function sanitizeHex(hexCandidate?: string, colorName: string = ''): string {
   return '#3A86FF';
 }
 
+/** Names the models fall back to again and again: banned so every drawing gets a fresh name. */
+const OVERUSED_NAMES = ['Felicito', 'Mimí', 'Mimi', 'Misu', 'Misi', 'Pipo', 'Nilo', 'Chispita', 'Blub', 'Lulú', 'Lulu', 'Pingui', 'Sparky', 'Bolita'];
+
+function buildVisionPrompt(language: 'es' | 'en'): string {
+  const outLanguage = language === 'en' ? 'ENGLISH' : 'SPANISH (from Spain)';
+  return `You analyze a photo of a drawing a child (3-10 years old) made on paper. The result becomes the hero of a bedtime story shown on the family TV.
+
+1. FOCUS only on what the child drew. Ignore the table, hands, shadows, pencils or paper texture.
+2. VALIDITY:
+   - isValidDrawing = true if there are visible child strokes of a character, creature or object (even very simple or abstract ones).
+   - isValidDrawing = false if the photo is blank, dark, blurry or shows no drawing at all.
+   - confidence: 0.0-1.0, how clearly the drawn character can be seen.
+3. INTERPRET with kindness: if it is abstract or scribbly, read it the way the child probably intended. If anything looks inappropriate, reinterpret it in a fully positive, gentle way for young children.
+4. COLORS: 2-4 dominant colors actually used in the strokes, each with a short name and its hex code (#RRGGBB) as close as possible to the real crayon/marker color.
+5. TEXT FIELDS IN ${outLanguage}: name, species, shapeLanguage, mood, colorPalette names, distinctiveFeatures and personality.
+   - species: what it is, in 2-5 plain words a child understands (a little dragon, a robot with wheels, a smiling cat). No "magical" labels.
+   - distinctiveFeatures: 2-4 concrete VISIBLE features from the drawing (long curly tail, three eyes, big wheels, striped legs). They will be used in the story, so make them specific.
+   - personality: one short sentence a child would like, consistent with the facial expression.
+   - shapeLanguage: the silhouette in a few words (round fluffy body with triangle ears).
+6. NAME: an ORIGINAL name of 2-3 syllables, easy to say for a small child, inspired by the drawing's look, color or sound (a round orange fish could be "Mango"; a tall green robot "Tuli"). Do not use these overused names: ${OVERUSED_NAMES.join(', ')}.
+7. namePhonetic: simple syllables for text-to-speech (e.g. "man-go").
+8. visualDescriptionEn: ALWAYS IN ENGLISH, 20-40 words describing exactly how the character looks (body shape, colors, features, expression) so an illustrator can redraw it consistently.`;
+}
+
 /**
  * Computer-vision step: turns a photo of the child's paper drawing into a structured CharacterProfile.
  * The model call goes through ILlmClient (Amazon Nova 2 Lite on Bedrock by default, Gemini as fallback).
@@ -69,53 +93,15 @@ function sanitizeHex(hexCandidate?: string, colorName: string = ''): string {
 export class LlmVisionAdapter implements IVisionAdapter {
   constructor(private llm: ILlmClient = getLlmClient()) {}
 
-  async analyzeDrawing(imageBuffer: Buffer, mimeType: string): Promise<CharacterProfile> {
-    console.log(`🔍 [VisionAdapter] Analyzing drawing with ${this.llm.name} (${imageBuffer.length} bytes, ${mimeType})...`);
+  async analyzeDrawing(imageBuffer: Buffer, mimeType: string, language: 'es' | 'en' = 'es'): Promise<CharacterProfile> {
+    const lang: 'es' | 'en' = language === 'en' ? 'en' : 'es';
+    console.log(`🔍 [VisionAdapter] Analyzing drawing with ${this.llm.name} (${imageBuffer.length} bytes, ${mimeType}, ${lang})...`);
 
     try {
-      const prompt = `
-Eres el experto analizador de creatividad infantil y visión artística de WonderLoop. 
-Analiza la fotografía de este dibujo hecho a mano por un niño en una hoja de papel.
-
-DIRECTRICES DE ANÁLISIS:
-1. Concéntrate EXCLUSIVAMENTE en el personaje u objeto dibujado por el niño. Ignora por completo el fondo (mesa, manos, sombras, estuche de lápices, textura del mantel).
-2. Si el dibujo es abstracto o esquemático, interpreta su intención con enorme ternura, fantasía e imaginación infantil.
-3. DETECCIÓN DE VALIDEZ DEL DIBUJO:
-   - "isValidDrawing": true si hay trazos infantiles visibles de un personaje, criatura u objeto.
-   - "isValidDrawing": false si la foto está completamente vacía, oscura, desenfocada, o solo apunta a una mesa sin ningún dibujo.
-   - "confidence": número entre 0.0 y 1.0 indicando la nitidez y claridad del personaje dibujado.
-4. CONSISTENCIA DE COLOR (PALETA HEX):
-   - Extrae de 2 a 4 colores dominantes presentes en los trazos de cera, rotulador o lápiz del dibujo.
-   - Asigna a cada uno su nombre descriptivo en español y su código Hexadecimal exacto (ej. "#3A86FF", "#FFD166").
-5. FORMA Y EXPRESIÓN:
-   - Describe el "shapeLanguage" (silueta geométrica: ej. "cuerpo redondeado y esponjoso con orejitas triangulares", "silueta cuadrada de robot con antenas").
-   - Describe el "mood" (ej. "alegre, curioso y entusiasta").
-6. FONÉTICA INFANTIL:
-   - Proporciona "namePhonetic": pronunciación silábica simplificada para motores de voz TTS (ej. "ni-lo", "chis-pi-ta", "po-pi").
-7. SEGURIDAD INFANTIL (COPPA / Child-Safe): Si detectas cualquier elemento inapropiado, reinterpreta siempre de forma 100% positiva, pacífica y amigable para niños de 3 a 10 años.
-
-Devuelve estrictamente un objeto JSON válido con la siguiente estructura:
-{
-  "isValidDrawing": true,
-  "confidence": 0.95,
-  "name": "Nombre original, dulce y sonoro acorde al dibujo (ej. Nilo, Chispita, Pipo, Blub)",
-  "namePhonetic": "ni-lo",
-  "species": "Especie o descripción mágica corta (ej. Dragón volador esponjoso, Robot explorador, Monstruito bondadoso)",
-  "shapeLanguage": "cuerpo redondeado con alas pequeñas y patitas cortas",
-  "mood": "alegre, curioso y juguetón",
-  "colorPalette": [
-    { "name": "azul celeste", "hex": "#4CC9F0" },
-    { "name": "amarillo dorado", "hex": "#FFD166" }
-  ],
-  "distinctiveFeatures": ["alas redondas de dragón", "ojos grandes y expresivos", "manchitas doradas en la espalda"],
-  "personality": "Descripción breve, tierna y divertida de su personalidad (aventurero, curioso, amigo leal)"
-}
-`;
-
       const parsed = await this.llm.generateJson({
-        prompt,
+        prompt: buildVisionPrompt(lang),
         image: { bytes: imageBuffer, mimeType: mimeType || 'image/jpeg' },
-        temperature: 0.35,
+        temperature: 0.5,
         maxTokens: 1500,
         timeoutMs: 30_000,
         label: 'Drawing Vision Analysis',
@@ -131,7 +117,7 @@ Devuelve estrictamente un objeto JSON válido con la siguiente estructura:
 
       if (rawPalette.length > 0) {
         for (const item of rawPalette) {
-          const colorName = typeof item === 'string' ? item : (item.name || 'color mágico');
+          const colorName = typeof item === 'string' ? item : (item.name || (lang === 'en' ? 'color' : 'color'));
           const hex = sanitizeHex(typeof item === 'object' ? item.hex : undefined, colorName);
           colorPalette.push({ name: colorName, hex });
           colorHexes.push(hex);
@@ -146,27 +132,30 @@ Devuelve estrictamente un objeto JSON válido con la siguiente estructura:
           primaryColors.push(nameStr);
         }
       } else {
-        colorPalette.push({ name: 'azul mágico', hex: '#3A86FF' }, { name: 'dorado brillante', hex: '#FFD166' });
+        const fallback = lang === 'en' ? ['blue', 'yellow'] : ['azul', 'amarillo'];
+        colorPalette.push({ name: fallback[0], hex: '#3A86FF' }, { name: fallback[1], hex: '#FFD166' });
         colorHexes.push('#3A86FF', '#FFD166');
-        primaryColors.push('azul mágico', 'dorado brillante');
+        primaryColors.push(...fallback);
       }
 
       const isValidDrawing = typeof parsed.isValidDrawing === 'boolean' ? parsed.isValidDrawing : true;
       const confidence = typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.9;
+      const isEn = lang === 'en';
 
       return {
-        name: parsed.name?.trim().slice(0, 40) || 'Compañero Mágico',
+        name: parsed.name?.trim().slice(0, 40) || (isEn ? 'Buddy' : 'Amigo'),
         namePhonetic: parsed.namePhonetic?.trim().toLowerCase().slice(0, 40) || undefined,
-        species: parsed.species?.trim().slice(0, 60) || 'Criatura de cuento',
-        shapeLanguage: parsed.shapeLanguage?.trim().slice(0, 100) || 'figura redondeada y amigable',
-        mood: parsed.mood?.trim().slice(0, 60) || 'alegre y curioso',
+        species: parsed.species?.trim().slice(0, 60) || (isEn ? 'storybook friend' : 'amigo de cuento'),
+        shapeLanguage: parsed.shapeLanguage?.trim().slice(0, 100) || (isEn ? 'round, friendly shape' : 'figura redondeada y amigable'),
+        mood: parsed.mood?.trim().slice(0, 60) || (isEn ? 'happy and curious' : 'alegre y curioso'),
         primaryColors: primaryColors.slice(0, 4),
         colorPalette: colorPalette.slice(0, 4),
         colorHexes: colorHexes.slice(0, 4),
         distinctiveFeatures: Array.isArray(parsed.distinctiveFeatures) && parsed.distinctiveFeatures.length > 0
           ? parsed.distinctiveFeatures.map((f: any) => String(f).trim().slice(0, 80)).slice(0, 5)
-          : ['ojos curiosos y expresivos', 'gran sonrisa amistosa'],
-        personality: parsed.personality?.trim().slice(0, 200) || 'Alegre, bondadoso y listo para vivir grandes aventuras.',
+          : (isEn ? ['big curious eyes', 'friendly smile'] : ['ojos grandes y curiosos', 'sonrisa amistosa']),
+        personality: parsed.personality?.trim().slice(0, 200) || (isEn ? 'Cheerful, kind and ready for a new adventure.' : 'Alegre, bondadoso y con ganas de vivir una aventura.'),
+        visualDescriptionEn: parsed.visualDescriptionEn?.trim().slice(0, 400) || undefined,
         confidence,
         isValidDrawing,
         originalDrawingBase64: `data:${mimeType};base64,${imageBuffer.toString('base64')}`
@@ -177,4 +166,3 @@ Devuelve estrictamente un objeto JSON válido con la siguiente estructura:
     }
   }
 }
-

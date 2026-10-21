@@ -86,6 +86,8 @@ fun App(
             val backendOnline = api.isOnline
             var isPremium by remember { mutableStateOf(false) }
             var showParentalGate by remember { mutableStateOf(false) }
+            // Bumped when a dialog closes without navigating, so the screen underneath re-acquires D-pad focus
+            var focusRestoreTick by remember { mutableStateOf(0) }
             var parentalGateExplanation by remember { mutableStateOf<String?>(null) }
             var parentalGateOnSuccess by remember { mutableStateOf<(() -> Unit)?>(null) }
             var showDailyLimitDialog by remember { mutableStateOf(false) }
@@ -114,6 +116,7 @@ fun App(
                     showParentalGate = false
                     parentalGateExplanation = null
                     parentalGateOnSuccess = null
+                    focusRestoreTick++
                     return
                 }
                 // Fire TV Guideline: BACK from root destinations must exit the app to TV launcher directly without a confirmation dialog
@@ -214,6 +217,7 @@ fun App(
                         showParentalGate = false
                         parentalGateExplanation = null
                         parentalGateOnSuccess = null
+                        focusRestoreTick++
                     },
                     onSuccess = {
                         showParentalGate = false
@@ -605,6 +609,7 @@ fun App(
                     is Screen.Home -> {
                         val coroutineScope = rememberCoroutineScope()
                         HomeScreen(
+                            focusRestoreTick = focusRestoreTick,
                             childName = childName,
                             childAvatar = childAvatar,
                             backendOnline = backendOnline,
@@ -804,7 +809,12 @@ fun App(
                                                 if (storyToContinue.character.name !in this) add(storyToContinue.character.name)
                                             }
                                         },
-                                        artStyle = inheritedArtStyle
+                                        artStyle = inheritedArtStyle,
+                                        previousChapterSummaries = buildList {
+                                            storyToContinue.continuation?.previousChapterSummaries?.let { addAll(it) }
+                                            storyToContinue.chapterSummary?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                        }.takeLast(6),
+                                        worldId = storyToContinue.worldId
                                     )
                                     navigateTo(Screen.CameraScan(continuationContext, scanSessionKey = PlatformStorage.currentTimeMillis()))
                                 }

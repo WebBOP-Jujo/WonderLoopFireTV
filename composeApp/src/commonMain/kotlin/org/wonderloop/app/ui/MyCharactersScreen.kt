@@ -16,6 +16,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
@@ -83,6 +90,12 @@ fun MyCharactersScreen(
     onOpenStory: (FullStoryResponse) -> Unit,
     onNewAdventureClick: () -> Unit
 ) {
+    val firstFriendFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(150)
+        try { firstFriendFocusRequester.requestFocus() } catch (_: Exception) {}
+    }
+
     val stories = StoryRepository.getStoriesForProfile()
 
     // Group stories by character name (both chapter characters and saga founder heroes)
@@ -413,6 +426,7 @@ fun MyCharactersScreen(
                                             character = item.character,
                                             stories = item.stories,
                                             onOpenStory = onOpenStory,
+                                            focusRequester = if (overallIndex == 0) firstFriendFocusRequester else null,
                                             pinColor = pinColor,
                                             rotation = rotation,
                                             modifier = Modifier.width(sheetWidth)
@@ -457,6 +471,7 @@ private fun PinnedDrawingSheet(
     onOpenStory: (FullStoryResponse) -> Unit,
     pinColor: Color,
     rotation: Float,
+    focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
     val originalDrawing = character.originalDrawingBase64?.takeIf { it.isNotBlank() }
@@ -477,7 +492,29 @@ private fun PinnedDrawingSheet(
             colors = CardDefaults.cardColors(containerColor = PaperPolaroid),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
             border = BorderStroke(1.5.dp, BoardCardBorder),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .onKeyEvent {
+                    if (it.key == Key.Menu && it.type == KeyEventType.KeyUp && hasBothImages) {
+                        PlatformAudioService.playSfx(if (showOriginal) SoundEffect.POP else SoundEffect.MAGIC_CHIME)
+                        showOriginal = !showOriginal
+                        true
+                    } else false
+                }
+                .tvFocusable(
+                    shape = RoundedCornerShape(16.dp),
+                    focusedScale = 1.06f,
+                    focusRequester = focusRequester,
+                    onClick = {
+                        val first = stories.firstOrNull()
+                        if (first != null) {
+                            PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
+                            onOpenStory(first)
+                        } else if (hasBothImages) {
+                            showOriginal = !showOriginal
+                        }
+                    }
+                )
         ) {
             Column(
                 modifier = Modifier
@@ -498,11 +535,7 @@ private fun PinnedDrawingSheet(
                                 colors = listOf(BoardGoldSoft, BoardCoralSoft)
                             )
                         )
-                        .border(1.dp, BoardCardBorder, RoundedCornerShape(12.dp))
-                        .clickable(enabled = hasBothImages) {
-                            PlatformAudioService.playSfx(if (showOriginal) SoundEffect.POP else SoundEffect.MAGIC_CHIME)
-                            showOriginal = !showOriginal
-                        },
+                        .border(1.dp, BoardCardBorder, RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     AnimatedContent(
@@ -566,7 +599,7 @@ private fun PinnedDrawingSheet(
                             Text(
                                 text = if (showOriginal) AppStrings.paperDrawingBadge else AppStrings.aiVersionBadge,
                                 color = Color.White,
-                                fontSize = 9.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1
                             )
@@ -580,7 +613,7 @@ private fun PinnedDrawingSheet(
                 Text(
                     text = character.name,
                     fontFamily = TitleFont(),
-                    fontSize = 15.5.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = BoardInkDark,
                     textAlign = TextAlign.Center,
@@ -593,9 +626,9 @@ private fun PinnedDrawingSheet(
 
                 val tapFeedbackText = if (hasBothImages) {
                     if (showOriginal) {
-                        if (AppStrings.isEnglish) "✨ See magic" else "✨ Ver magia"
+                        if (AppStrings.isEnglish) "☰ See magic" else "☰ Ver magia"
                     } else {
-                        if (AppStrings.isEnglish) "👆 See drawing" else "👆 Ver dibujo"
+                        if (AppStrings.isEnglish) "☰ See drawing" else "☰ Ver dibujo"
                     }
                 } else if (character.species.isNotBlank()) {
                     character.species
@@ -606,15 +639,11 @@ private fun PinnedDrawingSheet(
                 Surface(
                     shape = RoundedCornerShape(50.dp),
                     color = if (showOriginal) BoardCoralSoft else BoardMintSoft,
-                    border = BorderStroke(1.dp, if (showOriginal) BoardCoralBorder else BoardMintBorder),
-                    modifier = Modifier.clickable(enabled = hasBothImages) {
-                        PlatformAudioService.playSfx(if (showOriginal) SoundEffect.POP else SoundEffect.MAGIC_CHIME)
-                        showOriginal = !showOriginal
-                    }
+                    border = BorderStroke(1.dp, if (showOriginal) BoardCoralBorder else BoardMintBorder)
                 ) {
                     Text(
                         text = tapFeedbackText,
-                        fontSize = 10.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (showOriginal) BoardCoral else BoardMint,
                         textAlign = TextAlign.Center,
@@ -641,7 +670,6 @@ private fun PinnedDrawingSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(34.dp)
-                            .tvFocusable(shape = RoundedCornerShape(50.dp), onClick = onReadFirstStory)
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -650,7 +678,7 @@ private fun PinnedDrawingSheet(
                             Text(
                                 text = AppStrings.readStoryButton(stories.size),
                                 fontFamily = TitleFont(),
-                                fontSize = 13.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White,
                                 maxLines = 1,
@@ -764,7 +792,7 @@ private fun AddCharacterPolaroidSlot(
                 ) {
                     Text(
                         text = if (AppStrings.isEnglish) "✨ Draw on paper" else "✨ Dibuja en papel",
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = BoardGoldText,
                         maxLines = 1,

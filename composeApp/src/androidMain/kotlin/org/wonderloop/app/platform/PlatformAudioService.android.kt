@@ -253,6 +253,15 @@ actual object PlatformAudioService {
         }
     }
 
+    actual fun currentPositionMs(): Long {
+        return try {
+            val player = mediaPlayer ?: return -1L
+            if (player.isPlaying) player.currentPosition.toLong() else -1L
+        } catch (_: Exception) {
+            -1L
+        }
+    }
+
     actual fun stop() {
         try {
             if (mediaPlayer?.isPlaying == true) {

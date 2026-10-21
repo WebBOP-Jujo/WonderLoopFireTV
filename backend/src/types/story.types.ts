@@ -16,6 +16,8 @@ export interface CharacterProfile {
   personality: string;
   confidence?: number;
   isValidDrawing?: boolean;
+  /** Short English description of the look, used by every illustration prompt (consistency across languages). */
+  visualDescriptionEn?: string;
   originalDrawingBase64?: string | null;
   reinterpretedImageUrl?: string | null;
 }
@@ -26,6 +28,8 @@ export interface StoryScene {
   visualPrompt: string;
   illustrationUrl?: string | null;
   audioBase64?: string | null;
+  /** Start time (ms) of each whitespace-separated word of textContent in the narration (Polly speech marks). */
+  wordTimingsMs?: number[];
 }
 
 export type ChallengeSubject = 'friend' | 'accessory' | 'shelter' | 'vehicle' | 'snack' | 'place';
@@ -34,6 +38,7 @@ export interface CreativeChallenge {
   prompt: string;
   targetSubject: ChallengeSubject;
   encouragement: string;
+  audioBase64?: string;
 }
 
 export type ArtStyle = 'watercolor' | '3d_animation';
@@ -48,6 +53,10 @@ export interface StoryContinuationContext {
   sagaId?: string;
   originalHero?: CharacterProfile;
   previousCompanionNames?: string[];
+  /** 1-2 sentence summaries of every previous chapter (saga memory). */
+  previousChapterSummaries?: string[];
+  /** World of the previous chapter (catalog id) to allow continuity. */
+  worldId?: string;
   artStyle?: ArtStyle;
 }
 
@@ -68,6 +77,8 @@ export interface FullStoryResponse {
   nextStoryTitle?: string;
   artStyle?: ArtStyle;
   settingBible?: string;
+  chapterSummary?: string;
+  worldId?: string;
 }
 
 export interface CreateStoryRequest {

@@ -180,7 +180,8 @@ export function createTvSessionApiRouter(): Router {
       sessionId,
       shortCode,
       uploadUrl,
-      lanIp,
+      // Only meaningful on a LAN deployment; never advertise internal addresses behind a public URL
+      lanIp: process.env.PUBLIC_BASE_URL ? undefined : lanIp,
       expiresInSeconds: Math.round(SESSION_TTL_MS / 1000)
     });
   });
@@ -309,7 +310,7 @@ export function createTvSessionApiRouter(): Router {
       sessionId: session.sessionId,
       shortCode: session.shortCode,
       uploadUrl,
-      lanIp,
+      lanIp: process.env.PUBLIC_BASE_URL ? undefined : lanIp,
       status: session.status,
       expiresInSeconds: Math.round(SESSION_TTL_MS / 1000)
     });

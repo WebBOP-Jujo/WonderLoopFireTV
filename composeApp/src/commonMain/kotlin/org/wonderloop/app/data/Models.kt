@@ -14,7 +14,22 @@ data class CharacterProfile(
     val originalDrawingBase64: String? = null,
     val reinterpretedImageUrl: String? = null,
     val isValidDrawing: Boolean = true,
-    val confidence: Float = 1.0f
+    val confidence: Float = 1.0f,
+    // Visual identity from the drawing analysis. They must round-trip back to /generate:
+    // the story and the 5 illustrations use them to keep the hero's exact colors and silhouette.
+    val namePhonetic: String? = null,
+    val shapeLanguage: String? = null,
+    val mood: String? = null,
+    val colorPalette: List<ColorDef> = emptyList(),
+    val colorHexes: List<String> = emptyList(),
+    val visualDescriptionEn: String? = null
+)
+
+@Immutable
+@Serializable
+data class ColorDef(
+    val name: String = "",
+    val hex: String = ""
 )
 
 @Immutable
@@ -24,7 +39,9 @@ data class StoryScene(
     val textContent: String,
     val visualPrompt: String,
     val illustrationUrl: String? = null,
-    val audioBase64: String? = null
+    val audioBase64: String? = null,
+    /** Start time (ms) of each whitespace-separated word of textContent in the narration (karaoke highlight). */
+    val wordTimingsMs: List<Int> = emptyList()
 )
 
 @Immutable
@@ -32,7 +49,8 @@ data class StoryScene(
 data class CreativeChallenge(
     val prompt: String,
     val targetSubject: String = "friend",
-    val encouragement: String = ""
+    val encouragement: String = "",
+    val audioBase64: String? = null
 )
 
 @Immutable
@@ -47,7 +65,11 @@ data class StoryContinuationContext(
     val sagaId: String? = null,
     val originalHero: CharacterProfile? = null,
     val previousCompanionNames: List<String> = emptyList(),
-    val artStyle: String? = null
+    val artStyle: String? = null,
+    /** Saga memory: 1-2 sentence summary of every previous chapter, oldest first. */
+    val previousChapterSummaries: List<String> = emptyList(),
+    /** World of the previous chapter, so the backend can keep or change the setting on purpose. */
+    val worldId: String? = null
 ) {
     val effectiveHero: CharacterProfile get() = originalHero ?: previousCharacter
     val previousHeroName: String get() = effectiveHero.name
@@ -84,7 +106,9 @@ data class FullStoryResponse(
     val companionName: String? = null,
     val nextStoryTitle: String? = null,
     val childProfileId: String? = null,
-    val artStyle: String? = null
+    val artStyle: String? = null,
+    val chapterSummary: String? = null,
+    val worldId: String? = null
 ) {
     val effectiveSagaId: String get() = sagaId ?: continuation?.sagaId ?: continuation?.previousStoryId ?: storyId
     val isMultiChapter: Boolean get() = (chapterIndex ?: 1) > 1 || !nextStoryId.isNullOrBlank()
@@ -107,7 +131,8 @@ data class QuotaResponse(
 data class AnalyzeDrawingRequest(
     val imageBase64: String,
     val mimeType: String = "image/jpeg",
-    val artStyle: String = "watercolor"
+    val artStyle: String = "watercolor",
+    val language: String = "es"
 )
 
 @Serializable

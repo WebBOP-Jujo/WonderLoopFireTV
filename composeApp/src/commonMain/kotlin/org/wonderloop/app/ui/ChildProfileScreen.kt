@@ -616,7 +616,7 @@ fun ChildProfileScreen(
                                                     ) {
                                                         Text(
                                                             text = if (medal.isUnlocked) "✓" else medal.progressText,
-                                                            fontSize = 10.5.sp,
+                                                            fontSize = 12.sp,
                                                             fontWeight = FontWeight.ExtraBold,
                                                             color = if (medal.isUnlocked) ChildMint else ChildInkMuted,
                                                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)

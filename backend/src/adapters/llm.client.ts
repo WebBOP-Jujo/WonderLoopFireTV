@@ -148,7 +148,17 @@ export class BedrockNovaLlmClient implements ILlmClient {
       let parsed: any;
       let mode: string;
       if (toolInput && typeof toolInput === 'object') {
+        // Some answers nest arrays/objects as JSON strings inside the tool input: unwrap them
+        for (const [key, value] of Object.entries(toolInput)) {
+          if (typeof value === 'string' && /^\s*[[{]/.test(value)) {
+            try { toolInput[key] = JSON.parse(value); } catch { /* keep the string */ }
+          }
+        }
         if (request.validate && !request.validate(toolInput)) {
+          const shape = Object.entries(toolInput)
+            .map(([k, v]) => `${k}:${Array.isArray(v) ? `array(${v.length})` : typeof v}`)
+            .join(', ');
+          console.warn(`⚠️ [Bedrock] ${request.label}: tool output did not validate (stopReason: ${response.stopReason}; shape: ${shape})`);
           throw new Error(`${this.name} tool output failed validation for ${request.label}`);
         }
         parsed = toolInput;
@@ -197,7 +207,11 @@ export class GeminiLlmClient implements ILlmClient {
   }
 
   async generateJson(request: LlmJsonRequest): Promise<any> {
-    const contents: any[] = [{ text: request.prompt }];
+    // Gemini has no forced tool here: give it the exact JSON Schema so the keys match what Bedrock returns
+    const promptText = request.schema
+      ? `${request.prompt}\n\nReturn ONLY a JSON object that follows this JSON Schema exactly (same keys, all required fields):\n${JSON.stringify(request.schema)}`
+      : request.prompt;
+    const contents: any[] = [{ text: promptText }];
     if (request.image) {
       contents.push({
         inlineData: { mimeType: request.image.mimeType || 'image/jpeg', data: request.image.bytes.toString('base64') }

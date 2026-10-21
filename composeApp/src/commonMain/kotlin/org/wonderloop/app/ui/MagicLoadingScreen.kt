@@ -44,6 +44,8 @@ fun MagicLoadingScreen(
     onAnalysisComplete: (CharacterProfile) -> Unit,
     onError: (String) -> Unit
 ) {
+    org.wonderloop.app.ui.tv.KeepScreenOn()
+
     val brandRed = Color(0xFFD9384A)
     val deepInk = Color(0xFF2B2340)
     val mutedInk = Color(0xFF6B6480)

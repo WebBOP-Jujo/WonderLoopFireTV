@@ -210,6 +210,8 @@ Si la app no encuentra el backend, revisa la dirección del servidor en el diál
 | El QR no abre la web en el móvil | El móvil no está en la misma Wi-Fi o la IP LAN detectada es incorrecta | Conecta el móvil a la misma red o fija `LAN_IP=<ip_del_pc>` en `.env`. |
 | La subida falla con `INVALID_IMAGE_PAYLOAD` | Imagen corrupta o de más de 25 megapíxeles | Usa una foto normal; la web del móvil ya la reduce a 1024 px. |
 | La app muestra *"Sin conexión"* | El Fire TV no alcanza el puerto 3000 del PC | Comprueba la IP en el diálogo de la pantalla QR y el firewall de Windows (puerto 3000). |
+| En los logs del servidor aparece `🚦 [RateLimit:...]` | Demasiadas peticiones desde la misma IP pública (todos los dispositivos de casa cuentan juntos) | Es informativo. Si ocurre en uso normal, ajusta los límites en `backend/src/server.ts`. |
+| La narración local no suena cuando falta el audio del servidor | Motor TTS del sistema no visible para la app (Android 11+) | El manifiesto ya declara `<queries>` para `TTS_SERVICE`; reinstala el APK actual. |
 | Ver logs de la app | Depuración en el dispositivo | `adb -s 192.168.0.38:5555 logcat -s System.out:V` |
 
 ---

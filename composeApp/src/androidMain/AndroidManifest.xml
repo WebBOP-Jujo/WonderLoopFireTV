@@ -5,6 +5,14 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!-- Android 11+ package visibility: without this, Fire OS hides the system TTS engine (e.g. Pico) from the app
+         and the on-device TextToSpeech fallback cannot bind ("AppsFilter ... BLOCKED" in logcat). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <!-- Amazon Fire TV & Android TV compatibility declarations -->
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

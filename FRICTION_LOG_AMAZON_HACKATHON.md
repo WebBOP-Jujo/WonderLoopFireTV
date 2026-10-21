@@ -20,6 +20,7 @@ Transitioning this concept to **Amazon Fire TV Stick 4K** presented unique platf
 2. **10-Foot UI & Remote Navigation:** Replacing touch-based scrolling with a 3-meter living room D-Pad navigation model.
 3. **Hardware Constraints:** Optimizing audio synthesis, image decoders, and memory consumption on streaming stick SoCs (quad-core ARM, limited thermal and heap envelope).
 4. **Moving the AI pipeline to AWS:** Replacing our original Gemini text, vision and TTS calls with Amazon Bedrock (Nova 2 Lite) and Amazon Polly, while keeping Gemini as an automatic fallback (Frictions 6–9).
+5. **A reading experience for the 10-foot screen:** Using TV focus components from shared Kotlin Multiplatform UI, and showing story text without hiding the full-screen artwork (Frictions 10–12).
 
 This friction log chronicles our end-to-end journey, identifying key stumbling blocks, platform delights, and actionable feedback for Amazon's Developer Tooling team.
 
@@ -161,6 +162,47 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
 
 ---
 
+### 🟡 Friction 10: Compose for TV (`androidx.tv:tv-material`) Cannot Be Used from Kotlin Multiplatform Shared UI
+* **Category:** UI Framework & Multiplatform  
+* **Severity:** **MEDIUM** (Friction Rating: 3 / 5)  
+* **Task attempted:** Move our 10-foot UI from mobile Material 3 to Google's TV components (`androidx.tv.material3.Surface`, focus scale/border/glow) as Fire TV reviewers recommend.
+* **Steps taken:** Added `androidx.tv:tv-material:1.0.0` and tried to call it from the shared UI, which lives in `commonMain` (Compose Multiplatform).
+* **Expected:** TV components usable from shared Compose code, like Material 3.
+* **Actual:** The library is published for Android only, so `commonMain` cannot see it. A full migration would have meant moving ~15,000 lines of UI to `androidMain` or rewriting ~250 Material 3 components two days before the deadline.
+* **Workaround:** Thin `expect`/`actual` primitives (`TvClickableSurface`, `KeepScreenOn`) whose Android `actual` wraps the tv-material `Surface`. The reader, home screen and chapter-end pages use them; the remaining screens keep our own focus modifier.
+* **Actionable Feedback for Amazon:**
+  > **Guidance:** A Fire TV sample showing Compose Multiplatform + TV focus components (or an `expect`/`actual` pattern like ours) would save every KMP team the same investigation.
+
+---
+
+### 🟡 Friction 11: No 10-Foot Guidance for Reading-Heavy Apps (Text vs. Full-Screen Artwork)
+* **Category:** UX Guidelines  
+* **Severity:** **MEDIUM** (Friction Rating: 3 / 5)  
+* **Context:** Fire TV design guidance covers media browsing and video playback well, but a storybook is a mix of both: a full-screen 16:9 illustration plus 55–75 words of text per page that must be legible from the sofa.
+* **The Struggle:**
+  - Our first "cinema mode" put the whole page text on a white reading panel. At legible 10-foot sizes (≥ 23 sp) the panel covered **~55 % of the illustration**, including the character's body — the part children care about most.
+  - Shrinking the text breaks 10-foot legibility; a side-by-side layout crops the 16:9 art to less than half the screen.
+* **Resolution:** We borrowed the **Fire TV video player conventions** instead of inventing new ones:
+  - Film-style subtitles (1–2 sentences, 28 sp, gold highlight on the word being narrated) synced to Amazon Polly speech marks, covering ~20 % of the frame.
+  - Controls in a vertical rail that fades out while the narrator reads and returns on any key; OK pauses, like in a video app. ◀ ▶ always turn the page; a "Read it myself" mode shows the full text for a grown-up.
+  - The image prompt now keeps characters in the upper two-thirds of the frame so subtitles never cover a face.
+* **Actionable Feedback for Amazon:**
+  > **Docs:** Add a "reading & subtitle-style text over full-screen art" pattern to the Fire TV design guidelines (safe text band, minimum size, auto-hiding overlays, select-to-pause), so book, education and karaoke apps converge on the same remote behaviour.
+
+---
+
+### 🟢 Friction 12: Focus Lost After a Dialog Closes (Compose on Fire TV)
+* **Category:** UI/UX & Compose Framework  
+* **Severity:** **LOW** (Friction Rating: 2.5 / 5)  
+* **Context:** Found only on the real device: after dismissing our parental gate dialog, no element had focus and the D-pad did nothing until the user pressed BACK.
+* **Expected:** Focus returns to the element that opened the dialog, as it does with Android Views.
+* **Actual:** Compose does not restore focus when a `Dialog` window closes; the same happened at the end of horizontal rails, where focus jumped to an unrelated button.
+* **Workaround:** A small focus memory (last focused key + `FocusRequester` map) re-requested after dialogs close and after BACK navigation, plus key handlers that block focus from escaping the end of a rail.
+* **Actionable Feedback for Amazon:**
+  > **Tooling:** This is exactly what Feature Request #2 (D-Pad Focus Visualizer) would catch before certification; a "focus lost" warning in the ADB/MCP tooling would help every Compose TV app.
+
+---
+
 ## 3. Delights: What Worked Exceptionally Well
 
 1. **`@amazon-devices/amazon-devices-buildertools-mcp` & Skills:**
@@ -173,6 +215,8 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
    - The neural voices `Lucia` (es-ES) and `Ruth` (en-US) sounded natural for bedtime stories on the first try. Each page synthesized in **0.6–1.0 s** as a ~60–70 KB MP3 that our Fire TV player already supported, and SSML `<prosody rate>` + `<break>` mapped cleanly onto our "soft / normal / lively" narration styles.
 5. **Bedrock Converse API with images:**
    - Sending the child's drawing as raw bytes in a `ContentBlock` (no S3 upload, no base64 juggling) made the vision migration a small change. Nova 2 Lite analyzed a drawing in **~2 s** and wrote a full 5-scene story in **~5–6 s**, with token usage reported in every response.
+6. **Amazon Polly speech marks → word-synced subtitles:**
+   - One extra `SynthesizeSpeech` call per page (`OutputFormat: json`, `SpeechMarkTypes: ["word"]`) returns the start time of every word. Aligned to the on-screen words, they drive the TV subtitles and the gold word highlight with no audio analysis on the device — the feature that makes the reader feel like a film. Polly also narrates each chapter's drawing challenge, so children who cannot read yet still hear their mission.
 
 ---
 
@@ -185,6 +229,7 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
 | **#3** | **Pre-flight Appstore Certification Linter** | All Fire TV developers prior to submission | Scans for exit confirmation dialogs, missing Leanback launchers, and unshielded cleartext traffic before submission. |
 | **#4** | **Structured outputs for Amazon Nova 2 Lite** (Important) | Any Bedrock app that parses model output | Removes the need for forced-tool workarounds and makes JSON pipelines reliable in every language. |
 | **#5** | **GA Amazon image model + lifecycle banners on model docs** (Critical for us) | Creative / family apps on Bedrock | A supported Nova Canvas successor with reference-image consistency would let apps like WonderLoop run 100% on AWS. |
+| **#6** | **Fire TV guidance for Compose Multiplatform + reading-style UIs** | KMP teams; book, education and karaoke apps | One reference for TV focus components from shared code and for text over full-screen art (Frictions 10–11). |
 
 ---
 

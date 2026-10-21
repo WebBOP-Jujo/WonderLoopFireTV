@@ -16,6 +16,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
@@ -74,6 +79,9 @@ fun MyStoriesScreen(
     onNewAdventureClick: () -> Unit
 ) {
     var sagaToDelete by remember { mutableStateOf<SagaBook?>(null) }
+    // Deleting is an adult action: the remote's Menu key on a book asks for the parental gate first
+    var sagaPendingGate by remember { mutableStateOf<SagaBook?>(null) }
+    var refocusTick by remember { mutableStateOf(0) }
     var openingSaga by remember { mutableStateOf<SagaBook?>(null) }
     val sagas = StoryRepository.getBookshelfSagas()
     val firstBookFocusRequester = remember { FocusRequester() }
@@ -85,6 +93,14 @@ fun MyStoriesScreen(
         } catch (_: Exception) {}
     }
 
+    // Give D-pad focus back to the shelf after the parental gate closes
+    LaunchedEffect(refocusTick) {
+        if (refocusTick > 0) {
+            delay(250)
+            try { firstBookFocusRequester.requestFocus() } catch (_: Exception) {}
+        }
+    }
+
     // Trigger navigation once the 3D book-opening animation finishes
     LaunchedEffect(openingSaga) {
         val target = openingSaga ?: return@LaunchedEffect
@@ -92,6 +108,20 @@ fun MyStoriesScreen(
         onOpenStory(target.rootStory)
         delay(120)
         openingSaga = null
+    }
+
+    sagaPendingGate?.let { saga ->
+        ParentalGateDialog(
+            explanation = if (AppStrings.isEnglish) "Grown-ups only: solve it to delete this book." else "Solo adultos: resuélvelo para borrar este libro.",
+            onDismiss = {
+                sagaPendingGate = null
+                refocusTick++
+            },
+            onSuccess = {
+                sagaPendingGate = null
+                sagaToDelete = saga
+            }
+        )
     }
 
     // Story / Saga Deletion Confirmation Modal (New Design)
@@ -262,7 +292,7 @@ fun MyStoriesScreen(
                 )
             }
     ) {
-        val availableWidth = (maxWidth - 36.dp).coerceAtLeast(260.dp)
+        val availableWidth = (maxWidth - 96.dp).coerceAtLeast(260.dp)
 
         val columns = when {
             availableWidth >= 780.dp -> 4
@@ -279,7 +309,7 @@ fun MyStoriesScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
+            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 22.dp)
         ) {
             // =================================================================
             // 1. TOP BAR: Circular Back · Fredoka Title · Count Pill
@@ -340,7 +370,7 @@ fun MyStoriesScreen(
                         ) {
                             Text(
                                 text = "📚 ${AppStrings.booksCount(sagas.size)}",
-                                fontSize = 11.5.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = ShelfCoral,
                                 maxLines = 1,
@@ -439,7 +469,7 @@ fun MyStoriesScreen(
                 item(key = "bookshelf_subtitle") {
                     Text(
                         text = AppStrings.bookshelfSubtitle,
-                        fontSize = 13.5.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = ShelfInkMuted,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
@@ -483,7 +513,7 @@ fun MyStoriesScreen(
                                     },
                                     onDelete = {
                                         if (openingSaga == null) {
-                                            sagaToDelete = saga
+                                            sagaPendingGate = saga
                                         }
                                     },
                                     modifier = Modifier
@@ -605,6 +635,12 @@ private fun BookCoverItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.72f)
+                .onKeyEvent {
+                    if (it.key == Key.Menu && it.type == KeyEventType.KeyUp) {
+                        onDelete()
+                        true
+                    } else false
+                }
                 .tvFocusable(
                     shape = bookShape,
                     focusedScale = 1.06f,
@@ -659,7 +695,7 @@ private fun BookCoverItem(
                     ) {
                         Text(
                             text = "✨ PÁG. 1",
-                            fontSize = 8.5.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = ShelfCoral,
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
@@ -793,29 +829,12 @@ private fun BookCoverItem(
                                 AppStrings.pagesCountRibbon(story.scenes.size)
                             },
                             color = if (saga.isMultiChapter) ShelfGoldText else Color.White,
-                            fontSize = 9.5.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                         )
                     }
 
-                    // Crisp Circular Delete Button (Top Right)
-                    if (!isOpening) {
-                        Surface(
-                            onClick = onDelete,
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.9f),
-                            shadowElevation = 2.dp,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(6.dp)
-                                .size(28.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(text = "🗑️", fontSize = 12.sp)
-                            }
-                        }
-                    }
 
                     // Bottom Scrim & Title on the Book Cover
                     Box(
@@ -848,7 +867,7 @@ private fun BookCoverItem(
                             Text(
                                 text = if (saga.isMultiChapter) "🌟 Saga · ${story.character.name}" else "✨ ${story.character.name}",
                                 color = ShelfGoldSoft,
-                                fontSize = 10.5.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -954,7 +973,7 @@ private fun AddBookPlaceholder(
                 Text(
                     text = AppStrings.newStoryBookstand,
                     fontFamily = TitleFont(),
-                    fontSize = 13.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ShelfInkDark,
                     textAlign = TextAlign.Center,
@@ -962,27 +981,15 @@ private fun AddBookPlaceholder(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                val availableStories = SubscriptionManager.availableStories.value
                 Spacer(modifier = Modifier.height(4.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(50.dp),
-                    color = if (availableStories > 0) ShelfMintSoft else ShelfCoralSoft
-                ) {
-                    Text(
-                        text = if (availableStories > 0) {
-                            "✨ ${AppStrings.storiesAvailable(availableStories)}"
-                        } else {
-                            "⚠️ ${AppStrings.storiesAvailable(0)}"
-                        },
-                        fontSize = 9.5.sp,
-                        color = if (availableStories > 0) ShelfMint else ShelfCoral,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
-                }
+                Text(
+                    text = if (AppStrings.isEnglish) "📱 Scan a drawing" else "📱 Escanea un dibujo",
+                    fontSize = 13.sp,
+                    color = ShelfMint,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
             }
         }
 

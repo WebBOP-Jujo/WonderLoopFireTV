@@ -157,9 +157,9 @@ object AppStrings {
         if (isEnglish) "$count books" else "$count libros"
     }
     val bookshelfSubtitle get() = if (isEnglish)
-        "Tap any book on the shelf to open it and hear its narration:"
+        "Choose a book with the remote and press OK to read it · Grown-ups: ☰ Menu to delete"
     else
-        "Toca cualquier libro de la balda para abrirlo y escuchar su narración:"
+        "Elige un libro con el mando y pulsa OK para leerlo · Adultos: ☰ Menú para borrarlo"
     val emptyBookshelfTitle get() = if (isEnglish) "Your bookshelf is waiting" else "Tu estantería está esperando"
     val emptyBookshelfDesc get() = if (isEnglish)
         "Draw your hero on paper, snap a photo, and their illustrated book will appear here on the shelf!"
@@ -179,9 +179,9 @@ object AppStrings {
         if (isEnglish) "$count friends" else "$count amigos"
     }
     val boardSubtitle get() = if (isEnglish)
-        "Tap any photo to see its magic transformation or read its story:"
+        "Choose a friend with the remote and press OK to read their story:"
     else
-        "Toca cualquier foto para ver su transformación mágica o leer su cuento:"
+        "Elige un amigo con el mando y pulsa OK para leer su cuento:"
     val emptyBoardTitle get() = if (isEnglish) "Your art board is open" else "Tu tablón de arte está libre"
     val emptyBoardDesc get() = if (isEnglish)
         "Draw your hero on paper, snap a photo, and we'll pin their magical artwork here!"
@@ -223,7 +223,7 @@ object AppStrings {
         "100% Privado y Seguro: El perfil y dibujos se almacenan exclusivamente en este dispositivo."
 
     val whoIsImaginingClean get() = if (isEnglish) "Who is imagining today?" else "¿Quién imagina hoy?"
-    val tapYourCharacter get() = if (isEnglish) "Tap your character" else "Toca tu personaje"
+    val tapYourCharacter get() = if (isEnglish) "Choose your character with the remote" else "Elige tu personaje con el mando"
     val addProfileButton get() = if (isEnglish) "Add" else "Añadir"
     val newProfileSubtitle get() = if (isEnglish) "New profile" else "Nuevo perfil"
     val parentsZoneLink get() = if (isEnglish) "Parents Zone" else "Zona de padres"
@@ -236,7 +236,7 @@ object AppStrings {
 
     // Child Profile Screen ("Mi Perfil")
     val myProfileTitle get() = if (isEnglish) "My Profile" else "Mi Perfil"
-    val tapAvatarToCustomize get() = if (isEnglish) "Tap your avatar to customize it" else "Toca tu avatar para personalizarlo"
+    val tapAvatarToCustomize get() = if (isEnglish) "Select your avatar to customize it" else "Elige tu avatar para personalizarlo"
     val chooseYourNewAvatar get() = if (isEnglish) "Choose your avatar" else "Elige tu avatar"
     val myMedalsTitle get() = if (isEnglish) "My Magical Medals" else "Mis Medallas Mágicas"
     val medalFirstStoryTitle get() = if (isEnglish) "First Spark" else "Primer Trazo"

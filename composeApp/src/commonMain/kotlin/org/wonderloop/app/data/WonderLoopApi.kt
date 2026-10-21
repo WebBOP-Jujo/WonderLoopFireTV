@@ -143,7 +143,8 @@ class WonderLoopApi(
     suspend fun analyzeDrawing(
         imageBase64: String,
         mimeType: String = "image/jpeg",
-        artStyle: String = "watercolor"
+        artStyle: String = "watercolor",
+        language: String = ProfileRepository.getEffectiveLanguage()
     ): AnalyzeDrawingResponse {
         if (isOnline != true) {
             val reconnected = checkHealth()
@@ -155,7 +156,7 @@ class WonderLoopApi(
             contentType(ContentType.Application.Json)
             header("X-WonderLoop-Key", appSecretKey)
             header("X-User-Id", appUserId)
-            setBody(AnalyzeDrawingRequest(imageBase64, mimeType, artStyle))
+            setBody(AnalyzeDrawingRequest(imageBase64, mimeType, artStyle, language))
         }
         if (!httpResponse.status.isSuccess()) {
             val errBody = try { httpResponse.bodyAsText() } catch (_: Exception) { "" }

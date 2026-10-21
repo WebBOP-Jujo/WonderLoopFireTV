@@ -87,11 +87,17 @@ Amazon's judging criteria for the **Fire TV Track** explicitly emphasizes four c
 
 WonderLoop TV is **not** a scaled-up mobile app. It was designed and built from scratch for the TV living-room environment:
 
-* **Pure D-Pad Remote Navigation:** Complete directional control with up/down/left/right and select buttons.
+* **Compose for TV (`androidx.tv:tv-material`):** focusable cards and buttons are built on Google's TV `Surface`, which handles D-pad focus, OK/Enter, long-press, focus scale, golden focus border and glow natively ([`ui/tv`](composeApp/src/commonMain/kotlin/org/wonderloop/app/ui/tv/TvPrimitives.kt) primitives with an Android `actual`).
+* **Cinema-mode reader:** each page shows its 16:9 illustration full-bleed with a slow Ken Burns drift and **film-style subtitles synchronized with the Amazon Polly narration**: one or two sentences at a time, the spoken word lit in gold (Polly speech marks aligned to the on-screen words), so the artwork stays visible. Controls behave like a Fire TV video player: they fade out while the narrator reads and return on any key; OK pauses, ◀ ▶ always turn the page (or step through subtitles at the child's own pace when the voice is off), and **"Read it myself"** shows the full page text for a grown-up reading aloud. BACK closes that panel first, then exits (progress is saved). Illustrations are generated with the characters in the upper two-thirds of the frame so the subtitle band never covers a face.
+* **Chapter-end pages:** the drawing mission (hero polaroid, the challenge in large type, draw → scan → next chapter steps) is **narrated by Polly too**, so pre-readers hear their mission; the "challenge completed" page shows the drawn friend and a preview of the next chapter.
+* **Streaming-style home:** "Continue reading" hero with the story's own illustration, rails of 16:9 story covers and drawn friends, a daily drawing idea, and focus restored to the last opened item after BACK.
+* **Pure D-Pad Remote Navigation:** one focus stop per card, no focus escaping at the end of a rail, focus re-acquired after dialogs, and remote-first copy ("press OK", "☰ Menu") instead of touch wording.
 * **Distinct Focus Indicators:** High-contrast golden glow focus halos (`#FFD166`), subtle element scaling (`1.04x - 1.08x`), and tactile audio feedback (`SoundEffect.POP`).
+* **Screen stays on** while reading, narrating or waiting for a story (no screensaver mid-story).
+* **Try it without a phone:** four built-in child-style crayon drawings can be picked with the remote on the QR screen.
 * **Safe Title Overscan Margins:** Strict 48dp horizontal and 24dp vertical safe areas ensure content never clips on any television panel or projector.
 * **Typography for 10 Feet:** High-contrast, dyslexia-friendly, rounded typefaces (`Fredoka` for titles, `Nunito` for story text) sized for readability from 3+ meters away.
-* **Parental Gate ("Zona de Padres"):** Arithmetic challenge safeguards sensitive settings and profile management from accidental child input.
+* **Parental Gate ("Zona de Padres"):** Arithmetic challenge safeguards sensitive settings, profile management and deleting books (☰ Menu on a book) from accidental child input.
 * **Bilingual Support:** Full native support for Spanish (`es-ES`) and English (`en-US`), with localized prompts, UI labels, and voice narration.
 
 ---
@@ -122,7 +128,7 @@ Children's safety and privacy are paramount:
 | :--- | :--- | :--- | :--- |
 | **Drawing vision** (name, species, hex palette, distinctive features, blank-sheet detection) | **Amazon Nova 2 Lite** on Amazon Bedrock (`us.amazon.nova-2-lite-v1:0`, Converse API, image sent as bytes) | Gemini | [`llm.client.ts`](backend/src/adapters/llm.client.ts), [`vision.adapter.ts`](backend/src/adapters/vision.adapter.ts) |
 | **Story writing** (5 scenes + English illustration prompts + drawing challenge, `es` / `en`) | **Amazon Nova 2 Lite** on Amazon Bedrock | Gemini | [`llm.client.ts`](backend/src/adapters/llm.client.ts), [`story.adapter.ts`](backend/src/adapters/story.adapter.ts) |
-| **Voice narration** (one MP3 per page) | **Amazon Polly** neural voices: `Lucia` (es-ES), `Ruth` (en-US); voice style mapped to SSML speaking rate | Gemini TTS, per page | [`polly-audio.adapter.ts`](backend/src/adapters/polly-audio.adapter.ts), [`audio.adapter.ts`](backend/src/adapters/audio.adapter.ts) |
+| **Voice narration** (one MP3 per page + word timings) | **Amazon Polly** neural voices: `Lucia` (es-ES), `Ruth` (en-US); voice style mapped to SSML speaking rate; **word speech marks** drive the karaoke-style highlight on the TV | Gemini TTS, per page (no highlight) | [`polly-audio.adapter.ts`](backend/src/adapters/polly-audio.adapter.ts), [`audio.adapter.ts`](backend/src/adapters/audio.adapter.ts) |
 | **Illustrations** (1:1 portrait + 5 × 16:9 scenes) | Gemini image model | — | [`image.adapter.ts`](backend/src/adapters/image.adapter.ts) |
 
 **How the integration works**
@@ -130,6 +136,28 @@ Children's safety and privacy are paramount:
 * **Resilience:** any Bedrock error, timeout or schema-invalid answer falls through to Gemini for that request only. Polly failures fall back page by page. After a credentials/permissions error, the AWS client pauses itself for 5 minutes (circuit breaker) instead of slowing every story down.
 * **Switchable providers:** `LLM_PROVIDER=bedrock|gemini` and `TTS_PROVIDER=polly|gemini`; the active providers are printed on startup and returned by `GET /`.
 * **Measured on real calls (us-east-1):** drawing vision ≈ 2 s, full 5-scene story ≈ 5–6 s with Nova 2 Lite; Polly narration ≈ 0.6–1.0 s per page (≈ 60–70 KB MP3).
+
+### 📚 Story Quality Engine
+
+Generated stories are designed like real picture books, not free-form LLM text:
+
+* **Concrete narrative catalog** ([`story-catalog.ts`](backend/src/adapters/story-catalog.ts)): 12 recognizable worlds chosen with species affinity (a penguin goes to the snow or the sea), 15 everyday problems (a kite stuck in a tree, rain on the way home…), 8 tones, and ~50 **drawable** challenge objects (a boat, an umbrella, a ladder, a dog) that a 4-8 year-old can draw from memory. No abstract "magic beams".
+* **Story spine** for every chapter: setup → funny failed try → new idea → solution using a feature **the child actually drew** → calm bedtime ending that sets up the next drawing challenge.
+* **Language style sheets** (Spain Spanish with *raya* dialogue / American English with quotes), age-based sentence targets, and **saga memory** (chapter summaries carried between chapters).
+* **Automatic quality review** of every story (clichés, page openings, length per age, language leakage, drawable challenge) with one guided rewrite when needed.
+* **Illustration direction per page**: different camera framing and a morning-to-starry-night lighting arc, while the hero's look (English visual description + exact hex palette + reference image) stays identical on every page.
+
+Measured with [`src/eval-stories.ts`](backend/src/eval-stories.ts) (`npx tsx src/eval-stories.ts 2`, 16 stories, Amazon Nova 2 Lite):
+
+| Metric | Before | After |
+| :--- | :---: | :---: |
+| Concrete, drawable challenges | 38% | **100%** |
+| Unique challenges | 63% | **100%** |
+| Unique titles (same hero twice) | 88% | **100%** |
+| Pages within the age word target | 50% | **100%** |
+| Pages with clichés ("Once upon a time"…) | 4 | **0** |
+| Pages starting with a sound word | 40% | **0%** |
+| Average generation time | 6.5 s | **6.0 s** |
 
 **Why illustrations still use Gemini:** we evaluated the Amazon image models available on Bedrock. Amazon Nova Canvas reached end of life on September 30, 2026, Titan Image Generator G1 v2 is past its published end-of-life date (Legacy models are not available to new customers), and Amazon Nova 2 Omni is still in limited preview. WonderLoop also needs per-request character consistency from a reference image (the child's drawing), which Titan only offers through fine-tuning. The image adapter is isolated behind `IImageAdapter`, so an Amazon image model can be plugged in as soon as one is generally available.
 

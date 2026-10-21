@@ -3,6 +3,40 @@ import sharp from 'sharp';
 import { ArtStyle, CharacterProfile } from '../types/story.types.js';
 import { withRetry } from '../utils/retry.js';
 
+const STYLE = {
+  watercolor: {
+    portrait: "Children's picture-book character portrait, soft warm watercolor on textured paper, gentle pastel washes, delicate ink outlines",
+    scene: "Children's picture-book illustration, soft warm watercolor on textured paper, gentle pastel washes, delicate ink outlines"
+  },
+  '3d_animation': {
+    portrait: 'Character portrait in a high-end 3D animated feature-film style, soft clay-like materials, rounded friendly proportions, subsurface scattering',
+    scene: 'Scene in a high-end 3D animated feature-film style, soft clay-like materials, rounded friendly proportions, cinematic depth of field'
+  }
+} as const;
+
+/** One camera framing and one light per page: visual variety, plus a day-to-night arc that suits a bedtime story. */
+const PAGE_DIRECTION: Record<number, { shot: string; light: string }> = {
+  1: { shot: 'wide establishing shot showing the place and the hero small in the scene', light: 'fresh bright morning light' },
+  2: { shot: 'medium shot centered on the action', light: 'clear midday sunlight' },
+  3: { shot: 'close-up on the faces and their emotion', light: 'warm afternoon light' },
+  4: { shot: 'dynamic low-angle shot of the key moment', light: 'golden-hour glow' },
+  5: { shot: 'cozy wide shot with calm space around the characters', light: 'soft dusk with the first stars, warm lights glowing' }
+};
+
+const SAFE_FINISH =
+  'Friendly, gentle and safe for young children; clean well-formed anatomy and hands; no text, letters, numbers or watermarks anywhere in the image.';
+
+function describeLook(c?: CharacterProfile): string {
+  if (!c) return '';
+  if (c.visualDescriptionEn) return c.visualDescriptionEn;
+  const features = c.distinctiveFeatures?.length ? `, with ${c.distinctiveFeatures.join(', ')}` : '';
+  return `${c.species}${features}`;
+}
+
+function palette(c?: CharacterProfile): string {
+  return c?.colorHexes?.length ? `exact colors ${c.colorHexes.join(', ')}` : '';
+}
+
 export interface IImageAdapter {
   generateCharacterPortrait(
     drawingBuffer: Buffer,
@@ -17,7 +51,8 @@ export interface IImageAdapter {
     companionImageBase64?: string,
     artStyle?: ArtStyle,
     settingBible?: string,
-    characterProfile?: CharacterProfile
+    characterProfile?: CharacterProfile,
+    companionProfile?: CharacterProfile
   ): Promise<string>;
 }
 
@@ -92,45 +127,16 @@ export class NanobananaImageAdapter implements IImageAdapter {
     const is3D = artStyle === '3d_animation';
     console.log(`🎨 [GeminiImageAdapter] Generating character portrait for "${character.name}" (style: ${artStyle}, hex: ${character.colorHexes?.join(', ') || 'n/a'}) with gemini-3.1-flash-lite-image...`);
 
-    const hexSummary = character.colorHexes && character.colorHexes.length > 0
-      ? ` (MANDATORY EXACT COLOR HEXES: ${character.colorHexes.join(', ')})`
-      : '';
-    const shapeInfo = character.shapeLanguage ? `\nSilhouette & Shape Language: ${character.shapeLanguage}` : '';
-    const moodInfo = character.mood ? `\nVisual Mood: ${character.mood}` : '';
-
-    const prompt = is3D
-      ? `
-3D animated movie character portrait in charming Pixar / Disney & tactile soft clay animation style.
-Reinterpret the child's drawing provided in the image into a finished, adorable 3D animated movie protagonist.
-Character Name: "${character.name}"
-Species / Creature: "${character.species}"
-Primary Colors: ${character.primaryColors.join(', ')}${hexSummary}${shapeInfo}${moodInfo}
-Distinctive Features: ${character.distinctiveFeatures.join(', ')}
-Personality: ${character.personality}
-
-CRITICAL ARTISTIC GUIDELINES:
-- Capture the spirit, warmth, exact colors, and visual identity of the child's original drawing, translated into a high-end 3D animated character.
-- Cute rounded 3D proportions, expressive eyes, soft tactile fabric/skin/clay textures, subsurface scattering.
-- Center the character with an endearing, friendly expression against a clean, soft warm cinematic bokeh background vignette.
-- STRICT CHILD-SAFE NEGATIVE DIRECTIVES (ABSOLUTELY AVOID):
-  scary, horrifying, dark, violent, creepy, monstrous teeth, deformed limbs, extra fingers, mutated hands, bad anatomy, photorealistic uncanny valley, text, words, letters, labels, watermark, signatures.
-`.trim()
-      : `
-Children's storybook character portrait in classic warm watercolor picture book style.
-Reinterpret the child's drawing provided in the image into a finished, beautiful storybook protagonist.
-Character Name: "${character.name}"
-Species / Creature: "${character.species}"
-Primary Colors: ${character.primaryColors.join(', ')}${hexSummary}${shapeInfo}${moodInfo}
-Distinctive Features: ${character.distinctiveFeatures.join(', ')}
-Personality: ${character.personality}
-
-CRITICAL ARTISTIC GUIDELINES:
-- Capture the spirit, warmth, and exact visual identity of the child's original drawing.
-- Center the character with an endearing, friendly expression on a clean, soft warm pastel watercolor background vignette.
-- Soft watercolor paper textures, whimsical picture book art, warm magical lighting.
-- STRICT CHILD-SAFE NEGATIVE DIRECTIVES (ABSOLUTELY AVOID):
-  scary, horrifying, dark, violent, creepy, monstrous teeth, deformed limbs, extra fingers, mutated hands, bad anatomy, photorealistic uncanny valley, text, words, letters, labels, watermark, signatures.
-`.trim();
+    const style = STYLE[is3D ? '3d_animation' : 'watercolor'].portrait;
+    const prompt = [
+      `${style}.`,
+      `Redraw the child's drawing in the attached photo as a finished, lovable storybook hero, keeping its identity: the same body shape, the same features and the same colors (${palette(character) || character.primaryColors.join(', ')}).`,
+      `The hero is ${character.name}: ${describeLook(character)}.`,
+      character.shapeLanguage ? `Silhouette: ${character.shapeLanguage}.` : '',
+      `Expression and mood: ${character.mood || 'happy and curious'}; personality: ${character.personality}.`,
+      'Center the character, full body, facing the viewer with a warm smile, on a simple soft background vignette.',
+      SAFE_FINISH
+    ].filter(Boolean).join('\n');
 
     try {
       const response = await withRetry(
@@ -180,7 +186,8 @@ CRITICAL ARTISTIC GUIDELINES:
     companionImageBase64?: string,
     artStyle: ArtStyle = 'watercolor',
     settingBible?: string,
-    characterProfile?: CharacterProfile
+    characterProfile?: CharacterProfile,
+    companionProfile?: CharacterProfile
   ): Promise<string> {
     const hasCompanion = Boolean(companionImageBase64);
     const is3D = artStyle === '3d_animation';
@@ -188,51 +195,29 @@ CRITICAL ARTISTIC GUIDELINES:
 
     const characterPart = this.parseBase64Part(characterImageBase64);
     const companionPart = this.parseBase64Part(companionImageBase64);
+    const direction = PAGE_DIRECTION[pageNumber] || PAGE_DIRECTION[3];
 
-    let consistencyDirective = '';
-    if (characterPart && companionPart) {
-      consistencyDirective = `CRITICAL DUAL-CHARACTER CONSISTENCY DIRECTIVE:
-You MUST depict BOTH characters together in this scene:
-- Primary Character (from Reference Image 1): Keep facial expressions, colors, anatomy, and identifying features completely consistent with this hero.
-  * KEEP INVARIANT: eye shape, color patterns, and facial silhouette.
-- Companion Character (from Reference Image 2): Keep colors, anatomy, and identifying features completely consistent with this companion.
-Show them interacting as a warm, affectionate team in the scene.`;
-    } else if (characterPart) {
-      const hexAnchor = characterProfile?.colorHexes && characterProfile.colorHexes.length > 0
-        ? `\n- MANDATORY INVARIANT PALETTE (EXACT HEX): ${characterProfile.colorHexes.join(', ')}`
-        : '';
-      const featuresAnchor = characterProfile?.distinctiveFeatures && characterProfile.distinctiveFeatures.length > 0
-        ? `\n- KEEP INVARIANT: ${characterProfile.distinctiveFeatures.join(', ')}`
-        : '';
-      consistencyDirective = `CRITICAL CONSISTENCY DIRECTIVE: You MUST depict the exact same protagonist shown in the attached reference image. Keep the character's facial expression, colors, anatomy, and identifying features completely consistent with this hero.${hexAnchor}${featuresAnchor}`;
+    const consistency: string[] = [];
+    if (characterPart) {
+      consistency.push(
+        `Reference image 1 is the hero${characterProfile ? `, ${characterProfile.name}` : ''}: draw exactly the same character (same face, body shape, features and colors${palette(characterProfile) ? `: ${palette(characterProfile)}` : ''}).${characterProfile ? ` Look: ${describeLook(characterProfile)}.` : ''}`
+      );
+    }
+    if (companionPart) {
+      consistency.push(
+        `Reference image 2 is the companion${companionProfile ? `, ${companionProfile.name}` : ''}: keep it identical too${palette(companionProfile) ? ` (${palette(companionProfile)})` : ''}.${companionProfile ? ` Look: ${describeLook(companionProfile)}.` : ''} Show both characters together.`
+      );
     }
 
-    const settingAnchorDirective = settingBible
-      ? `\nENVIRONMENTAL ANCHOR (SETTING BIBLE):\n"${settingBible}"\nEnsure lighting, terrain, and atmospheric colors match this world setting consistently across all pages.`
-      : '';
-
-    const negativeDirectives = `
-STRICT CHILD-SAFE NEGATIVE DIRECTIVES (ABSOLUTELY AVOID):
-scary, horrifying, dark, violent, creepy, deformed extra limbs, mutated hands, multiple fingers, bad anatomy, photorealistic uncanny valley, text, words, letters, labels, watermark, signatures.
-`.trim();
-
-    const enrichedPrompt = is3D
-      ? `
-Widescreen 16:9 horizontal cinematic 3D animated movie scene illustration for page ${pageNumber} in charming Pixar / Disney & tactile soft clay animation style, designed for a large living-room television display.
-${consistencyDirective}
-${settingAnchorDirective}
-Scene: ${visualPrompt}
-Composition & Style: Wide 16:9 horizontal framing with expansive scenic background, high-end 3D animated feature film render, cute rounded 3D character proportions, soft tactile textures, subsurface scattering, cinematic warm volumetric lighting, shallow depth of field, vibrant joyful colors.
-${negativeDirectives}
-`.trim()
-      : `
-Widescreen 16:9 horizontal children's storybook watercolor illustration for page ${pageNumber}, designed for a large living-room television display.
-${consistencyDirective}
-${settingAnchorDirective}
-Scene: ${visualPrompt}
-Composition & Style: Wide 16:9 horizontal panoramic storybook framing, whimsical children's picture book watercolor, soft gentle textures, warm magical lighting, rich pastel tones.
-${negativeDirectives}
-`.trim();
+    const enrichedPrompt = [
+      `${STYLE[is3D ? '3d_animation' : 'watercolor'].scene}, wide 16:9 landscape for a living-room TV.`,
+      ...consistency,
+      settingBible ? `Setting (keep it consistent across the whole story): ${settingBible}.` : '',
+      `Moment to illustrate: ${visualPrompt}`,
+      `Camera: ${direction.shot}. Lighting: ${direction.light}.`,
+      'Composition: full-bleed artwork filling the whole frame edge to edge (no white paper margins, borders or frames); main characters clearly visible and expressive, placed in the upper two-thirds of the frame with their faces well above the bottom quarter; the bottom quarter is calm, simple ground, water or sky with no faces or key details; uncluttered background.',
+      SAFE_FINISH
+    ].filter(Boolean).join('\n');
 
     const contents: any[] = [{ text: enrichedPrompt }];
     if (characterPart) contents.push(characterPart);

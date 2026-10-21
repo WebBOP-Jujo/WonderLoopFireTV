@@ -66,6 +66,8 @@ fun QrScanScreen(
     onPhotoCaptured: (imageBase64: String, artStyle: String, sessionId: String) -> Unit,
     onBack: () -> Unit
 ) {
+    org.wonderloop.app.ui.tv.KeepScreenOn()
+
     var selectedArtStyle by remember(initialArtStyle) { mutableStateOf(initialArtStyle) }
     var session by remember { mutableStateOf<TvSessionResponse?>(null) }
     var sessionStatus by remember { mutableStateOf("waiting") }
@@ -508,7 +510,11 @@ fun QrScanScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "📶 Móvil y tele en la misma Wi-Fi",
+                            text = if (api.baseUrl.startsWith("https://")) {
+                                if (AppStrings.isEnglish) "🔒 Works with any phone, on any network" else "🔒 Funciona con cualquier móvil y red"
+                            } else {
+                                if (AppStrings.isEnglish) "📶 Phone and TV on the same Wi-Fi" else "📶 Móvil y tele en la misma Wi-Fi"
+                            },
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = QrInkMuted,
@@ -818,19 +824,28 @@ fun QrScanScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         ) {
-                            Text(text = "📶", fontSize = 13.sp)
+                            val isCloud = api.baseUrl.startsWith("https://")
+                            Text(text = if (isCloud) "☁️" else "📶", fontSize = 15.sp)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Wi-Fi · ${api.baseUrl.substringAfter("://").removeSuffix(":3000")} · ",
-                                fontSize = 13.sp,
+                                text = if (isCloud) {
+                                    if (AppStrings.isEnglish) "Cloud server · " else "Servidor en la nube · "
+                                } else {
+                                    "Wi-Fi · ${api.baseUrl.substringAfter("://").removeSuffix(":3000")} · "
+                                },
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF5B5470)
+                                color = Color(0xFF5B5470),
+                                maxLines = 1,
+                                softWrap = false
                             )
                             Text(
-                                text = "Cambiar",
-                                fontSize = 13.sp,
+                                text = if (AppStrings.isEnglish) "Change" else "Cambiar",
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = QrCoral
+                                color = QrCoral,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }

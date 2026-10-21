@@ -416,7 +416,7 @@ fun PaywallScreen(
                                             text = "★ MÁS POPULAR · −38 %",
                                             color = Color.White,
                                             fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 10.5.sp,
+                                            fontSize = 12.sp,
                                             letterSpacing = 0.5.sp
                                         )
                                     }

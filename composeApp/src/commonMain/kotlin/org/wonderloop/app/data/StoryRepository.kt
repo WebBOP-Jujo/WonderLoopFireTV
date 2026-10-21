@@ -71,10 +71,19 @@ object StoryRepository {
             )
         }
 
+        val challengeAudio = story.creativeChallenge.audioBase64
+        val challengeAudioExt = if (challengeAudio == null || challengeAudio.startsWith("data:audio/mp3", ignoreCase = true) ||
+            challengeAudio.startsWith("data:audio/mpeg", ignoreCase = true) || challengeAudio.endsWith(".mp3", ignoreCase = true)
+        ) "mp3" else "wav"
+        val updatedChallenge = story.creativeChallenge.copy(
+            audioBase64 = PlatformStorage.externalizeMediaIfNeeded("${sid}_audio_challenge.$challengeAudioExt", challengeAudio)
+        )
+
         return story.copy(
             character = updatedCharacter,
             continuation = updatedContinuation,
-            scenes = updatedScenes
+            scenes = updatedScenes,
+            creativeChallenge = updatedChallenge
         )
     }
 

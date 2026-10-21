@@ -51,6 +51,19 @@ import androidx.compose.ui.input.key.*
 import org.wonderloop.app.ui.components.tvFocusable
 import org.wonderloop.app.ui.components.TvFocusGold
 import kotlin.math.absoluteValue
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import org.wonderloop.app.ui.tv.KeepScreenOn
+import org.wonderloop.app.ui.tv.TvClickableSurface
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 
 @OptIn(ExperimentalFoundationApi::class)
 private val NoOpBringIntoViewSpec = object : BringIntoViewSpec {
@@ -70,6 +83,7 @@ private val ReaderGoldBorder = Color(0xFFF3DC9B)
 private val ReaderGoldText = Color(0xFF9E6700)
 private val ReaderCardBorder = Color(0xFFEDE8E1)
 private val ReaderDotInactive = Color(0xFFDCD5CA)
+private val ReaderGoldHighlight = Color(0xFFFFD166)
 
 sealed class SagaPage {
     data class ScenePage(
@@ -185,6 +199,12 @@ fun AudioSpeakerIcon(
     }
 }
 
+/** Fallback pace for subtitles when the narration has no Polly speech marks (Gemini audio or device TTS). */
+private const val ESTIMATED_MS_PER_WORD = 430L
+/** About two lines of 28sp subtitle text inside the 10-foot safe zone. */
+private const val SUBTITLE_MAX_CHARS = 100
+private const val CONTROLS_AUTO_HIDE_MS = 3500L
+
 @Composable
 fun StoryReaderScreen(
     story: FullStoryResponse,
@@ -193,6 +213,8 @@ fun StoryReaderScreen(
     onGoToBookshelf: () -> Unit = onCloseClick
 ) {
     val coroutineScope = rememberCoroutineScope()
+    // No screensaver while a story is being read or narrated
+    KeepScreenOn()
 
     // 1. Load all chapters of this saga in chronological order
     val sagaChapters = remember(story.storyId, StoryRepository.savedStories.size) {
@@ -219,20 +241,9 @@ fun StoryReaderScreen(
             }
 
             if (nextChapter != null) {
-                list.add(
-                    SagaPage.RetoSuperadoPage(
-                        chapter = chapter,
-                        chapterIndex = chNum,
-                        nextChapter = nextChapter
-                    )
-                )
+                list.add(SagaPage.RetoSuperadoPage(chapter = chapter, chapterIndex = chNum, nextChapter = nextChapter))
             } else {
-                list.add(
-                    SagaPage.ChallengePromptPage(
-                        chapter = chapter,
-                        chapterIndex = chNum
-                    )
-                )
+                list.add(SagaPage.ChallengePromptPage(chapter = chapter, chapterIndex = chNum))
             }
         }
         list
@@ -242,90 +253,135 @@ fun StoryReaderScreen(
     val chapterStartIndices = remember(pages) {
         val map = mutableMapOf<Int, Int>()
         pages.forEachIndexed { pIdx, page ->
-            val chNum = when (page) {
-                is SagaPage.ScenePage -> page.chapterIndex
-                is SagaPage.RetoSuperadoPage -> page.chapterIndex
-                is SagaPage.ChallengePromptPage -> page.chapterIndex
-            }
-            if (!map.containsKey(chNum)) {
-                map[chNum] = pIdx
-            }
+            val chNum = page.chapterNumber()
+            if (!map.containsKey(chNum)) map[chNum] = pIdx
         }
         map
     }
 
     val initialPage = remember(story.storyId) {
-        val targetChNum = story.chapterIndex ?: 1
-        chapterStartIndices[targetChNum] ?: 0
+        chapterStartIndices[story.chapterIndex ?: 1] ?: 0
     }
 
-    val pagerState = rememberPagerState(
-        initialPage = initialPage,
-        pageCount = { pages.size }
-    )
+    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { pages.size })
     var isPlayingAudio by remember { mutableStateOf(false) }
-    var autoNarrateSession by remember { mutableStateOf(false) }
-    var showExitDialog by remember { mutableStateOf(false) }
-    var wasExitDialogOpen by remember { mutableStateOf(false) }
+    // Bedtime mode: the story reads itself aloud from the first page; "Pause" turns it off for the session.
+    var autoNarrateSession by remember { mutableStateOf(true) }
+    var playbackPositionMs by remember { mutableStateOf(-1L) }
+    var narrationElapsedMs by remember { mutableStateOf(0L) }
+    var narrationDone by remember { mutableStateOf(false) }
+    // Subtitle block on screen (index into the page's chunks)
+    var shownChunk by remember { mutableStateOf(0) }
+    // "Read it myself": the whole page text for a grown-up reading aloud
+    var fullTextMode by remember { mutableStateOf(false) }
+    // Video-player style overlay: hidden while the narrator reads, back on any key press
+    var controlsVisible by remember { mutableStateOf(true) }
+    var interactionTick by remember { mutableStateOf(0) }
+    var swallowSelectRelease by remember { mutableStateOf(false) }
     val exitButtonFocusRequester = remember { FocusRequester() }
     val nextButtonFocusRequester = remember { FocusRequester() }
     val audioButtonFocusRequester = remember { FocusRequester() }
-    val prevButtonFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(showExitDialog) {
-        if (wasExitDialogOpen && !showExitDialog) {
-            delay(100)
-            try {
-                if (pagerState.currentPage < pages.size - 1) {
-                    nextButtonFocusRequester.requestFocus()
-                } else {
-                    audioButtonFocusRequester.requestFocus()
-                }
-            } catch (_: Exception) {}
-        }
-        wasExitDialogOpen = showExitDialog
-    }
-
-    LaunchedEffect(pagerState.currentPage) {
-        delay(120)
-        try {
-            val page = pages.getOrNull(pagerState.currentPage)
-            if (page is SagaPage.ScenePage) {
-                nextButtonFocusRequester.requestFocus()
-            }
-        } catch (_: Exception) {}
-    }
 
     val currentPage = pages.getOrNull(pagerState.currentPage) ?: pages.first()
-    val currentChapter = when (currentPage) {
-        is SagaPage.ScenePage -> currentPage.chapter
-        is SagaPage.RetoSuperadoPage -> currentPage.chapter
-        is SagaPage.ChallengePromptPage -> currentPage.chapter
-    }
-    val currentChapterNum = when (currentPage) {
-        is SagaPage.ScenePage -> currentPage.chapterIndex
-        is SagaPage.RetoSuperadoPage -> currentPage.chapterIndex
-        is SagaPage.ChallengePromptPage -> currentPage.chapterIndex
-    }
+    val currentChapter = currentPage.chapterStory()
+    val currentChapterNum = currentPage.chapterNumber()
+    val onScenePage = currentPage is SagaPage.ScenePage
 
-    PlatformBackHandler(enabled = true) {
-        if (showExitDialog) {
-            showExitDialog = false
-        } else {
-            showExitDialog = true
+    // Words and subtitle chunks of the page being read, synced with the narration clock
+    val sceneText = (currentPage as? SagaPage.ScenePage)?.scene?.textContent.orEmpty()
+    val sceneWords = remember(sceneText) { Regex("\\S+").findAll(sceneText).map { it.range }.toList() }
+    val sceneChunks = remember(sceneText) { subtitleChunks(sceneWords.map { sceneText.substring(it) }) }
+    val sceneTimings = (currentPage as? SagaPage.ScenePage)?.scene?.wordTimingsMs.orEmpty()
+    val timingsValid = sceneTimings.isNotEmpty() && sceneTimings.size == sceneWords.size
+    val activeWord = if (timingsValid && playbackPositionMs >= 0) sceneTimings.indexOfLast { it <= playbackPositionMs } else -1
+    val spokenWord = when {
+        activeWord >= 0 -> activeWord
+        isPlayingAudio && !timingsValid && sceneWords.isNotEmpty() -> {
+            val clockMs = if (playbackPositionMs >= 0) playbackPositionMs else narrationElapsedMs
+            (clockMs / ESTIMATED_MS_PER_WORD).toInt().coerceIn(0, sceneWords.lastIndex)
+        }
+        else -> -1
+    }
+    LaunchedEffect(spokenWord, sceneChunks) {
+        if (spokenWord >= 0) {
+            val idx = sceneChunks.indexOfFirst { spokenWord in it }
+            if (idx >= 0) shownChunk = idx
         }
     }
 
-    val pageTurnSpec = remember {
-        tween<Float>(
-            durationMillis = 320,
-            easing = FastOutSlowInEasing
-        )
+    val pageTurnSpec = remember { tween<Float>(durationMillis = 420, easing = FastOutSlowInEasing) }
+
+    fun goTo(target: Int) {
+        if (target in pages.indices && target != pagerState.currentPage && !pagerState.isScrollInProgress) {
+            coroutineScope.launch { pagerState.animateScrollToPage(page = target, animationSpec = pageTurnSpec) }
+        }
+    }
+
+    fun playPage(page: SagaPage?) {
+        narrationDone = false
+        val challengeAudio = (page as? SagaPage.ChallengePromptPage)?.chapter?.creativeChallenge?.audioBase64
+        when {
+            page is SagaPage.ScenePage -> {
+                isPlayingAudio = true
+                PlatformAudioService.playStoryAudio(page.scene.textContent, page.scene.audioBase64)
+            }
+            page is SagaPage.ChallengePromptPage && page.canNarrateChallenge() -> {
+                isPlayingAudio = true
+                PlatformAudioService.playStoryAudio(page.challengeNarrationText(), challengeAudio)
+            }
+            else -> {
+                PlatformAudioService.stop()
+                isPlayingAudio = false
+            }
+        }
+    }
+
+    fun toggleAudio() {
+        if (isPlayingAudio) {
+            PlatformAudioService.stop()
+            isPlayingAudio = false
+            autoNarrateSession = false
+        } else {
+            autoNarrateSession = true
+            if (fullTextMode) fullTextMode = false
+            playPage(pages.getOrNull(pagerState.currentPage))
+        }
+    }
+
+    fun setFullText(enabled: Boolean) {
+        fullTextMode = enabled
+        if (enabled && isPlayingAudio) {
+            // A grown-up is reading aloud: the narrator steps aside
+            PlatformAudioService.stop()
+            isPlayingAudio = false
+            autoNarrateSession = false
+        }
+    }
+
+    // ◀ ▶ walk the subtitles at the child's own pace when nobody narrates, otherwise turn the page
+    fun step(forward: Boolean) {
+        val canStepChunk = onScenePage && !isPlayingAudio && !fullTextMode
+        when {
+            canStepChunk && forward && shownChunk < sceneChunks.lastIndex -> shownChunk++
+            canStepChunk && !forward && shownChunk > 0 -> shownChunk--
+            else -> goTo(pagerState.currentPage + if (forward) 1 else -1)
+        }
+    }
+
+    // Fire TV guideline: BACK closes the open overlay first, then leaves (progress is saved automatically)
+    PlatformBackHandler(enabled = true) {
+        if (fullTextMode) {
+            setFullText(false)
+        } else {
+            PlatformAudioService.stop()
+            onCloseClick()
+        }
     }
 
     DisposableEffect(Unit) {
         PlatformAudioService.setOnAudioCompletedListener {
             isPlayingAudio = false
+            narrationDone = true
         }
         onDispose {
             PlatformAudioService.setOnAudioCompletedListener(null)
@@ -337,931 +393,916 @@ fun StoryReaderScreen(
         StoryRepository.markLastReadStory(currentChapter.storyId)
     }
 
-    var previousPage by remember { mutableStateOf(pagerState.currentPage) }
-
+    // Page change (and first open): sound effect, narration and focus on the primary action
+    var previousPage by remember { mutableStateOf(-1) }
     LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage != previousPage) {
-            val page = pages.getOrNull(pagerState.currentPage)
+        val page = pages.getOrNull(pagerState.currentPage)
+        val firstOpen = previousPage == -1
+        shownChunk = 0
+        narrationDone = false
+        if (!firstOpen) {
+            PlatformAudioService.stop()
+            isPlayingAudio = false
             if (page is SagaPage.ChallengePromptPage || page is SagaPage.RetoSuperadoPage) {
                 PlatformAudioService.playSfx(SoundEffect.CELEBRATION)
             } else {
                 PlatformAudioService.playSfx(SoundEffect.PAGE_TURN)
             }
-            previousPage = pagerState.currentPage
-
-            if (autoNarrateSession) {
-                if (page is SagaPage.ScenePage) {
-                    isPlayingAudio = true
-                    PlatformAudioService.playStoryAudio(page.scene.textContent, page.scene.audioBase64)
-                } else {
-                    PlatformAudioService.stop()
-                    isPlayingAudio = false
+        }
+        previousPage = pagerState.currentPage
+        if (page is SagaPage.ScenePage) {
+            delay(120)
+            try { nextButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+        }
+        if (autoNarrateSession) {
+            // let the page settle (and the celebration jingle finish) before the voice starts
+            delay(
+                when {
+                    firstOpen -> 700L
+                    page is SagaPage.ScenePage -> 250L
+                    else -> 1100L
                 }
-            }
+            )
+            if (pagerState.currentPage == pages.indexOf(page)) playPage(page)
         }
     }
 
-    // Redesigned Exit Reader Confirmation Modal
-    if (showExitDialog) {
-        Dialog(
-            onDismissRequest = { showExitDialog = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-                    Card(
-                        shape = RoundedCornerShape(28.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(1.5.dp, ReaderCardBorder),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
-                        modifier = Modifier.width(480.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 28.dp, vertical = 26.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(CircleShape)
-                                    .background(ReaderGoldSoft),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = "📖", fontSize = 34.sp)
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            Text(
-                                text = AppStrings.exitReaderDialogTitle,
-                                fontFamily = TitleFont(),
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ReaderInkDark,
-                                textAlign = TextAlign.Center
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Text(
-                                text = AppStrings.storySavedNotice(currentChapter.title),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ReaderInkMuted,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 20.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(22.dp))
-
-                            // Primary: Keep Reading
-                            val keepReadingFocusRequester = remember { FocusRequester() }
-                            LaunchedEffect(Unit) {
-                                try { keepReadingFocusRequester.requestFocus() } catch (_: Exception) {}
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(50.dp),
-                                color = ReaderCoral,
-                                shadowElevation = 4.dp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .focusRequester(keepReadingFocusRequester)
-                                    .tvFocusable(
-                                        shape = RoundedCornerShape(50.dp),
-                                        focusedScale = 1.05f,
-                                        onClick = { showExitDialog = false }
-                                    )
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "${AppStrings.keepReading} ✨",
-                                        fontFamily = TitleFont(),
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Secondary: Exit to Home / Bookshelf
-                            val onExitReader = {
-                                showExitDialog = false
-                                PlatformAudioService.stop()
-                                onCloseClick()
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(50.dp),
-                                color = Color.White,
-                                border = BorderStroke(1.5.dp, ReaderCardBorder),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                                    .tvFocusable(
-                                        shape = RoundedCornerShape(50.dp),
-                                        focusedScale = 1.05f,
-                                        onClick = onExitReader
-                                    )
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = AppStrings.exitReaderDialogConfirm,
-                                        fontFamily = TitleFont(),
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ReaderInkMuted
-                                    )
-                                }
-                            }
-                        }
-                    }
+    // Narration finished: rest on the last subtitle and invite the child to turn the page
+    LaunchedEffect(narrationDone) {
+        if (narrationDone && pages.getOrNull(pagerState.currentPage) is SagaPage.ScenePage) {
+            shownChunk = sceneChunks.lastIndex.coerceAtLeast(0)
+            try { nextButtonFocusRequester.requestFocus() } catch (_: Exception) {}
         }
     }
 
-    BoxWithConstraints(
+    // Narration clock for subtitles and word-by-word highlighting (Amazon Polly speech marks)
+    LaunchedEffect(isPlayingAudio, pagerState.currentPage) {
+        playbackPositionMs = -1L
+        narrationElapsedMs = 0L
+        while (isPlayingAudio) {
+            playbackPositionMs = PlatformAudioService.currentPositionMs()
+            delay(50)
+            narrationElapsedMs += 50
+        }
+        playbackPositionMs = -1L
+    }
+
+    LaunchedEffect(interactionTick, isPlayingAudio, fullTextMode, onScenePage) {
+        controlsVisible = true
+        if (onScenePage && isPlayingAudio && !fullTextMode) {
+            delay(CONTROLS_AUTO_HIDE_MS)
+            controlsVisible = false
+        }
+    }
+
+    val overlayAlpha by animateFloatAsState(
+        targetValue = if (!onScenePage || controlsVisible || fullTextMode) 1f else 0f,
+        animationSpec = tween(durationMillis = if (controlsVisible) 200 else 500),
+        label = "reader_overlay_alpha"
+    )
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(ReaderCreamBg)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            ReaderGoldSoft.copy(alpha = 0.45f),
-                            ReaderCoralSoft.copy(alpha = 0.2f),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = maxOf(size.width, size.height) * 0.65f
-                    )
-                )
-            }
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyUp && !showExitDialog) {
-                    when (event.key) {
-                        Key.MediaFastForward, Key.PageDown -> {
-                            if (!pagerState.isScrollInProgress && pagerState.currentPage < pages.size - 1) {
-                                coroutineScope.launch {
-                                    pagerState.animateScrollToPage(
-                                        page = pagerState.currentPage + 1,
-                                        animationSpec = pageTurnSpec
-                                    )
-                                }
-                                true
-                            } else false
+                if (event.type == KeyEventType.KeyDown) interactionTick++
+                val onScene = pages.getOrNull(pagerState.currentPage) is SagaPage.ScenePage
+                val overlayHidden = onScene && !controlsVisible && !fullTextMode
+                when (event.key) {
+                    // ◀ ▶ always belong to the story (subtitle or page), never to focus movement
+                    Key.DirectionRight, Key.DirectionLeft -> {
+                        if (!onScene) {
+                            false
+                        } else {
+                            if (event.type == KeyEventType.KeyDown) step(forward = event.key == Key.DirectionRight)
+                            true
                         }
-                        Key.MediaRewind, Key.PageUp -> {
-                            if (!pagerState.isScrollInProgress && pagerState.currentPage > 0) {
-                                coroutineScope.launch {
-                                    pagerState.animateScrollToPage(
-                                        page = pagerState.currentPage - 1,
-                                        animationSpec = pageTurnSpec
-                                    )
-                                }
-                                true
-                            } else false
+                    }
+                    // Like a video player: OK while the overlay is hidden pauses the narration and shows the controls
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> when {
+                        overlayHidden && event.type == KeyEventType.KeyDown && !swallowSelectRelease -> {
+                            swallowSelectRelease = true
+                            toggleAudio()
+                            coroutineScope.launch {
+                                delay(60)
+                                try { audioButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                            }
+                            true
                         }
-                        Key.MediaPlayPause -> {
-                            val curP = pages.getOrNull(pagerState.currentPage)
-                            if (curP is SagaPage.ScenePage) {
-                                if (isPlayingAudio) {
-                                    PlatformAudioService.stop()
-                                    isPlayingAudio = false
-                                } else {
-                                    isPlayingAudio = true
-                                    PlatformAudioService.playStoryAudio(curP.scene.textContent, curP.scene.audioBase64)
-                                }
-                                true
-                            } else false
+                        swallowSelectRelease -> {
+                            if (event.type == KeyEventType.KeyUp) swallowSelectRelease = false
+                            true
                         }
                         else -> false
                     }
-                } else false
+                    // First ▲ ▼ only wakes the overlay up
+                    Key.DirectionUp, Key.DirectionDown -> overlayHidden
+                    Key.MediaFastForward, Key.PageDown -> {
+                        if (event.type == KeyEventType.KeyUp) goTo(pagerState.currentPage + 1)
+                        true
+                    }
+                    Key.MediaRewind, Key.PageUp -> {
+                        if (event.type == KeyEventType.KeyUp) goTo(pagerState.currentPage - 1)
+                        true
+                    }
+                    Key.MediaPlayPause -> {
+                        val narratable = onScene || pages.getOrNull(pagerState.currentPage) is SagaPage.ChallengePromptPage
+                        if (event.type == KeyEventType.KeyUp && narratable) toggleAudio()
+                        narratable
+                    }
+                    else -> false
+                }
             }
     ) {
-        val isLandscape = maxWidth > maxHeight
-        val screenHorizontalPadding = if (isLandscape) 48.dp else 16.dp
-        val screenVerticalPadding = if (isLandscape) 24.dp else 10.dp
+        // =================================================================
+        // 1. PAGES: full-bleed 16:9 illustrations (cinema mode) or challenge pages
+        // =================================================================
+        @OptIn(ExperimentalFoundationApi::class)
+        CompositionLocalProvider(LocalBringIntoViewSpec provides NoOpBringIntoViewSpec) {
+            HorizontalPager(
+                state = pagerState,
+                userScrollEnabled = false,
+                modifier = Modifier.fillMaxSize()
+            ) { pageIndex ->
+                val page = pages[pageIndex]
+                val isCurrentPage = pageIndex == pagerState.currentPage
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val pageOffset = (pagerState.currentPage - pageIndex) + pagerState.currentPageOffsetFraction
+                            alpha = (1f - pageOffset.absoluteValue * 0.6f).coerceIn(0f, 1f)
+                        }
+                ) {
+                    when (page) {
+                        is SagaPage.ScenePage -> CinematicIllustration(
+                            url = page.scene.illustrationUrl,
+                            contentDescription = if (AppStrings.isEnglish) "Illustration for page ${page.scene.pageNumber}" else "Ilustración de la página ${page.scene.pageNumber}",
+                            animate = isCurrentPage
+                        )
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = screenHorizontalPadding, vertical = screenVerticalPadding),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // =================================================================
-            // 1. TOP BAR: Circular Close · Pill Badge & Title · Circular Audio
-            // =================================================================
-            Row(
+                        is SagaPage.RetoSuperadoPage -> RetoSuperadoPageContent(
+                            page = page,
+                            isCurrentPage = isCurrentPage,
+                            onTurnToNextChapter = { goTo(pagerState.currentPage + 1) },
+                            onGoToBookshelf = {
+                                PlatformAudioService.stop()
+                                onGoToBookshelf()
+                            },
+                            onGoPrev = { goTo(pagerState.currentPage - 1) }
+                        )
+
+                        is SagaPage.ChallengePromptPage -> ChallengePromptPageContent(
+                            page = page,
+                            isCurrentPage = isCurrentPage,
+                            isPlayingAudio = isPlayingAudio && isCurrentPage,
+                            onToggleAudio = { toggleAudio() },
+                            onScanNextDrawing = {
+                                PlatformAudioService.stop()
+                                PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
+                                onScanNextDrawing(page.chapter)
+                            },
+                            onGoToBookshelf = {
+                                PlatformAudioService.stop()
+                                onGoToBookshelf()
+                            },
+                            onGoPrev = { goTo(pagerState.currentPage - 1) }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (onScenePage) {
+            // Soft top scrim so the top bar stays legible over any illustration
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = if (isLandscape) 4.dp else 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Close button: [✕ Salir]
-                Surface(
-                    shape = RoundedCornerShape(50.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.5.dp, ReaderCardBorder),
-                    shadowElevation = 2.dp,
-                    modifier = Modifier
-                        .height(44.dp)
-                        .focusRequester(exitButtonFocusRequester)
-                        .tvFocusable(shape = RoundedCornerShape(50.dp), focusedScale = 1.06f, onClick = { showExitDialog = true })
-                        .onKeyEvent {
-                            if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionDown || it.key == Key.DirectionRight)) {
-                                try {
-                                    if (pagerState.currentPage < pages.size - 1) {
-                                        nextButtonFocusRequester.requestFocus()
-                                    } else {
-                                        audioButtonFocusRequester.requestFocus()
-                                    }
-                                } catch (_: Exception) {}
-                                true
-                            } else false
-                        }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    ) {
-                        Text(
-                            text = "✕",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = ReaderInkDark
+                    .height(110.dp)
+                    .graphicsLayer { alpha = overlayAlpha }
+                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.32f), Color.Transparent)))
+            )
+            // Bottom scrim: the only part of the illustration the subtitles darken
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.45f to Color.Black.copy(alpha = 0.28f),
+                            1f to Color.Black.copy(alpha = 0.72f)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (AppStrings.isEnglish) "Exit" else "Salir",
-                            fontFamily = TitleFont(),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ReaderInkDark
-                        )
-                    }
-                }
+                    )
+            )
+        }
 
-                // Center: Story Title (+ Saga Chapter badge if multi-chapter)
+        // =================================================================
+        // 2. TOP BAR: Exit · Title · Progress (inside the 48dp/20dp safe zone)
+        // =================================================================
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = overlayAlpha }
+                .padding(horizontal = 48.dp, vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TvClickableSurface(
+                onClick = {
+                    PlatformAudioService.stop()
+                    onCloseClick()
+                },
+                modifier = Modifier
+                    .height(44.dp)
+                    .focusRequester(exitButtonFocusRequester),
+                shape = RoundedCornerShape(50),
+                containerColor = Color.White.copy(alpha = 0.92f),
+                focusedContainerColor = Color.White,
+                contentDescription = if (AppStrings.isEnglish) "Exit story" else "Salir del cuento"
+            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = 18.dp).align(Alignment.Center)
                 ) {
-                    if (sagaChapters.size > 1) {
-                        Surface(
-                            shape = RoundedCornerShape(50.dp),
-                            color = ReaderCoralSoft,
-                            modifier = Modifier.padding(end = 10.dp)
-                        ) {
-                            Text(
-                                text = "🌟 ${AppStrings.sagaBadge(currentChapterNum).uppercase()}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = ReaderCoral,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
+                    Text(text = "✕", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = ReaderInkDark)
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = currentChapter.title,
+                        text = if (AppStrings.isEnglish) "Exit" else "Salir",
                         fontFamily = TitleFont(),
-                        fontSize = if (isLandscape) 22.sp else 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ReaderInkDark,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ReaderInkDark
                     )
                 }
-
-                // Right: Symmetric spacer matching Exit button width so title stays centered
-                Spacer(modifier = Modifier.width(96.dp))
             }
 
-            Spacer(modifier = Modifier.height(if (isLandscape) 4.dp else 8.dp))
-
-            // =================================================================
-            // 2. MAIN BOOK PAGER WITH 3D PAGE-CURL TRANSITION
-            // =================================================================
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
             ) {
-                @OptIn(ExperimentalFoundationApi::class)
-                CompositionLocalProvider(
-                    LocalBringIntoViewSpec provides NoOpBringIntoViewSpec
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.9f)
                 ) {
-                    HorizontalPager(
-                        state = pagerState,
-                        userScrollEnabled = false,
-                        modifier = Modifier.fillMaxSize()
-                    ) { pageIndex ->
-                        val page = pages[pageIndex]
-                        val isCurrentPage = pageIndex == pagerState.currentPage
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    val pageOffset = ((pagerState.currentPage - pageIndex) + pagerState.currentPageOffsetFraction)
-                                    val absOffset = pageOffset.absoluteValue
-                                    alpha = (1f - (absOffset * 0.35f)).coerceIn(0.25f, 1f)
-                                }
-                        ) {
-                            when (page) {
-                                is SagaPage.ScenePage -> {
-                                    ScenePageContent(
-                                        page = page,
-                                        isLandscape = isLandscape,
-                                        isCurrentPage = isCurrentPage,
-                                        isPlayingAudio = isPlayingAudio,
-                                        onToggleAudio = {
-                                            if (isPlayingAudio) {
-                                                PlatformAudioService.stop()
-                                                isPlayingAudio = false
-                                                autoNarrateSession = false
-                                            } else {
-                                                autoNarrateSession = true
-                                                isPlayingAudio = true
-                                                PlatformAudioService.playStoryAudio(page.scene.textContent, page.scene.audioBase64)
-                                            }
-                                        }
-                                    )
-                                }
-
-                                is SagaPage.RetoSuperadoPage -> {
-                                    RetoSuperadoPageContent(
-                                        page = page,
-                                        isLandscape = isLandscape,
-                                        isCurrentPage = isCurrentPage,
-                                        onTurnToNextChapter = {
-                                            if (!pagerState.isScrollInProgress && pagerState.currentPage < pages.size - 1) {
-                                                coroutineScope.launch {
-                                                    pagerState.animateScrollToPage(
-                                                        page = pagerState.currentPage + 1,
-                                                        animationSpec = pageTurnSpec
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        onGoToBookshelf = {
-                                            PlatformAudioService.stop()
-                                            onGoToBookshelf()
-                                        },
-                                        onGoPrev = {
-                                            if (!pagerState.isScrollInProgress && pagerState.currentPage > 0) {
-                                                coroutineScope.launch {
-                                                    pagerState.animateScrollToPage(
-                                                        page = pagerState.currentPage - 1,
-                                                        animationSpec = pageTurnSpec
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-
-                                is SagaPage.ChallengePromptPage -> {
-                                    ChallengePromptPageContent(
-                                        page = page,
-                                        isLandscape = isLandscape,
-                                        isCurrentPage = isCurrentPage,
-                                        onScanNextDrawing = {
-                                            PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
-                                            onScanNextDrawing(page.chapter)
-                                        },
-                                        onGoToBookshelf = {
-                                            PlatformAudioService.stop()
-                                            onGoToBookshelf()
-                                        },
-                                        onGoPrev = {
-                                            if (!pagerState.isScrollInProgress && pagerState.currentPage > 0) {
-                                                coroutineScope.launch {
-                                                    pagerState.animateScrollToPage(
-                                                        page = pagerState.currentPage - 1,
-                                                        animationSpec = pageTurnSpec
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(if (isLandscape) 4.dp else 8.dp))
-
-            // =================================================================
-            // 3. BOTTOM READER CONTROLS: Prev + Audio · Segments · Next / Reto
-            // =================================================================
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(vertical = if (isLandscape) 2.dp else 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // LEFT: [ ◀ Anterior ]  and  [ 🔊 Narrando / Escuchar ]
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    val canGoPrev = pagerState.currentPage > 0
-                    val onGoPrev: () -> Unit = {
-                        if (!pagerState.isScrollInProgress && canGoPrev) {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(
-                                    page = pagerState.currentPage - 1,
-                                    animationSpec = pageTurnSpec
-                                )
-                            }
-                        }
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = if (canGoPrev) Color.White else Color.White.copy(alpha = 0.4f),
-                        border = BorderStroke(1.5.dp, if (canGoPrev) ReaderCardBorder else ReaderCardBorder.copy(alpha = 0.4f)),
-                        shadowElevation = if (canGoPrev) 2.dp else 0.dp,
-                        modifier = Modifier
-                            .height(46.dp)
-                            .focusRequester(prevButtonFocusRequester)
-                            .then(
-                                if (canGoPrev) {
-                                    Modifier
-                                        .tvFocusable(shape = RoundedCornerShape(50.dp), focusedScale = 1.06f, onClick = onGoPrev)
-                                        .onKeyEvent {
-                                            if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) {
-                                                try { exitButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                                                true
-                                            } else if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionRight) {
-                                                try { audioButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                                                true
-                                            } else if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
-                                                onGoPrev()
-                                                true
-                                            } else false
-                                        }
-                                } else Modifier
-                            )
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        ) {
-                            Text(
-                                text = "←",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (canGoPrev) ReaderInkDark else ReaderInkMuted.copy(alpha = 0.35f)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (AppStrings.isEnglish) "Previous" else "Anterior",
-                                fontFamily = TitleFont(),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (canGoPrev) ReaderInkDark else ReaderInkMuted.copy(alpha = 0.35f)
-                            )
-                        }
-                    }
-
-                    // Audio Narrando / Escuchar Button (only on scene pages)
-                    if (currentPage is SagaPage.ScenePage) {
-                        val toggleAudio: () -> Unit = {
-                            if (isPlayingAudio) {
-                                PlatformAudioService.stop()
-                                isPlayingAudio = false
-                                autoNarrateSession = false
-                            } else {
-                                autoNarrateSession = true
-                                isPlayingAudio = true
-                                PlatformAudioService.playStoryAudio(currentPage.scene.textContent, currentPage.scene.audioBase64)
-                            }
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(50.dp),
-                            color = if (isPlayingAudio) ReaderMintSoft else Color.White,
-                            border = BorderStroke(
-                                width = 1.5.dp,
-                                color = if (isPlayingAudio) ReaderMintBorder else ReaderCardBorder
-                            ),
-                            shadowElevation = 2.dp,
-                            modifier = Modifier
-                                .height(46.dp)
-                                .focusRequester(audioButtonFocusRequester)
-                                .tvFocusable(shape = RoundedCornerShape(50.dp), focusedScale = 1.06f, onClick = toggleAudio)
-                                .onKeyEvent {
-                                    if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) {
-                                        try { exitButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                                        true
-                                    } else if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionLeft) {
-                                        if (canGoPrev) {
-                                            try { prevButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                                            true
-                                        } else false
-                                    } else if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionRight) {
-                                        try { nextButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                                        true
-                                    } else false
-                                }
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 16.dp)
-                            ) {
-                                AudioSpeakerIcon(
-                                    isPlaying = isPlayingAudio,
-                                    tint = if (isPlayingAudio) ReaderMint else ReaderCoral,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (isPlayingAudio) {
-                                        if (AppStrings.isEnglish) "Playing..." else "Narrando"
-                                    } else {
-                                        if (AppStrings.isEnglish) "Listen" else "Escuchar"
-                                    },
-                                    fontFamily = TitleFont(),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (isPlayingAudio) ReaderMint else ReaderInkDark
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // CENTER: Single Segmented Bar + Label
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)
-                ) {
-                    val currentChapterPages = pages.mapIndexedNotNull { idx, p ->
-                        val chNum = when (p) {
-                            is SagaPage.ScenePage -> p.chapterIndex
-                            is SagaPage.RetoSuperadoPage -> p.chapterIndex
-                            is SagaPage.ChallengePromptPage -> p.chapterIndex
-                        }
-                        if (chNum == currentChapterNum) Pair(idx, p) else null
-                    }
-                    val totalScenes = currentChapterPages.count { it.second is SagaPage.ScenePage }
-                    val currentSceneIndex = (currentPage as? SagaPage.ScenePage)?.sceneIndex ?: totalScenes
-
-                    // Segmented Bar Row
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth(if (isLandscape) 0.55f else 0.85f)
-                            .height(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
                     ) {
-                        for (i in 0 until totalScenes) {
-                            val isRead = i < currentSceneIndex
-                            val isActive = i == currentSceneIndex && currentPage is SagaPage.ScenePage
-                            val segColor = when {
-                                isActive -> ReaderCoral
-                                isRead -> ReaderMint
-                                else -> ReaderCardBorder
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(segColor)
-                            )
-                        }
-
-                        // Challenge or Next Chapter segment
-                        val hasChallenge = currentChapterPages.any { it.second is SagaPage.ChallengePromptPage || it.second is SagaPage.RetoSuperadoPage }
-                        if (hasChallenge) {
-                            val isChallengeActive = currentPage is SagaPage.ChallengePromptPage || currentPage is SagaPage.RetoSuperadoPage
-                            Box(
-                                modifier = Modifier
-                                    .width(24.dp)
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(if (isChallengeActive) ReaderGoldText else ReaderGoldSoft)
-                                    .border(1.dp, ReaderGoldBorder, RoundedCornerShape(4.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "★",
-                                    fontSize = 12.sp,
-                                    color = if (isChallengeActive) Color.White else ReaderGoldText,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Progress label
-                    val hasChallenge = currentChapterPages.any { it.second is SagaPage.ChallengePromptPage || it.second is SagaPage.RetoSuperadoPage }
-                    val progressLabel = when (currentPage) {
-                        is SagaPage.ScenePage -> {
-                            val base = "Página ${currentPage.sceneIndex + 1} de ${currentPage.totalScenesInChapter}"
-                            if (hasChallenge) "$base · ${if (AppStrings.isEnglish) "Challenge at end" else "Reto al final"}" else base
-                        }
-                        is SagaPage.ChallengePromptPage -> if (AppStrings.isEnglish) "Creative Challenge" else "Reto Creativo"
-                        is SagaPage.RetoSuperadoPage -> if (AppStrings.isEnglish) "Challenge Completed!" else "¡Reto Superado!"
-                    }
-
-                    Text(
-                        text = progressLabel,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ReaderInkMuted
-                    )
-                }
-
-                // RIGHT: Next Page Pill / Ir al Reto Button
-                val canGoNext = pagerState.currentPage < pages.size - 1
-                if (canGoNext) {
-                    val onGoNext: () -> Unit = {
-                        if (!pagerState.isScrollInProgress && pagerState.currentPage < pages.size - 1) {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(
-                                    page = pagerState.currentPage + 1,
-                                    animationSpec = pageTurnSpec
-                                )
-                            }
-                        }
-                    }
-                    val isLastSceneBeforeChallenge = currentPage is SagaPage.ScenePage &&
-                        pagerState.currentPage + 1 < pages.size &&
-                        (pages[pagerState.currentPage + 1] is SagaPage.ChallengePromptPage || pages[pagerState.currentPage + 1] is SagaPage.RetoSuperadoPage)
-
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = ReaderCoral,
-                        shadowElevation = 3.dp,
-                        modifier = Modifier
-                            .height(46.dp)
-                            .focusRequester(nextButtonFocusRequester)
-                            .tvFocusable(
-                                shape = RoundedCornerShape(50.dp),
-                                focusedScale = 1.06f,
-                                onClick = onGoNext
-                            )
-                            .onKeyEvent {
-                                if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) {
-                                    try { exitButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                                    true
-                                } else if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionLeft) {
-                                    try { audioButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                                    true
-                                } else if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionRight) {
-                                    onGoNext()
-                                    true
-                                } else false
-                            }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 18.dp)
-                        ) {
+                        if (sagaChapters.size > 1) {
                             Text(
-                                text = if (isLastSceneBeforeChallenge) {
-                                    if (AppStrings.isEnglish) "Go to Challenge →" else "Ir al Reto →"
-                                } else {
-                                    if (AppStrings.isEnglish) "Next →" else "Siguiente →"
-                                },
-                                fontFamily = TitleFont(),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                text = "🌟 ${AppStrings.sagaBadge(currentChapterNum)}",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = ReaderCoral
                             )
+                            Spacer(modifier = Modifier.width(10.dp))
                         }
+                        Text(
+                            text = currentChapter.title,
+                            fontFamily = TitleFont(),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ReaderInkDark,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
-                } else {
-                    // Last page: Spacer to balance layout width
-                    Spacer(modifier = Modifier.width(130.dp))
                 }
             }
+
+            ReaderProgressPill(pages = pages, currentIndex = pagerState.currentPage, chapterNum = currentChapterNum)
+        }
+
+        // =================================================================
+        // 3. SCENE OVERLAY: synced subtitles (or full text) + auto-hiding controls
+        // =================================================================
+        if (currentPage is SagaPage.ScenePage) {
+            val nextIndex = pagerState.currentPage + 1
+            val canGoNext = nextIndex < pages.size
+            val canGoPrev = pagerState.currentPage > 0
+            val nextIsChallenge = canGoNext && pages[nextIndex] !is SagaPage.ScenePage
+
+            if (fullTextMode) {
+                FullTextPanel(
+                    text = sceneText,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 48.dp, end = 272.dp, bottom = 28.dp)
+                )
+            } else {
+                SubtitleBlock(
+                    text = sceneText,
+                    words = sceneWords,
+                    chunks = sceneChunks,
+                    chunkIndex = shownChunk,
+                    activeWord = activeWord,
+                    pageIndex = pagerState.currentPage,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(start = 72.dp, end = 72.dp, bottom = 34.dp)
+                )
+            }
+
+            // Page-turn hints while the overlay rests
+            if (canGoNext) {
+                EdgeChevron(
+                    glyph = "›",
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 28.dp)
+                        .graphicsLayer { alpha = 1f - overlayAlpha }
+                )
+            }
+            if (canGoPrev) {
+                EdgeChevron(
+                    glyph = "‹",
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 28.dp)
+                        .graphicsLayer { alpha = (1f - overlayAlpha) * 0.6f }
+                )
+            }
+
+            ReaderControls(
+                isPlayingAudio = isPlayingAudio,
+                narrationDone = narrationDone,
+                fullTextMode = fullTextMode,
+                canGoPrev = canGoPrev,
+                nextLabel = when {
+                    nextIsChallenge -> if (AppStrings.isEnglish) "Challenge →" else "Ir al reto →"
+                    else -> if (AppStrings.isEnglish) "Next →" else "Siguiente →"
+                },
+                onNext = if (canGoNext) ({ goTo(nextIndex) }) else null,
+                onPrev = { goTo(pagerState.currentPage - 1) },
+                onToggleAudio = { toggleAudio() },
+                onToggleFullText = { setFullText(!fullTextMode) },
+                nextFocusRequester = nextButtonFocusRequester,
+                audioFocusRequester = audioButtonFocusRequester,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 48.dp, top = 40.dp)
+                    .graphicsLayer { alpha = overlayAlpha }
+            )
         }
     }
 }
 
+private fun SagaPage.chapterNumber(): Int = when (this) {
+    is SagaPage.ScenePage -> chapterIndex
+    is SagaPage.RetoSuperadoPage -> chapterIndex
+    is SagaPage.ChallengePromptPage -> chapterIndex
+}
+
+private fun SagaPage.chapterStory(): FullStoryResponse = when (this) {
+    is SagaPage.ScenePage -> chapter
+    is SagaPage.RetoSuperadoPage -> chapter
+    is SagaPage.ChallengePromptPage -> chapter
+}
+
+private fun SagaPage.ChallengePromptPage.challengeNarrationText(): String {
+    val challenge = chapter.creativeChallenge
+    val opener = if (AppStrings.isEnglish) "Help ${chapter.sagaHero.name}!" else "¡Ayuda a ${chapter.sagaHero.name}!"
+    return listOf(opener, challenge.prompt, challenge.encouragement).filter { it.isNotBlank() }.joinToString(" ")
+}
+
+/** Polly audio from the backend, or the Spanish device voice for stories created before challenge narration existed. */
+private fun SagaPage.ChallengePromptPage.canNarrateChallenge(): Boolean =
+    !chapter.creativeChallenge.audioBase64.isNullOrBlank() || !AppStrings.isEnglish
+
+/**
+ * Splits a page into subtitle blocks (ranges of word indices): whole sentences when they fit,
+ * long sentences cut at the pause closest to their middle, short neighbours merged up to [maxChars].
+ * A dialogue tag ("—¡Ayuda! —gritó el peluche.") stays with its line.
+ */
+internal fun subtitleChunks(words: List<String>, maxChars: Int = SUBTITLE_MAX_CHARS): List<IntRange> {
+    if (words.isEmpty()) return emptyList()
+    fun length(range: IntRange): Int = range.sumOf { words[it].length + 1 } - 1
+
+    val sentences = mutableListOf<IntRange>()
+    var start = 0
+    for (i in words.indices) {
+        val bare = words[i].trimEnd('»', '"', '”', '\'', ')')
+        val endsSentence = bare.endsWith('.') || bare.endsWith('!') || bare.endsWith('?') || bare.endsWith('…')
+        val next = words.getOrNull(i + 1)
+        val dialogueTagFollows = next != null && next.startsWith("—") && next.drop(1).firstOrNull()?.isLowerCase() == true
+        if (i == words.lastIndex || (endsSentence && !dialogueTagFollows)) {
+            sentences += start..i
+            start = i + 1
+        }
+    }
+
+    val pieces = mutableListOf<IntRange>()
+    fun split(range: IntRange) {
+        if (length(range) <= maxChars || range.first == range.last) {
+            pieces += range
+            return
+        }
+        val target = length(range) / 2
+        val pauses = (range.first until range.last).filter { i ->
+            val w = words[i]
+            w.endsWith(',') || w.endsWith(';') || w.endsWith(':') || w.endsWith('!') || w.endsWith('?') ||
+                w.endsWith('—') || words[i + 1].startsWith("—")
+        }
+        val cut = pauses.minByOrNull { kotlin.math.abs(length(range.first..it) - target) }
+            ?: run {
+                var acc = 0
+                range.first + (range.first until range.last).indexOfFirst { acc += words[it].length + 1; acc > target }.coerceAtLeast(0)
+            }
+        split(range.first..cut)
+        split((cut + 1)..range.last)
+    }
+    sentences.forEach { split(it) }
+
+    val chunks = mutableListOf<IntRange>()
+    for (piece in pieces) {
+        val last = chunks.lastOrNull()
+        if (last != null && length(last.first..piece.last) <= maxChars) {
+            chunks[chunks.lastIndex] = last.first..piece.last
+        } else {
+            chunks += piece
+        }
+    }
+    return chunks
+}
+
+/** Full-bleed 16:9 illustration with a slow Ken Burns drift on the page being read. */
 @Composable
-private fun ScenePageContent(
-    page: SagaPage.ScenePage,
-    isLandscape: Boolean,
-    isCurrentPage: Boolean = true,
-    isPlayingAudio: Boolean,
-    onToggleAudio: () -> Unit
-) {
-    val scene = page.scene
-    if (isLandscape) {
-        Row(
+private fun CinematicIllustration(url: String?, contentDescription: String?, animate: Boolean) {
+    val transition = rememberInfiniteTransition(label = "ken_burns")
+    val drift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 24000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "ken_burns_drift"
+    )
+    val p = if (animate) drift else 0f
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF6EBD9))
+    ) {
+        WonderLoopImage(
+            model = url,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .graphicsLayer {
+                    val scale = 1.03f + 0.06f * p
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = (p - 0.5f) * size.width * 0.03f
+                }
+        )
+    }
+}
+
+@Composable
+private fun ReaderProgressPill(pages: List<SagaPage>, currentIndex: Int, chapterNum: Int) {
+    val chapterPages = pages.withIndex().filter { it.value.chapterNumber() == chapterNum }
+    val scenes = chapterPages.filter { it.value is SagaPage.ScenePage }
+    val current = pages.getOrNull(currentIndex)
+    val sceneIdx = (current as? SagaPage.ScenePage)?.sceneIndex ?: scenes.size
+    Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.9f)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            // Left Page: Illustration Card (Clean, artwork only)
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.5.dp, ReaderCardBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-            ) {
+            scenes.forEachIndexed { i, _ ->
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Color(0xFFFFF6DE))
-                ) {
+                        .size(width = if (i == sceneIdx) 26.dp else 16.dp, height = 8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            when {
+                                i == sceneIdx && current is SagaPage.ScenePage -> ReaderCoral
+                                i < sceneIdx -> ReaderMint
+                                else -> ReaderDotInactive
+                            }
+                        )
+                )
+            }
+            Text(
+                text = "★",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (current !is SagaPage.ScenePage) ReaderGoldText else ReaderGoldBorder
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = if (current is SagaPage.ScenePage) "${sceneIdx + 1} / ${scenes.size}" else if (AppStrings.isEnglish) "Challenge" else "Reto",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = ReaderInkDark
+            )
+        }
+    }
+}
+
+private val SubtitleShadow = Shadow(color = Color.Black.copy(alpha = 0.75f), offset = Offset(0f, 2f), blurRadius = 12f)
+
+/**
+ * Cinema subtitles: one or two sentences at a time over the illustration, the narrated word in gold.
+ * Word timings come from Amazon Polly speech marks, aligned to the whitespace-separated words by the backend.
+ */
+@Composable
+private fun SubtitleBlock(
+    text: String,
+    words: List<IntRange>,
+    chunks: List<IntRange>,
+    chunkIndex: Int,
+    activeWord: Int,
+    pageIndex: Int,
+    modifier: Modifier = Modifier
+) {
+    if (chunks.isEmpty()) return
+    val index = chunkIndex.coerceIn(0, chunks.lastIndex)
+    val chunk = chunks[index]
+    val start = words[chunk.first].first
+    val slice = text.substring(start, words[chunk.last].last + 1)
+    AnimatedContent(
+        targetState = Triple(pageIndex, index, slice),
+        transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(160)) },
+        contentAlignment = Alignment.BottomCenter,
+        label = "subtitle",
+        modifier = modifier
+    ) { (shownPage, shownIndex, shownSlice) ->
+        val live = shownPage == pageIndex && shownIndex == index
+        val annotated = buildAnnotatedString {
+            append(shownSlice)
+            if (live && activeWord in chunk) {
+                val range = words[activeWord]
+                addStyle(SpanStyle(color = ReaderGoldHighlight), range.first - start, range.last + 1 - start)
+            }
+        }
+        Text(
+            text = annotated,
+            style = TextStyle(shadow = SubtitleShadow),
+            fontSize = 28.sp,
+            lineHeight = 38.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/** "Read it myself" mode: the whole page for a grown-up reading aloud, next to the controls. */
+@Composable
+private fun FullTextPanel(text: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color.White.copy(alpha = 0.95f))
+            .border(1.5.dp, ReaderCardBorder, RoundedCornerShape(28.dp))
+            .padding(horizontal = 28.dp, vertical = 20.dp)
+    ) {
+        Text(
+            text = if (AppStrings.isEnglish) "📖 READ-ALOUD MODE" else "📖 MODO LEER YO",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.5.sp,
+            color = ReaderGoldText
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        HighlightedStoryText(text = text, wordTimingsMs = emptyList(), positionMs = -1L)
+    }
+}
+
+@Composable
+private fun EdgeChevron(glyph: String, modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.28f))
+    ) {
+        Text(
+            text = glyph,
+            fontSize = 34.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+    }
+}
+
+/** Vertical control rail: ▲ ▼ move between actions, so ◀ ▶ stay free for turning pages. */
+@Composable
+private fun ReaderControls(
+    isPlayingAudio: Boolean,
+    narrationDone: Boolean,
+    fullTextMode: Boolean,
+    canGoPrev: Boolean,
+    nextLabel: String,
+    onNext: (() -> Unit)?,
+    onPrev: () -> Unit,
+    onToggleAudio: () -> Unit,
+    onToggleFullText: () -> Unit,
+    nextFocusRequester: FocusRequester,
+    audioFocusRequester: FocusRequester,
+    modifier: Modifier = Modifier
+) {
+    val nextPulse = if (narrationDone && onNext != null) {
+        val transition = rememberInfiniteTransition(label = "next_pulse")
+        val scale by transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.07f,
+            animationSpec = infiniteRepeatable(tween(650, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "next_pulse_scale"
+        )
+        scale
+    } else {
+        1f
+    }
+
+    Column(
+        modifier = modifier.width(204.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (onNext != null) {
+            TvClickableSurface(
+                onClick = onNext,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .graphicsLayer {
+                        scaleX = nextPulse
+                        scaleY = nextPulse
+                    }
+                    .focusRequester(nextFocusRequester),
+                shape = RoundedCornerShape(50),
+                containerColor = ReaderCoral,
+                focusedContainerColor = ReaderCoral,
+                contentColor = Color.White,
+                focusedScale = 1.06f,
+                glowColor = ReaderCoral.copy(alpha = 0.45f),
+                contentDescription = nextLabel,
+                playClickSound = false
+            ) {
+                Text(
+                    text = nextLabel,
+                    fontFamily = TitleFont(),
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+        }
+
+        TvClickableSurface(
+            onClick = onToggleAudio,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .focusRequester(audioFocusRequester),
+            shape = RoundedCornerShape(50),
+            containerColor = if (isPlayingAudio) ReaderMintSoft else Color.White,
+            borderColor = if (isPlayingAudio) ReaderMintBorder else ReaderCardBorder,
+            contentDescription = if (isPlayingAudio) AppStrings.pauseNarration else AppStrings.listenPageWithVoice
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                AudioSpeakerIcon(
+                    isPlaying = isPlayingAudio,
+                    tint = if (isPlayingAudio) ReaderMint else ReaderCoral,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isPlayingAudio) {
+                        if (AppStrings.isEnglish) "Pause" else "Pausar"
+                    } else {
+                        if (AppStrings.isEnglish) "Listen" else "Escuchar"
+                    },
+                    fontFamily = TitleFont(),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isPlayingAudio) ReaderMint else ReaderInkDark
+                )
+            }
+        }
+
+        if (canGoPrev) {
+            TvClickableSurface(
+                onClick = onPrev,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                shape = RoundedCornerShape(50),
+                containerColor = Color.White,
+                borderColor = ReaderCardBorder,
+                playClickSound = false,
+                contentDescription = if (AppStrings.isEnglish) "Previous page" else "Página anterior"
+            ) {
+                Text(
+                    text = if (AppStrings.isEnglish) "← Previous" else "← Anterior",
+                    fontFamily = TitleFont(),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ReaderInkMuted,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+        }
+
+        TvClickableSurface(
+            onClick = onToggleFullText,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp),
+            shape = RoundedCornerShape(50),
+            containerColor = if (fullTextMode) ReaderGoldSoft else Color.White,
+            borderColor = if (fullTextMode) ReaderGoldBorder else ReaderCardBorder,
+            contentDescription = if (AppStrings.isEnglish) "Show the whole page text" else "Ver el texto completo"
+        ) {
+            Text(
+                text = when {
+                    fullTextMode -> if (AppStrings.isEnglish) "✕ Hide text" else "✕ Ocultar texto"
+                    else -> if (AppStrings.isEnglish) "📖 I'll read" else "📖 Leer yo"
+                },
+                fontFamily = TitleFont(),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (fullTextMode) ReaderGoldText else ReaderInkDark,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+
+        Text(
+            text = if (AppStrings.isEnglish) "◀ ▶ turn the page" else "◀ ▶ pasar página",
+            style = TextStyle(shadow = SubtitleShadow),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+    }
+}
+
+/** Whole page text (read-aloud mode), with optional karaoke highlight of the narrated word. */
+@Composable
+private fun HighlightedStoryText(text: String, wordTimingsMs: List<Int>, positionMs: Long) {
+    val words = remember(text) { Regex("\\S+").findAll(text).map { it.range }.toList() }
+    val activeIndex = if (positionMs < 0 || wordTimingsMs.size != words.size) {
+        -1
+    } else {
+        wordTimingsMs.indexOfLast { it <= positionMs }
+    }
+    val annotated = remember(text, activeIndex) {
+        buildAnnotatedString {
+            append(text)
+            if (activeIndex in words.indices) {
+                val range = words[activeIndex]
+                addStyle(
+                    SpanStyle(background = ReaderGoldHighlight, color = ReaderInkDark),
+                    range.first,
+                    range.last + 1
+                )
+            }
+        }
+    }
+    val compact = words.size > 60
+    Text(
+        text = annotated,
+        fontSize = if (compact) 20.sp else 22.sp,
+        lineHeight = if (compact) 29.sp else 32.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = ReaderInkDark
+    )
+}
+
+// =====================================================================
+// CHAPTER-END PAGES: drawing mission and "challenge completed"
+// =====================================================================
+
+/** The chapter's own artwork, washed in cream, so end pages feel part of the same story. */
+@Composable
+private fun ChapterBackdrop(imageUrl: String?, animate: Boolean) {
+    CinematicIllustration(url = imageUrl, contentDescription = null, animate = animate)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.horizontalGradient(
+                    listOf(ReaderCreamBg.copy(alpha = 0.55f), ReaderCreamBg.copy(alpha = 0.9f))
+                )
+            )
+    )
+}
+
+/** Tilted instant-photo frame for a character portrait, with a ribbon badge on top. */
+@Composable
+private fun PolaroidPortrait(
+    imageUrl: String?,
+    contentDescription: String,
+    badge: String,
+    accent: Color,
+    rotation: Float,
+    imageSize: Dp
+) {
+    Box(contentAlignment = Alignment.TopCenter) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White,
+            shadowElevation = 10.dp,
+            modifier = Modifier
+                .padding(top = 16.dp)
+                .rotate(rotation)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 28.dp)
+                    .size(imageSize)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.12f))
+            ) {
+                if (!imageUrl.isNullOrBlank()) {
                     WonderLoopImage(
-                        model = scene.illustrationUrl,
-                        contentDescription = "Ilustración de la página ${scene.pageNumber}",
+                        model = imageUrl,
+                        contentDescription = contentDescription,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
-                }
-            }
-
-            // Right Page: Story Text Card (Clean, stable 10-foot typography)
-            val textScrollState = rememberScrollState()
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.5.dp, ReaderCardBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(textScrollState)
-                        .padding(horizontal = 32.dp, vertical = 26.dp),
-                    verticalArrangement = if (textScrollState.maxValue > 0) Arrangement.Top else Arrangement.Center
-                ) {
-                    Text(
-                        text = scene.textContent,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ReaderInkDark,
-                        lineHeight = 35.sp,
-                        textAlign = TextAlign.Start
-                    )
+                } else {
+                    Text(text = "🎨", fontSize = 72.sp)
                 }
             }
         }
-    } else {
-        // Portrait Mode: Unified Open Storybook Card
-        Card(
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(1.5.dp, ReaderCardBorder),
-            elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Surface(shape = RoundedCornerShape(50), color = accent, shadowElevation = 4.dp) {
+            Text(
+                text = badge,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.5.sp,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+/** Draw → scan → new chapter: the creative loop at a glance. */
+@Composable
+private fun CreativeLoopSteps(nextChapterNumber: Int, modifier: Modifier = Modifier) {
+    val steps = listOf(
+        "🖍️" to (if (AppStrings.isEnglish) "Draw it" else "Dibújalo"),
+        "📱" to (if (AppStrings.isEnglish) "Scan it" else "Escanéalo"),
+        "✨" to (if (AppStrings.isEnglish) "Chapter $nextChapterNumber" else "Capítulo $nextChapterNumber")
+    )
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.85f))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        steps.forEachIndexed { i, (emoji, label) ->
+            if (i > 0) {
+                Text(text = "›", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ReaderInkMuted)
+            }
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.weight(1f)
             ) {
-                // Top Watercolor Illustration Frame
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(275.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(Color(0xFFFFF6DE), Color(0xFFFFE8EC))
-                            )
-                        )
-                        .border(1.5.dp, Color(0xFFF3E5C8), RoundedCornerShape(22.dp))
-                ) {
-                    WonderLoopImage(
-                        model = scene.illustrationUrl,
-                        contentDescription = "Ilustración de la página ${scene.pageNumber}",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    // Floating Page Number Pill
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = Color.White.copy(alpha = 0.92f),
-                        shadowElevation = 3.dp,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(12.dp)
-                    ) {
-                        Text(
-                            text = "✨ ${page.sceneIndex + 1} / ${page.totalScenesInChapter}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = ReaderInkDark,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Story Text
+                Text(text = emoji, fontSize = 22.sp)
                 Text(
-                    text = scene.textContent,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = label,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
                     color = ReaderInkDark,
-                    lineHeight = 28.sp,
-                    textAlign = TextAlign.Start,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 6.dp)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Bottom Voice Pill inside the book card
-                AudioNarrationPill(
-                    isPlayingAudio = isPlayingAudio,
-                    label = if (isPlayingAudio) AppStrings.pauseNarration else AppStrings.listenPageWithVoice,
-                    onClick = onToggleAudio,
-                    modifier = Modifier.align(Alignment.Start)
+                    maxLines = 1
                 )
             }
         }
     }
 }
 
-@Composable
-private fun AudioNarrationPill(
-    isPlayingAudio: Boolean,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(50.dp),
-        color = if (isPlayingAudio) ReaderMintSoft else ReaderCoralSoft,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isPlayingAudio) ReaderMintBorder else Color(0xFFF9D0CA)
-        ),
-        onClick = onClick,
-        modifier = modifier
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-        ) {
-            AudioSpeakerIcon(
-                isPlaying = isPlayingAudio,
-                tint = if (isPlayingAudio) ReaderMint else ReaderCoral,
-                modifier = Modifier.size(17.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = label,
-                fontFamily = TitleFont(),
-                fontSize = 13.sp,
-                color = if (isPlayingAudio) ReaderMint else ReaderCoral,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+/** ◀ on the left-most action goes back a page; the other keys keep moving focus normally. */
+private fun Modifier.previousPageOnLeft(onGoPrev: () -> Unit): Modifier = onPreviewKeyEvent {
+    if (it.key == Key.DirectionLeft) {
+        if (it.type == KeyEventType.KeyDown) onGoPrev()
+        true
+    } else {
+        false
     }
 }
 
 @Composable
 private fun RetoSuperadoPageContent(
     page: SagaPage.RetoSuperadoPage,
-    isLandscape: Boolean,
     isCurrentPage: Boolean = true,
     onTurnToNextChapter: () -> Unit,
     onGoToBookshelf: () -> Unit,
@@ -1275,394 +1316,189 @@ private fun RetoSuperadoPageContent(
     val companionAvatar: String? = page.nextChapter.character.reinterpretedImageUrl
         ?: page.nextChapter.character.originalDrawingBase64
         ?: page.nextChapter.scenes.firstOrNull()?.illustrationUrl
+    val nextCover = page.nextChapter.scenes.firstOrNull()?.illustrationUrl
+    val nextChapterFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isCurrentPage) {
+        if (isCurrentPage) {
+            delay(120)
+            try { nextChapterFocusRequester.requestFocus() } catch (_: Exception) {}
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (isLandscape) {
-            // Widescreen 2-Column TV Layout
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+        ChapterBackdrop(imageUrl = nextCover, animate = isCurrentPage)
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 48.dp, end = 48.dp, top = 84.dp, bottom = 28.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left: the new friend the child drew
+            Column(
+                modifier = Modifier.weight(0.4f),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Left Card: Companion Portrait & Congratulations
-                Card(
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(2.dp, ReaderMintBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                PolaroidPortrait(
+                    imageUrl = companionAvatar,
+                    contentDescription = companionName,
+                    badge = AppStrings.challengeAlreadyCompletedTitle.uppercase(),
+                    accent = ReaderMint,
+                    rotation = 3f,
+                    imageSize = 220.dp
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = companionName,
+                    fontFamily = TitleFont(),
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ReaderInkDark,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Right: what happened + the next chapter
+            Column(
+                modifier = Modifier
+                    .weight(0.6f)
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(Color.White.copy(alpha = 0.96f))
+                    .border(2.dp, ReaderMintBorder, RoundedCornerShape(32.dp))
+                    .padding(horizontal = 30.dp, vertical = 24.dp)
+            ) {
+                Text(
+                    text = AppStrings.challengeAlreadyCompletedBody(companionName),
+                    fontSize = 21.sp,
+                    lineHeight = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ReaderInkDark,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
                     modifier = Modifier
-                        .weight(0.48f)
-                        .fillMaxHeight()
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(ReaderGoldSoft)
+                        .border(1.dp, ReaderGoldBorder, RoundedCornerShape(20.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 22.dp, vertical = 18.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(50.dp),
-                            color = ReaderMintSoft,
-                            border = BorderStroke(1.dp, ReaderMintBorder),
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        ) {
-                            Text(
-                                text = "🎉 ${AppStrings.challengeAlreadyCompletedTitle.uppercase()}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = ReaderMint,
-                                letterSpacing = 0.5.sp,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
-                            )
-                        }
-
-                        if (companionAvatar != null) {
-                            Surface(
-                                shape = CircleShape,
-                                shadowElevation = 6.dp,
-                                border = BorderStroke(3.dp, ReaderMint),
-                                modifier = Modifier.size(76.dp)
-                            ) {
-                                WonderLoopImage(
-                                    model = companionAvatar,
-                                    contentDescription = companionName,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        } else {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(70.dp)
-                                    .clip(CircleShape)
-                                    .background(ReaderMintSoft)
-                                    .border(2.dp, ReaderMint, CircleShape)
-                            ) {
-                                Text(text = "🎨", fontSize = 32.sp)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
+                    if (!nextCover.isNullOrBlank()) {
+                        WonderLoopImage(
+                            model = nextCover,
+                            contentDescription = nextChTitle,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(width = 128.dp, height = 72.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                    }
+                    Column {
                         Text(
-                            text = companionName,
+                            text = if (AppStrings.isEnglish) "🌟 CHAPTER $nextChNum IS READY" else "🌟 CAPÍTULO $nextChNum LISTO",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.5.sp,
+                            color = ReaderGoldText
+                        )
+                        Text(
+                            text = nextChTitle,
                             fontFamily = TitleFont(),
-                            fontSize = 20.sp,
+                            fontSize = 21.sp,
+                            lineHeight = 26.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = ReaderInkDark,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Text(
-                            text = AppStrings.challengeAlreadyCompletedBody(companionName),
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ReaderInkMuted,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 19.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp)
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                // Right Card: Next Chapter Banner & Actions
-                Card(
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.5.dp, ReaderCardBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                Spacer(modifier = Modifier.height(22.dp))
+
+                TvClickableSurface(
+                    onClick = onTurnToNextChapter,
+                    enabled = isCurrentPage,
                     modifier = Modifier
-                        .weight(0.52f)
-                        .fillMaxHeight()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 24.dp, vertical = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = ReaderGoldSoft,
-                            border = BorderStroke(1.dp, ReaderGoldBorder),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(text = "🌟", fontSize = 24.sp)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = if (AppStrings.isEnglish) "NEXT CHAPTER READY" else "SIGUIENTE CAPÍTULO LISTO",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = ReaderGoldText,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                    Text(
-                                        text = "Capítulo $nextChNum: $nextChTitle",
-                                        fontFamily = TitleFont(),
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = ReaderInkDark
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        val nextChapterFocusRequester = remember { FocusRequester() }
-                        LaunchedEffect(isCurrentPage) {
-                            if (isCurrentPage) {
-                                kotlinx.coroutines.delay(120)
-                                try { nextChapterFocusRequester.requestFocus() } catch (_: Exception) {}
-                            }
-                        }
-                        Button(
-                            onClick = onTurnToNextChapter,
-                            shape = RoundedCornerShape(50.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = ReaderMint,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .focusRequester(nextChapterFocusRequester)
-                                .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onTurnToNextChapter)
-                                .onKeyEvent {
-                                    if (it.type == KeyEventType.KeyUp && (it.key == Key.DirectionLeft || it.key == Key.Back)) {
-                                        onGoPrev()
-                                        true
-                                    } else if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionRight) {
-                                        onTurnToNextChapter()
-                                        true
-                                    } else false
-                                }
-                        ) {
-                            Text(
-                                text = if (AppStrings.isEnglish) "Read Chapter $nextChNum ➔" else "¡Leer Capítulo $nextChNum! ➔",
-                                fontFamily = TitleFont(),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        TextButton(
-                            onClick = onGoToBookshelf,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(42.dp)
-                                .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onGoToBookshelf)
-                        ) {
-                            Text(
-                                text = AppStrings.goToMyBookshelf,
-                                fontFamily = TitleFont(),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ReaderInkMuted
-                            )
-                        }
-                    }
-                }
-            }
-        } else {
-            // Portrait fallback
-            Card(
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(2.dp, ReaderMintBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 22.dp, vertical = 22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = ReaderMintSoft,
-                        border = BorderStroke(1.dp, ReaderMintBorder),
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    ) {
-                        Text(
-                            text = "🎉 ${AppStrings.challengeAlreadyCompletedTitle.uppercase()}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = ReaderMint,
-                            letterSpacing = 0.5.sp,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                        )
-                    }
-
-                    if (companionAvatar != null) {
-                        Surface(
-                            shape = CircleShape,
-                            shadowElevation = 6.dp,
-                            border = BorderStroke(3.dp, ReaderMint),
-                            modifier = Modifier.size(96.dp)
-                        ) {
-                            WonderLoopImage(
-                                model = companionAvatar,
-                                contentDescription = companionName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    } else {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(84.dp)
-                                .clip(CircleShape)
-                                .background(ReaderMintSoft)
-                                .border(2.dp, ReaderMint, CircleShape)
-                        ) {
-                            Text(text = "🎨", fontSize = 40.sp)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = companionName,
-                        fontFamily = TitleFont(),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ReaderInkDark,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = AppStrings.challengeAlreadyCompletedBody(companionName),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ReaderInkMuted,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = ReaderGoldSoft,
-                        border = BorderStroke(1.dp, ReaderGoldBorder),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "🌟", fontSize = 20.sp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = if (AppStrings.isEnglish) "NEXT CHAPTER READY" else "SIGUIENTE CAPÍTULO LISTO",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = ReaderGoldText,
-                                    letterSpacing = 0.5.sp
-                                )
-                                Text(
-                                    text = "Capítulo $nextChNum: $nextChTitle",
-                                    fontFamily = TitleFont(),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = ReaderInkDark
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    val nextChapterFocusRequester = remember { FocusRequester() }
-                    LaunchedEffect(isCurrentPage) {
-                        if (isCurrentPage) {
-                            kotlinx.coroutines.delay(120)
-                            try { nextChapterFocusRequester.requestFocus() } catch (_: Exception) {}
-                        }
-                    }
-                    Button(
-                        onClick = onTurnToNextChapter,
-                        shape = RoundedCornerShape(50.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ReaderMint,
-                            contentColor = Color.White
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .focusRequester(nextChapterFocusRequester)
-                            .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onTurnToNextChapter)
-                            .onKeyEvent {
-                                if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
-                                    onGoPrev()
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .focusRequester(nextChapterFocusRequester)
+                        .onPreviewKeyEvent {
+                            when (it.key) {
+                                Key.DirectionLeft -> {
+                                    if (it.type == KeyEventType.KeyDown) onGoPrev()
                                     true
-                                } else false
+                                }
+                                Key.DirectionRight -> {
+                                    if (it.type == KeyEventType.KeyDown) onTurnToNextChapter()
+                                    true
+                                }
+                                else -> false
                             }
-                    ) {
-                        Text(
-                            text = if (AppStrings.isEnglish) "Read Chapter $nextChNum ➔" else "¡Leer Capítulo $nextChNum! ➔",
-                            fontFamily = TitleFont(),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                    }
+                        },
+                    shape = RoundedCornerShape(50),
+                    containerColor = ReaderMint,
+                    focusedContainerColor = ReaderMint,
+                    contentColor = Color.White,
+                    glowColor = ReaderMint.copy(alpha = 0.4f),
+                    contentDescription = if (AppStrings.isEnglish) "Read chapter $nextChNum" else "Leer el capítulo $nextChNum"
+                ) {
+                    Text(
+                        text = if (AppStrings.isEnglish) "Read Chapter $nextChNum ➔" else "¡Leer Capítulo $nextChNum! ➔",
+                        fontFamily = TitleFont(),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                    TextButton(
-                        onClick = onGoToBookshelf,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onGoToBookshelf)
-                    ) {
-                        Text(
-                            text = AppStrings.goToMyBookshelf,
-                            fontFamily = TitleFont(),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ReaderInkMuted
-                        )
-                    }
+                TvClickableSurface(
+                    onClick = onGoToBookshelf,
+                    enabled = isCurrentPage,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .previousPageOnLeft(onGoPrev),
+                    shape = RoundedCornerShape(50),
+                    containerColor = Color.White,
+                    borderColor = ReaderCardBorder,
+                    contentDescription = AppStrings.goToMyBookshelf
+                ) {
+                    Text(
+                        text = AppStrings.goToMyBookshelf,
+                        fontFamily = TitleFont(),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ReaderInkMuted,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
             }
         }
 
-        ConfettiEffect(particleCount = 45)
+        ConfettiEffect(particleCount = 30)
     }
 }
 
 @Composable
 private fun ChallengePromptPageContent(
     page: SagaPage.ChallengePromptPage,
-    isLandscape: Boolean,
     isCurrentPage: Boolean = true,
+    isPlayingAudio: Boolean,
+    onToggleAudio: () -> Unit,
     onScanNextDrawing: () -> Unit,
     onGoToBookshelf: () -> Unit,
     onGoPrev: () -> Unit = {}
@@ -1672,546 +1508,205 @@ private fun ChallengePromptPageContent(
         ?: hero.originalDrawingBase64
         ?: page.chapter.scenes.firstOrNull()?.illustrationUrl
     val nextChapterNumber = (page.chapter.chapterIndex ?: page.chapterIndex) + 1
+    val challenge = page.chapter.creativeChallenge
+    val canNarrate = page.canNarrateChallenge()
     val scanFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(isCurrentPage) {
         if (isCurrentPage) {
-            kotlinx.coroutines.delay(120)
+            delay(120)
             try { scanFocusRequester.requestFocus() } catch (_: Exception) {}
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (isLandscape) {
-            // Widescreen 2-Column TV Layout
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+        ChapterBackdrop(imageUrl = page.chapter.scenes.lastOrNull()?.illustrationUrl, animate = isCurrentPage)
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 48.dp, end = 48.dp, top = 84.dp, bottom = 28.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left: the hero asking for help + how the loop works
+            Column(
+                modifier = Modifier.weight(0.4f),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Left Card: Mission Card (Avatar, Prompt, Encouragement)
-                Card(
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(2.dp, ReaderGoldBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                    modifier = Modifier
-                        .weight(0.48f)
-                        .fillMaxHeight()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 22.dp, vertical = 18.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(50.dp),
-                            color = ReaderGoldSoft,
-                            border = BorderStroke(1.dp, ReaderGoldBorder),
-                            modifier = Modifier.padding(bottom = 10.dp)
-                        ) {
-                            Text(
-                                text = if (AppStrings.isEnglish) "🎨 DRAWING MISSION · CH. $nextChapterNumber" else "🎨 MISIÓN DE DIBUJO · CAP. $nextChapterNumber",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = ReaderGoldText,
-                                letterSpacing = 0.5.sp,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                            )
-                        }
-
-                        // Hero Avatar with Crayon Badge
-                        Box(contentAlignment = Alignment.BottomEnd) {
-                            if (!heroAvatar.isNullOrBlank()) {
-                                Surface(
-                                    shape = CircleShape,
-                                    shadowElevation = 4.dp,
-                                    border = BorderStroke(2.5.dp, ReaderCoral),
-                                    modifier = Modifier.size(68.dp)
-                                ) {
-                                    WonderLoopImage(
-                                        model = heroAvatar,
-                                        contentDescription = hero.name,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                            } else {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .clip(CircleShape)
-                                        .background(ReaderGoldSoft)
-                                ) {
-                                    Text(text = "🖍️", fontSize = 30.sp)
-                                }
-                            }
-
-                            Surface(
-                                shape = CircleShape,
-                                color = ReaderCoral,
-                                border = BorderStroke(2.dp, Color.White),
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(text = "🖍️", fontSize = 11.sp)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Text(
-                            text = if (AppStrings.isEnglish) "Help ${hero.name}!" else "¡Ayuda a ${hero.name}!",
-                            fontFamily = TitleFont(),
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ReaderInkDark,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = page.chapter.creativeChallenge.prompt,
-                            fontSize = 14.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = ReaderInkDark,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
-                        )
-
-                        if (page.chapter.creativeChallenge.encouragement.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = ReaderMintSoft,
-                                border = BorderStroke(1.dp, ReaderMintBorder),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(text = "💡", fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = page.chapter.creativeChallenge.encouragement,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ReaderInkDark,
-                                        lineHeight = 17.sp,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Right Card: Action & Steps Card
-                Card(
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.5.dp, ReaderCardBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                    modifier = Modifier
-                        .weight(0.52f)
-                        .fillMaxHeight()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 24.dp, vertical = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = if (AppStrings.isEnglish) "How to continue:" else "¿Cómo continuar?",
-                            fontFamily = TitleFont(),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ReaderInkDark
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color(0xFFF7F2EA),
-                                border = BorderStroke(1.dp, ReaderCardBorder),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp)
-                                ) {
-                                    Text(text = "🖍️", fontSize = 22.sp)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = if (AppStrings.isEnglish) "1. Draw on paper" else "1. Dibuja en papel",
-                                        fontSize = 13.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ReaderInkDark,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color(0xFFF7F2EA),
-                                border = BorderStroke(1.dp, ReaderCardBorder),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp)
-                                ) {
-                                    Text(text = "📱", fontSize = 22.sp)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = if (AppStrings.isEnglish) "2. Scan with phone" else "2. Escanea con móvil",
-                                        fontSize = 13.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ReaderInkDark,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        Button(
-                            onClick = onScanNextDrawing,
-                            shape = RoundedCornerShape(50.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = ReaderCoral,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .focusRequester(scanFocusRequester)
-                                .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onScanNextDrawing)
-                                .onKeyEvent {
-                                    if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
-                                        onGoPrev()
-                                        true
-                                    } else false
-                                }
-                        ) {
-                            Text(
-                                text = if (AppStrings.isEnglish) "📱 I've drawn it! Scan QR ➔" else "📱 ¡Ya lo he dibujado! Escanear QR ➔",
-                                fontFamily = TitleFont(),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedButton(
-                            onClick = onGoToBookshelf,
-                            shape = RoundedCornerShape(50.dp),
-                            border = BorderStroke(1.5.dp, ReaderCardBorder),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = Color.White,
-                                contentColor = ReaderInkMuted
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(42.dp)
-                                .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onGoToBookshelf)
-                                .onKeyEvent {
-                                    if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
-                                        onGoPrev()
-                                        true
-                                    } else false
-                                }
-                        ) {
-                            Text(
-                                text = AppStrings.goToMyBookshelf,
-                                fontFamily = TitleFont(),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ReaderInkMuted
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = if (AppStrings.isEnglish) "Help ${hero.name}!" else "¡Ayuda a ${hero.name}!",
+                    fontFamily = TitleFont(),
+                    fontSize = 32.sp,
+                    lineHeight = 38.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ReaderInkDark,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                PolaroidPortrait(
+                    imageUrl = heroAvatar,
+                    contentDescription = hero.name,
+                    badge = if (AppStrings.isEnglish) "🖍️ DRAWING MISSION" else "🖍️ MISIÓN DE DIBUJO",
+                    accent = ReaderCoral,
+                    rotation = -3f,
+                    imageSize = 184.dp
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                CreativeLoopSteps(nextChapterNumber = nextChapterNumber, modifier = Modifier.fillMaxWidth())
             }
-        } else {
-            // Portrait fallback
-            Card(
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(2.dp, ReaderGoldBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            shape = RoundedCornerShape(50.dp),
-                            color = ReaderGoldSoft,
-                            border = BorderStroke(1.dp, ReaderGoldBorder),
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        ) {
-                            Text(
-                                text = if (AppStrings.isEnglish) "🎨 DRAWING MISSION · CHAPTER $nextChapterNumber" else "🎨 MISIÓN DE DIBUJO · CAPÍTULO $nextChapterNumber",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = ReaderGoldText,
-                                letterSpacing = 0.5.sp,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
-                            )
-                        }
 
+            // Right: the mission itself, big enough to read from the sofa
+            Column(
+                modifier = Modifier
+                    .weight(0.6f)
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(Color.White.copy(alpha = 0.96f))
+                    .border(2.dp, ReaderGoldBorder, RoundedCornerShape(32.dp))
+                    .padding(horizontal = 30.dp, vertical = 20.dp)
+            ) {
+                Surface(shape = RoundedCornerShape(50), color = ReaderGoldSoft, border = BorderStroke(1.dp, ReaderGoldBorder)) {
+                    Text(
+                        text = if (AppStrings.isEnglish) "🎨 TO UNLOCK CHAPTER $nextChapterNumber" else "🎨 PARA DESBLOQUEAR EL CAPÍTULO $nextChapterNumber",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.5.sp,
+                        color = ReaderGoldText,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = challenge.prompt,
+                    fontSize = 25.sp,
+                    lineHeight = 32.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = ReaderInkDark,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (challenge.encouragement.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(ReaderMintSoft)
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "💡", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = if (AppStrings.isEnglish) "Help ${hero.name}!" else "¡Ayuda a ${hero.name}!",
-                            fontFamily = TitleFont(),
-                            fontSize = 25.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            text = challenge.encouragement,
+                            fontSize = 18.sp,
+                            lineHeight = 23.sp,
+                            fontWeight = FontWeight.Bold,
                             color = ReaderInkDark,
-                            textAlign = TextAlign.Center
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(22.dp),
-                        color = Color(0xFFFFFBF2),
-                        border = BorderStroke(1.5.dp, ReaderGoldBorder),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
+                TvClickableSurface(
+                    onClick = onScanNextDrawing,
+                    enabled = isCurrentPage,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .focusRequester(scanFocusRequester)
+                        .previousPageOnLeft(onGoPrev),
+                    shape = RoundedCornerShape(50),
+                    containerColor = ReaderCoral,
+                    focusedContainerColor = ReaderCoral,
+                    contentColor = Color.White,
+                    glowColor = ReaderCoral.copy(alpha = 0.45f),
+                    contentDescription = if (AppStrings.isEnglish) "I've drawn it, scan the drawing" else "Ya lo he dibujado, escanear el dibujo"
+                ) {
+                    Text(
+                        text = if (AppStrings.isEnglish) "📱 I've drawn it! Scan it" else "📱 ¡Ya lo he dibujado! Escanear",
+                        fontFamily = TitleFont(),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (canNarrate) {
+                        TvClickableSurface(
+                            onClick = onToggleAudio,
+                            enabled = isCurrentPage,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(contentAlignment = Alignment.BottomEnd) {
-                                if (!heroAvatar.isNullOrBlank()) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        shadowElevation = 4.dp,
-                                        border = BorderStroke(2.5.dp, ReaderCoral),
-                                        modifier = Modifier.size(72.dp)
-                                    ) {
-                                        WonderLoopImage(
-                                            model = heroAvatar,
-                                            contentDescription = hero.name,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                } else {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier
-                                            .size(68.dp)
-                                            .clip(CircleShape)
-                                            .background(ReaderGoldSoft)
-                                    ) {
-                                        Text(text = "🖍️", fontSize = 34.sp)
-                                    }
-                                }
-
-                                Surface(
-                                    shape = CircleShape,
-                                    color = ReaderCoral,
-                                    border = BorderStroke(2.dp, Color.White),
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(text = "🖍️", fontSize = 13.sp)
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Text(
-                                text = page.chapter.creativeChallenge.prompt,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = ReaderInkDark,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 23.sp
-                            )
-
-                            if (page.chapter.creativeChallenge.encouragement.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = ReaderMintSoft,
-                                    border = BorderStroke(1.dp, ReaderMintBorder),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(text = "💡", fontSize = 16.sp)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = page.chapter.creativeChallenge.encouragement,
-                                            fontSize = 13.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = ReaderInkDark,
-                                            lineHeight = 17.sp,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color(0xFFF7F2EA),
-                            border = BorderStroke(1.dp, ReaderCardBorder),
-                            modifier = Modifier.weight(1f)
+                                .weight(1f)
+                                .height(48.dp)
+                                .previousPageOnLeft(onGoPrev),
+                            shape = RoundedCornerShape(50),
+                            containerColor = if (isPlayingAudio) ReaderMintSoft else Color.White,
+                            borderColor = if (isPlayingAudio) ReaderMintBorder else ReaderCardBorder,
+                            contentDescription = if (AppStrings.isEnglish) "Listen to the challenge" else "Escuchar el reto"
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                modifier = Modifier.align(Alignment.Center)
                             ) {
-                                Text(text = "🖍️", fontSize = 15.sp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (AppStrings.isEnglish) "1. Draw on paper" else "1. Dibuja en papel",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = ReaderInkDark,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                AudioSpeakerIcon(
+                                    isPlaying = isPlayingAudio,
+                                    tint = if (isPlayingAudio) ReaderMint else ReaderCoral,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color(0xFFF7F2EA),
-                            border = BorderStroke(1.dp, ReaderCardBorder),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                            ) {
-                                Text(text = "📱", fontSize = 15.sp)
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (AppStrings.isEnglish) "2. Scan QR with phone" else "2. Escanea QR con móvil",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = ReaderInkDark,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    text = when {
+                                        isPlayingAudio -> if (AppStrings.isEnglish) "Pause" else "Pausar"
+                                        else -> if (AppStrings.isEnglish) "Listen" else "Escuchar"
+                                    },
+                                    fontFamily = TitleFont(),
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isPlayingAudio) ReaderMint else ReaderInkDark
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Button(
-                            onClick = onScanNextDrawing,
-                            shape = RoundedCornerShape(50.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = ReaderCoral,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 5.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp)
-                                .focusRequester(scanFocusRequester)
-                                .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onScanNextDrawing)
-                                .onKeyEvent {
-                                    if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
-                                        onGoPrev()
-                                        true
-                                    } else false
-                                }
-                        ) {
-                            Text(
-                                text = if (AppStrings.isEnglish) "📱 I've drawn it! Scan QR ➔" else "📱 ¡Ya lo he dibujado! Escanear QR ➔",
-                                fontFamily = TitleFont(),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedButton(
-                            onClick = onGoToBookshelf,
-                            shape = RoundedCornerShape(50.dp),
-                            border = BorderStroke(1.5.dp, ReaderCardBorder),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = Color.White,
-                                contentColor = ReaderInkMuted
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp)
-                                .tvFocusable(enabled = isCurrentPage, shape = RoundedCornerShape(50.dp), onClick = onGoToBookshelf)
-                                .onKeyEvent {
-                                    if (it.type == KeyEventType.KeyUp && it.key == Key.DirectionLeft) {
-                                        onGoPrev()
-                                        true
-                                    } else false
-                                }
-                        ) {
-                            Text(
-                                text = AppStrings.goToMyBookshelf,
-                                fontFamily = TitleFont(),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ReaderInkMuted
-                            )
-                        }
+                    TvClickableSurface(
+                        onClick = onGoToBookshelf,
+                        enabled = isCurrentPage,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .then(if (canNarrate) Modifier else Modifier.previousPageOnLeft(onGoPrev)),
+                        shape = RoundedCornerShape(50),
+                        containerColor = Color.White,
+                        borderColor = ReaderCardBorder,
+                        contentDescription = AppStrings.goToMyBookshelf
+                    ) {
+                        Text(
+                            text = if (AppStrings.isEnglish) "📚 Library" else "📚 Biblioteca",
+                            fontFamily = TitleFont(),
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ReaderInkMuted,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
                     }
                 }
             }
         }
 
-        ConfettiEffect(particleCount = 45)
+        ConfettiEffect(particleCount = 30)
     }
 }

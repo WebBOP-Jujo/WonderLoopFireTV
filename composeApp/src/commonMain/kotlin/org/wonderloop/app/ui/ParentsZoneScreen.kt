@@ -419,7 +419,7 @@ fun ParentsZoneScreen(
                                         ) {
                                             Text(
                                                 text = if (AppStrings.isEnglish) "Active" else "Activo",
-                                                fontSize = 10.sp,
+                                                fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = ParentsCoral,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)

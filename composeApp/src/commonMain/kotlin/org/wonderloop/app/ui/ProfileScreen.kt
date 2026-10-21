@@ -585,7 +585,7 @@ fun ProfileScreen(
                                         ) {
                                             Text(
                                                 text = "✓",
-                                                fontSize = 10.sp,
+                                                fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = Color.White
                                             )

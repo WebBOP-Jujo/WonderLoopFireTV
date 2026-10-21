@@ -29,6 +29,8 @@ const SPEECH_PROVIDER_LABEL =
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// Public URL when deployed (e.g. https://api.example.com). When set, internal/LAN addresses are never advertised.
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL?.trim().replace(/\/+$/, '') || '';
 
 // Behind a reverse proxy / load balancer (Caddy, ALB, App Runner, Cloud Run) req.ip would otherwise be
 // the proxy's address, making every client share a single rate-limit bucket.
@@ -73,29 +75,55 @@ const revenueCatService = new RevenueCatService();
 const tvSessionApiRouter = createTvSessionApiRouter();
 const tvUploadWebRouter = createTvUploadWebRouter();
 
-// 1. Protective rate limiter for heavy Generative AI workloads (Cloud Run anti-abuse)
+// Logs every rejected request so rate limiting is visible in production logs.
+function rateLimitHandler(name: string) {
+  return (req: express.Request, res: express.Response, _next: express.NextFunction, options: { statusCode: number; message: unknown }) => {
+    console.warn(`🚦 [RateLimit:${name}] ${req.ip} exceeded the limit on ${req.method} ${req.originalUrl}`);
+    res.status(options.statusCode).json(options.message);
+  };
+}
+
+// 1. Protective rate limiter for heavy Generative AI workloads (anti-abuse)
 const aiRateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
   max: 30, // 30 requests per 10 minutes per IP
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => req.path === '/health' || req.path === '/',
+  handler: rateLimitHandler('ai'),
   message: {
     error: 'RATE_LIMIT_EXCEEDED',
     message: 'Has alcanzado el límite temporal de generación de cuentos. Espera unos minutos.'
   }
 });
 
-// 2. Protective rate limiter for TV session polling and session creation (prevents RAM flooding)
+// 2. TV session polling. Behind a proxy (TRUST_PROXY) every device of a household shares ONE public IP:
+//    the Fire TV polls every 1.2 s (~250 req / 5 min) and the phone upload page every 1.5 s (~200 req / 5 min),
+//    so the budget must cover several devices polling at once.
 const tvSessionRateLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 350, // Allows normal 1.2s polling frequency for active sessions
+  max: 1500, // ~5 req/s per household
   standardHeaders: true,
   legacyHeaders: false,
+  handler: rateLimitHandler('tv-session'),
   message: {
     success: false,
     error: 'TOO_MANY_REQUESTS',
     message: 'Demasiadas peticiones a la sesión de TV. Inténtalo más tarde.'
+  }
+});
+
+// 2b. Session creation allocates server memory: much stricter than polling (prevents RAM flooding)
+const tvSessionCreateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler('tv-session-create'),
+  message: {
+    success: false,
+    error: 'TOO_MANY_REQUESTS',
+    message: 'Demasiadas sesiones de TV creadas. Inténtalo en unos minutos.'
   }
 });
 
@@ -105,6 +133,7 @@ const tvUploadRateLimiter = rateLimit({
   max: 30, // Max 30 photo attempts per 5 minutes per IP
   standardHeaders: true,
   legacyHeaders: false,
+  handler: rateLimitHandler('upload'),
   message: {
     success: false,
     error: 'TOO_MANY_REQUESTS',
@@ -116,6 +145,7 @@ const tvUploadRateLimiter = rateLimit({
 app.use('/api/story', aiRateLimiter, createStoryRouter(storyOrchestrator, revenueCatService));
 // Drawing uploads decode images with sharp (CPU heavy): apply the stricter upload limiter on top of the session one
 app.post(['/api/tv-session/:sessionId/drawing', '/v1/tv-session/:sessionId/drawing'], tvUploadRateLimiter);
+app.post(['/api/tv-session', '/v1/tv-session'], tvSessionCreateLimiter);
 app.use('/api/tv-session', tvSessionRateLimiter, tvSessionApiRouter);
 app.use('/v1/tv-session', tvSessionRateLimiter, tvSessionApiRouter);
 app.use('/upload', tvUploadRateLimiter, tvUploadWebRouter);
@@ -125,7 +155,7 @@ app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'WonderLoop TV Backend',
-    lanIp: detectLanIp(),
+    ...(PUBLIC_BASE_URL ? {} : { lanIp: detectLanIp() }),
     timestamp: new Date().toISOString()
   });
 });
@@ -137,7 +167,7 @@ app.get('/', (_req, res) => {
     version: '1.0.0',
     status: 'healthy',
     hackathon: 'Build, Ship, Shape: Amazon Developer Hackathon (Fire TV)',
-    lanIp: detectLanIp(),
+    ...(PUBLIC_BASE_URL ? { publicUrl: PUBLIC_BASE_URL } : { lanIp: detectLanIp() }),
     models: {
       language: getLlmClient().name,
       image: 'gemini-3.1-flash-lite-image',
@@ -148,12 +178,13 @@ app.get('/', (_req, res) => {
 
 const server = app.listen(Number(PORT), '0.0.0.0', () => {
   const lanIp = detectLanIp();
+  const endpoints = PUBLIC_BASE_URL
+    ? `  🌐 Public URL:     ${PUBLIC_BASE_URL}\n  📱 QR Upload Base: ${PUBLIC_BASE_URL}/upload/<sessionId>`
+    : `  📡 Local Server:   http://localhost:${PORT}\n  📺 Fire TV Stick:  http://${lanIp}:${PORT}\n  📱 QR Upload Base: http://${lanIp}:${PORT}/upload/<sessionId>`;
   console.log(`
   ✨ WonderLoop TV Gateway Online!
   ===========================================
-  📡 Local Server:   http://localhost:${PORT}
-  📺 Fire TV Stick:  http://${lanIp}:${PORT}
-  📱 QR Upload Base: http://${lanIp}:${PORT}/upload/<sessionId>
+${endpoints}
   🎯 Target Event:   Build, Ship, Shape — Amazon Fire TV Hackathon
   🤖 AI Models:
      - Text & Vision: ${getLlmClient().name}

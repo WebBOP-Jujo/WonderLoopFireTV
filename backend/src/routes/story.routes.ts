@@ -95,7 +95,8 @@ export function createStoryRouter(
         }
 
         const artStyle = req.body.artStyle === '3d_animation' ? '3d_animation' : 'watercolor';
-        const character = await orchestrator.analyzeDrawing(buffer, mimeType, artStyle);
+        const language = req.body.language === 'en' ? 'en' : 'es';
+        const character = await orchestrator.analyzeDrawing(buffer, mimeType, artStyle, language);
         res.json({ success: true, character });
       } catch (error: any) {
         console.error('❌ [StoryRouter] Error in /analyze-drawing:', error);
@@ -190,7 +191,7 @@ export function createStoryRouter(
               : (childAge >= 7 ? '3d_animation' : 'watercolor');
 
         // 1. Analyze drawing
-        const character = await orchestrator.analyzeDrawing(buffer, mimeType, normalizedArtStyle);
+        const character = await orchestrator.analyzeDrawing(buffer, mimeType, normalizedArtStyle, language);
 
         // 2. Generate full story
         const story = await orchestrator.createFullStory(character, childName, childAge, theme, language, undefined, normalizedVoice, normalizedArtStyle);
