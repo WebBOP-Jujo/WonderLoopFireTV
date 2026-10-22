@@ -372,7 +372,7 @@ WRITING RULES
 - chapterSummary: 1-2 sentences, in the story language, saying what happened (it is used as memory for the next chapter).
 
 ILLUSTRATION PROMPTS (visualPrompt, always in ENGLISH, 20-45 words per page)
-- Describe only what is visible at that page's key moment: who (${heroName} the ${sanitizeString(hero.species, 60)}${companion ? ` and ${companionName} the ${sanitizeString(companion.species, 60)}` : ''}), the action and pose, the facial emotion, the key props and the exact spot in ${world.nameEn}.
+- Describe only what is visible at that page's key moment: who (${heroName} the ${sanitizeString(hero.species, 60)}${companion ? ` and ${companionName} the ${sanitizeString(companion.species, 60)}` : ''}), the action and pose, the facial emotion (cheerful, curious, surprised or determined; never sad, crying or scared), the key props and the exact spot in ${world.nameEn}.
 - Every page shows a different moment and spot.${companion ? ` Both ${heroName} and ${companionName} appear in every page.` : ''}
 - Do NOT write art style, camera, lighting, "16:9" or "illustration": they are added automatically.
 

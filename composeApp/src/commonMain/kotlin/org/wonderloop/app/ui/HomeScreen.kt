@@ -2,9 +2,11 @@ package org.wonderloop.app.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -58,17 +62,29 @@ private val HomeCardBorder = Color(0xFFEDE3D5)
 /** Remembers the last element the user opened so BACK returns focus to it (Fire TV focus restoration). */
 private object HomeFocusMemory {
     var lastKey: String? = null
+    var lastIdea: DailyIdea? = null
 }
 
-/** A concrete, drawable idea that changes every day (shown on the "create" card). */
+private data class DailyIdea(val emoji: String, val es: String, val en: String)
+
+/** Concrete, drawable ideas; one is picked at random on each visit (paper note on the "create" card). Kept short to fit the note. */
 private val DAILY_IDEAS = listOf(
-    "un león con una gran melena amarilla" to "a lion with a big yellow mane",
-    "un barco pirata con velas de rayas" to "a pirate ship with striped sails",
-    "un robot con ruedas y una antena" to "a robot with wheels and an antenna",
-    "una tortuga con un caparazón de colores" to "a turtle with a colorful shell",
-    "un dragón pequeño con alas verdes" to "a little dragon with green wings",
-    "un cohete que va a la Luna" to "a rocket flying to the Moon",
-    "un gato con botas rojas" to "a cat wearing red boots"
+    DailyIdea("🦁", "Un león con gran melena", "A lion with a big mane"),
+    DailyIdea("🏴‍☠️", "Un barco pirata con bandera", "A pirate ship with a flag"),
+    DailyIdea("🤖", "Un robot con una antena", "A robot with an antenna"),
+    DailyIdea("🐢", "Una tortuga de colores", "A colorful turtle"),
+    DailyIdea("🐉", "Un dragón con alas verdes", "A dragon with green wings"),
+    DailyIdea("🚀", "Un cohete que va a la Luna", "A rocket flying to the Moon"),
+    DailyIdea("🐱", "Un gato con botas rojas", "A cat wearing red boots"),
+    DailyIdea("🐙", "Un pulpo con ocho brazos", "An octopus with eight arms"),
+    DailyIdea("🦄", "Un unicornio de arcoíris", "A rainbow unicorn"),
+    DailyIdea("🐘", "Un elefante con un sombrero", "An elephant wearing a hat"),
+    DailyIdea("🦖", "Un dinosaurio con manchas", "A dinosaur with spots"),
+    DailyIdea("🐝", "Una abeja con gafas", "A bee wearing glasses"),
+    DailyIdea("🦉", "Un búho con ojos grandes", "An owl with big eyes"),
+    DailyIdea("🐧", "Un pingüino con bufanda", "A penguin with a scarf"),
+    DailyIdea("🐸", "Una rana con una corona", "A frog wearing a crown"),
+    DailyIdea("🦊", "Un zorro con una mochila", "A fox with a backpack")
 )
 
 @Composable
@@ -120,9 +136,9 @@ fun HomeScreen(
         if (!restored) runCatching { requester("create").requestFocus() }
     }
 
+    // A fresh idea each time the child lands on Home, never the same one twice in a row
     val idea = remember {
-        val day = (PlatformStorage.currentTimeMillis() / 86_400_000L).toInt()
-        DAILY_IDEAS[((day % DAILY_IDEAS.size) + DAILY_IDEAS.size) % DAILY_IDEAS.size]
+        DAILY_IDEAS.filter { it != HomeFocusMemory.lastIdea }.random().also { HomeFocusMemory.lastIdea = it }
     }
 
     WonderBackdrop {
@@ -138,7 +154,7 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(42.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 WonderLoopLogo()
@@ -151,7 +167,7 @@ fun HomeScreen(
                         onClick = onRetryConnection,
                         accent = HomeCoral
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                 }
                 HeaderChip(
                     icon = childAvatar.ifBlank { "🧒" },
@@ -160,14 +176,14 @@ fun HomeScreen(
                     onClick = remembered("switch", onSwitchProfileClick),
                     contentDescription = if (en) "Switch profile" else "Cambiar de perfil"
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 HeaderChip(
                     icon = "👤",
                     label = if (en) "My profile" else "Mi perfil",
                     focusRequester = requester("profile"),
                     onClick = remembered("profile", onEditProfileClick)
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 HeaderChip(
                     icon = "🔒",
                     label = if (en) "Parents" else "Padres",
@@ -176,7 +192,7 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // ============================================================
             // 2. HERO ROW: create a story · continue reading
@@ -184,15 +200,16 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(204.dp),
+                    .height(200.dp),
                 horizontalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 CreateStoryCard(
-                    idea = if (en) idea.second else idea.first,
+                    childName = childName,
+                    idea = idea,
                     focusRequester = requester("create"),
                     onClick = remembered("create", onNewAdventureClick),
                     modifier = Modifier
-                        .weight(1.45f)
+                        .weight(1.6f)
                         .fillMaxHeight()
                 )
                 if (displayStory != null) {
@@ -217,16 +234,18 @@ fun HomeScreen(
             // 3. RAIL: my stories (16:9 covers from the real illustrations)
             // ============================================================
             if (sagas.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(20.dp))
+                // Rail rhythm: ~16dp from the row above to its title, ~12dp from title to cards
+                // (the 8dp content padding leaves room for the 1.08x focus scale)
+                Spacer(modifier = Modifier.height(16.dp))
                 RailHeader(
                     title = if (en) "My stories" else "Mis cuentos",
                     count = if (en) "${sagas.size} ${if (sagas.size == 1) "book" else "books"}" else "${sagas.size} ${if (sagas.size == 1) "libro" else "libros"}"
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 LazyRow(
                     modifier = Modifier.railFocusEntry { requester("story:${sagas.first().sagaId}") },
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp)
+                    contentPadding = PaddingValues(vertical = 8.dp, horizontal = 12.dp)
                 ) {
                     items(sagas.take(10), key = { it.sagaId }) { saga ->
                         val key = "story:${saga.sagaId}"
@@ -247,27 +266,47 @@ fun HomeScreen(
                         )
                     }
                 }
+            } else {
+                // New profile: the rail shows where books will appear, with one card to start
+                Spacer(modifier = Modifier.height(16.dp))
+                RailHeader(title = if (en) "My stories" else "Mis cuentos", count = if (en) "Empty for now" else "Aún vacío")
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    EmptySlotCard(
+                        icon = "＋",
+                        label = if (en) "Your first story" else "Tu primer cuento",
+                        width = 224.dp,
+                        height = 126.dp,
+                        focusRequester = requester("empty_story"),
+                        onClick = remembered("empty_story", onNewAdventureClick)
+                    )
+                    repeat(3) { GhostCard(width = 224.dp, height = 126.dp) }
+                }
             }
 
             // ============================================================
             // 4. RAIL: my friends (characters drawn by the child)
             // ============================================================
             if (friends.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 RailHeader(
                     title = if (en) "My friends" else "Mis amigos",
                     count = if (en) "${friends.size} ${if (friends.size == 1) "friend" else "friends"}" else "${friends.size} ${if (friends.size == 1) "amigo" else "amigos"}"
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 LazyRow(
                     modifier = Modifier.railFocusEntry { requester("friend:${friends.first().name.lowercase()}") },
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp)
+                    contentPadding = PaddingValues(vertical = 8.dp, horizontal = 12.dp)
                 ) {
-                    items(friends.take(12), key = { "friend:${it.name.lowercase()}" }) { friend ->
+                    itemsIndexed(friends.take(12), key = { _, f -> "friend:${f.name.lowercase()}" }) { index, friend ->
                         val key = "friend:${friend.name.lowercase()}"
-                        FriendCard(
+                        FriendPolaroid(
                             friend = friend,
+                            index = index,
                             focusRequester = requester(key),
                             onClick = remembered(key) {
                                 val story = profileStories.firstOrNull { s ->
@@ -283,11 +322,25 @@ fun HomeScreen(
                             icon = "🎨",
                             label = if (en) "All friends" else "Ver todos",
                             width = 132.dp,
-                            height = 150.dp,
+                            height = 164.dp,
                             focusRequester = requester("friends_all"),
                             onClick = remembered("friends_all", onNavigateToCharacters)
                         )
                     }
+                }
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+                RailHeader(title = if (en) "My friends" else "Mis amigos", count = if (en) "Draw the first one" else "Dibuja el primero")
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    EmptyFriendPolaroid(
+                        focusRequester = requester("empty_friend"),
+                        onClick = remembered("empty_friend", onNewAdventureClick)
+                    )
+                    repeat(4) { index -> GhostPolaroid(index = index + 1) }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -305,16 +358,16 @@ private fun Modifier.railFocusEntry(firstItem: () -> FocusRequester): Modifier =
 
 @Composable
 private fun WonderLoopLogo() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Canvas(modifier = Modifier.size(width = 46.dp, height = 30.dp)) {
-            val strokeW = 5.dp.toPx()
-            val r = 11.dp.toPx()
-            drawCircle(color = Color(0xFFFF6B6B), radius = r, center = Offset(14.dp.toPx(), 15.dp.toPx()), style = Stroke(width = strokeW))
-            drawCircle(color = Color(0xFF1FBE9C), radius = r, center = Offset(32.dp.toPx(), 15.dp.toPx()), style = Stroke(width = strokeW))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Canvas(modifier = Modifier.size(width = 37.dp, height = 24.dp)) {
+            val strokeW = 4.dp.toPx()
+            val r = 9.dp.toPx()
+            drawCircle(color = Color(0xFFFF6B6B), radius = r, center = Offset(11.dp.toPx(), 12.dp.toPx()), style = Stroke(width = strokeW))
+            drawCircle(color = Color(0xFF1FBE9C), radius = r, center = Offset(26.dp.toPx(), 12.dp.toPx()), style = Stroke(width = strokeW))
         }
         Row {
-            Text(text = "Wonder", fontFamily = TitleFont(), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE5484D))
-            Text(text = "Loop", fontFamily = TitleFont(), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF12A58A))
+            Text(text = "Wonder", fontFamily = TitleFont(), fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE5484D))
+            Text(text = "Loop", fontFamily = TitleFont(), fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color(0xFF12A58A))
         }
     }
 }
@@ -331,29 +384,31 @@ private fun HeaderChip(
     TvClickableSurface(
         onClick = onClick,
         modifier = Modifier
-            .height(44.dp)
+            .height(38.dp)
             .focusRequester(focusRequester),
         shape = RoundedCornerShape(50),
-        containerColor = Color.White,
+        containerColor = Color.White.copy(alpha = 0.85f),
+        focusedContainerColor = Color.White,
         borderColor = HomeCardBorder,
         contentDescription = contentDescription ?: label
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 14.dp)
                 .align(Alignment.Center)
         ) {
-            Text(text = icon, fontSize = 18.sp)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = accent, maxLines = 1)
+            Text(text = icon, fontSize = 15.sp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(text = label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = accent, maxLines = 1)
         }
     }
 }
 
 @Composable
-private fun CreateStoryCard(idea: String, focusRequester: FocusRequester, onClick: () -> Unit, modifier: Modifier) {
+private fun CreateStoryCard(childName: String, idea: DailyIdea, focusRequester: FocusRequester, onClick: () -> Unit, modifier: Modifier) {
     val en = AppStrings.isEnglish
+    val name = childName.ifBlank { if (en) "explorer" else "explorador" }
     TvClickableSurface(
         onClick = onClick,
         modifier = modifier.focusRequester(focusRequester),
@@ -370,47 +425,40 @@ private fun CreateStoryCard(idea: String, focusRequester: FocusRequester, onClic
                 .background(Brush.linearGradient(listOf(HomeCoral, HomeCoralEnd)))
                 .padding(start = 24.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
         ) {
-            // Drawing → story, at a glance
-            DrawingToStoryArt(
+            DailyIdeaNote(
+                idea = idea,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .size(width = 136.dp, height = 140.dp)
+                    .width(212.dp)
             )
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .padding(end = 146.dp),
+                    .padding(end = 228.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
                     Text(
-                        text = if (en) "✏️  NEW STORY" else "✏️  NUEVO CUENTO",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (en) "Turn your drawing into a story" else "Convierte tu dibujo en un cuento",
+                        text = if (en) "Hi, $name! 👋" else "¡Hola, $name! 👋",
                         fontFamily = TitleFont(),
-                        fontSize = 26.sp,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        lineHeight = 30.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        // Balanced break instead of a lone "hoy?" on the second line
+                        text = if (en) "What story shall we\ncreate today?" else "¿Qué cuento vamos\na crear hoy?",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.92f),
+                        lineHeight = 23.sp,
                         maxLines = 2
                     )
                 }
                 Column {
-                    Text(
-                        text = if (en) "💡 Today's idea: $idea" else "💡 Idea de hoy: $idea",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.95f),
-                        lineHeight = 19.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
@@ -431,37 +479,57 @@ private fun CreateStoryCard(idea: String, focusRequester: FocusRequester, onClic
     }
 }
 
-/** A crayon sheet of paper turning into a sparkling storybook. */
+/** Today's drawing idea as a slightly tilted paper note taped onto the card. */
 @Composable
-private fun DrawingToStoryArt(modifier: Modifier = Modifier) {
-    Box(modifier = modifier) {
-        Box(
-            contentAlignment = Alignment.Center,
+private fun DailyIdeaNote(idea: DailyIdea, modifier: Modifier = Modifier) {
+    val en = AppStrings.isEnglish
+    Box(modifier = modifier.rotate(3f), contentAlignment = Alignment.TopCenter) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .size(width = 96.dp, height = 112.dp)
-                .rotate(-8f)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color.White)
+                .padding(top = 8.dp)
+                .fillMaxWidth()
+                .shadow(8.dp, RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFFFF6DE))
+                .padding(horizontal = 12.dp, vertical = 14.dp)
         ) {
-            Text(text = "🦖", fontSize = 48.sp)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .border(2.dp, HomeGold, CircleShape)
+            ) {
+                Text(text = idea.emoji, fontSize = 27.sp)
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = if (en) "💡 TODAY'S IDEA" else "💡 IDEA DE HOY",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.5.sp,
+                    color = Color(0xFF9E6700)
+                )
+                Text(
+                    text = if (en) idea.en else idea.es,
+                    fontSize = 15.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = HomeInk,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
+        // Washi tape
         Box(
-            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(HomeGold)
-        ) {
-            Text(text = "📖", fontSize = 32.sp)
-        }
-        Text(
-            text = "✨",
-            fontSize = 26.sp,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 6.dp)
+                .size(width = 62.dp, height = 18.dp)
+                .rotate(-4f)
+                .background(Color.White.copy(alpha = 0.7f))
         )
     }
 }
@@ -530,34 +598,191 @@ private fun ContinueReadingCard(story: FullStoryResponse, focusRequester: FocusR
 @Composable
 private fun WelcomeCard(modifier: Modifier) {
     val en = AppStrings.isEnglish
+    val steps = if (en) {
+        listOf("🖍️" to "Draw a character", "📱" to "Scan it with a phone", "📺" to "Watch it come alive here!")
+    } else {
+        listOf("🖍️" to "Dibuja un personaje", "📱" to "Escanéalo con el móvil", "📺" to "¡Míralo cobrar vida aquí!")
+    }
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(26.dp))
             .background(Color.White)
-            .padding(24.dp),
+            .padding(horizontal = 22.dp, vertical = 18.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Column {
-            Text(text = "🖍️ 📱 📺", fontSize = 30.sp)
-            Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = if (en) "Your first story is waiting" else "Tu primer cuento te espera",
+                text = if (en) "It's this easy!" else "¡Así de fácil!",
                 fontFamily = TitleFont(),
-                fontSize = 24.sp,
+                fontSize = 23.sp,
                 fontWeight = FontWeight.Bold,
-                color = HomeInk
+                color = HomeInk,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = if (en) "Draw a character on paper, scan it with any phone and watch it come alive here."
-                else "Dibuja un personaje en un papel, escanéalo con cualquier móvil y míralo cobrar vida aquí.",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = HomeInkMuted,
-                lineHeight = 22.sp
-            )
+            Spacer(modifier = Modifier.height(12.dp))
+            steps.forEachIndexed { i, (icon, text) ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(if (i == 0) HomeCoralSoft else HomeIvoryGlow)
+                    ) {
+                        Text(text = icon, fontSize = 15.sp)
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = text,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HomeInkMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
+}
+
+/** Dashed, focusable "start here" slot shown in an empty rail. */
+@Composable
+private fun EmptySlotCard(
+    icon: String,
+    label: String,
+    width: androidx.compose.ui.unit.Dp,
+    height: androidx.compose.ui.unit.Dp,
+    focusRequester: FocusRequester,
+    onClick: () -> Unit
+) {
+    TvClickableSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(width = width, height = height)
+            // Only focusable card of its rail: RIGHT must not escape diagonally
+            .onPreviewKeyEvent { it.key == Key.DirectionRight }
+            .focusRequester(focusRequester),
+        shape = RoundedCornerShape(18.dp),
+        containerColor = Color.White.copy(alpha = 0.7f),
+        focusedContainerColor = Color.White,
+        focusedScale = 1.08f,
+        contentDescription = label
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .dashedOutline(18.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(HomeCoralSoft)
+                ) {
+                    Text(text = icon, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = HomeCoral)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = label, fontFamily = TitleFont(), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = HomeCoral)
+            }
+        }
+    }
+}
+
+/** A faint, non-focusable placeholder hinting at where future books will line up. */
+@Composable
+private fun GhostCard(width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Box(
+        modifier = Modifier
+            .size(width = width, height = height)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.35f))
+    )
+}
+
+/** The first friend slot: a pinned Polaroid with a "?" silhouette that leads to scanning. */
+@Composable
+private fun EmptyFriendPolaroid(focusRequester: FocusRequester, onClick: () -> Unit) {
+    val en = AppStrings.isEnglish
+    Box(modifier = Modifier.size(width = 132.dp, height = 164.dp).rotate(-2.5f)) {
+        TvClickableSurface(
+            onClick = onClick,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .fillMaxSize()
+                .onPreviewKeyEvent { it.key == Key.DirectionRight }
+                .focusRequester(focusRequester),
+            shape = RoundedCornerShape(10.dp),
+            containerColor = Color.White,
+            borderColor = HomeCardBorder,
+            focusedScale = 1.08f,
+            contentDescription = if (en) "Scan your first friend" else "Escanea tu primer amigo"
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 8.dp, end = 8.dp, top = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(104.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(HomeIvoryGlow)
+                        .dashedOutline(6.dp)
+                ) {
+                    Text(text = "?", fontFamily = TitleFont(), fontSize = 46.sp, fontWeight = FontWeight.Bold, color = HomeCoral.copy(alpha = 0.6f))
+                }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = if (en) "Your first friend" else "Tu primer amigo",
+                        fontFamily = TitleFont(),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HomeCoral,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+        Pushpin3D(
+            pinColor = PinColors[0],
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .zIndex(1f)
+        )
+    }
+}
+
+/** A faint, non-focusable Polaroid waiting for a future friend. */
+@Composable
+private fun GhostPolaroid(index: Int) {
+    val tilt = listOf(-2.5f, 1.8f, -1.2f, 2.4f)[index % 4]
+    Box(
+        modifier = Modifier
+            .size(width = 132.dp, height = 164.dp)
+            .rotate(tilt)
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.35f))
+    )
+}
+
+private fun Modifier.dashedOutline(corner: androidx.compose.ui.unit.Dp): Modifier = drawBehind {
+    drawRoundRect(
+        color = HomeCoral.copy(alpha = 0.5f),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner.toPx()),
+        style = Stroke(
+            width = 2.dp.toPx(),
+            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx()))
+        )
+    )
 }
 
 @Composable
@@ -633,45 +858,63 @@ private fun StoryCoverCard(saga: SagaBook, focusRequester: FocusRequester, onCli
     }
 }
 
+/** A friend's portrait as a pinned Polaroid, like the corkboard in "Mis amigos". */
 @Composable
-private fun FriendCard(friend: CharacterProfile, focusRequester: FocusRequester, onClick: () -> Unit) {
-    TvClickableSurface(
-        onClick = onClick,
+private fun FriendPolaroid(friend: CharacterProfile, index: Int, focusRequester: FocusRequester, onClick: () -> Unit) {
+    val tilt = listOf(-2.5f, 1.8f, -1.2f, 2.4f)[index % 4]
+    Box(
         modifier = Modifier
-            .size(width = 132.dp, height = 150.dp)
-            .focusRequester(focusRequester),
-        shape = RoundedCornerShape(20.dp),
-        containerColor = Color.White,
-        borderColor = HomeCardBorder,
-        focusedScale = 1.08f,
-        contentDescription = friend.name
+            .size(width = 132.dp, height = 164.dp)
+            .rotate(tilt)
     ) {
-        Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
+        TvClickableSurface(
+            onClick = onClick,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .fillMaxSize()
+                .focusRequester(focusRequester),
+            shape = RoundedCornerShape(10.dp),
+            containerColor = Color.White,
+            borderColor = HomeCardBorder,
+            focusedScale = 1.08f,
+            contentDescription = friend.name
+        ) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(112.dp)
-                    .background(Color(0xFFFFF6E3))
+                    .fillMaxSize()
+                    .padding(start = 8.dp, end = 8.dp, top = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 WonderLoopImage(
                     model = friend.reinterpretedImageUrl ?: friend.originalDrawingBase64,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(104.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(HomeIvoryGlow)
                 )
-            }
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = friend.name,
-                    fontFamily = TitleFont(),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = HomeInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = friend.name,
+                        fontFamily = TitleFont(),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HomeInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
+        Pushpin3D(
+            pinColor = PinColors[index % PinColors.size],
+            // Above the card even while it is scaled up by focus
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .zIndex(1f)
+        )
     }
 }
 

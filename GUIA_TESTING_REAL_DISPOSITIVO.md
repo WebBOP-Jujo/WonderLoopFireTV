@@ -164,8 +164,10 @@ Si la app no encuentra el backend, revisa la dirección del servidor en el diál
 ## 7. Checklist de pruebas E2E
 
 ### 🟢 1. Navegación con mando D-Pad
-- La pantalla de inicio enfoca automáticamente el botón principal *"Crear un nuevo cuento mágico"*.
-- Las tarjetas *"Ver Biblioteca"* y *"Ver todos"* se recorren con la cruceta y muestran el halo dorado de foco.
+- La pantalla de inicio enfoca automáticamente la tarjeta *"¡Hola, {nombre}! · Escanear mi dibujo"*, con la nota "💡 Idea de hoy" (cambia cada vez que se vuelve al inicio y se lee entera, sin "…").
+- Las tarjetas *"Ver Biblioteca"* y *"Ver todos"* se recorren con la cruceta y muestran el halo dorado de foco; en "Mis amigos" la chincheta sigue visible sobre el polaroid enfocado.
+- Con un perfil nuevo (sin cuentos) aparecen "＋ Tu primer cuento" y el polaroid "?", "Tu primer amigo": ▼ desde la tarjeta roja los recorre, OK abre el escaneo y ▶ no saca el foco de la fila.
+- "Añadir perfil" (selector de perfiles y Zona de Padres) se enfoca con borde dorado y sin velo gris.
 - `BACK` en la pantalla de inicio abre el diálogo "¿Ya te vas?" con el foco en "Seguir creando"; BACK otra vez lo cierra y "Salir de WonderLoop" vuelve al launcher del Fire TV.
 
 ### 🟢 2. Escaneo del dibujo vía QR

@@ -84,11 +84,12 @@ function buildVisionPrompt(language: 'es' | 'en'): string {
 5. TEXT FIELDS IN ${outLanguage}: name, species, shapeLanguage, mood, colorPalette names, distinctiveFeatures and personality.
    - species: what it is, in 2-5 plain words a child understands (a little dragon, a robot with wheels, a smiling cat). No "magical" labels.
    - distinctiveFeatures: 2-4 concrete VISIBLE features from the drawing (long curly tail, three eyes, big wheels, striped legs). They will be used in the story, so make them specific.
-   - personality: one short sentence a child would like, consistent with the facial expression.
+   - mood: always a happy, positive feeling (cheerful, curious, playful, brave, calm). Never sad, angry, scared or tired: a straight or downturned mouth in a child's drawing is just how they draw, read it as a gentle smile.
+   - personality: one short sentence a child would like, consistent with that happy mood.
    - shapeLanguage: the silhouette in a few words (round fluffy body with triangle ears).
 6. NAME: an ORIGINAL name of 2-3 syllables, easy to say for a small child, inspired by the drawing's look, color or sound (a round orange fish could be "Mango"; a tall green robot "Tuli"). Prefer a name starting with the letter "${initial}". Do not use these overused names: ${OVERUSED_NAMES.join(', ')}.
 7. namePhonetic: simple syllables for text-to-speech (e.g. "man-go").
-8. visualDescriptionEn: ALWAYS IN ENGLISH, 20-40 words describing exactly how the character looks (body shape, colors, features, expression) so an illustrator can redraw it consistently.`;
+8. visualDescriptionEn: ALWAYS IN ENGLISH, 20-40 words describing exactly how the character looks (body shape, colors, features) so an illustrator can redraw it consistently. Always describe a friendly, happy expression (a warm smile, bright eyes), never a sad, grumpy or crying one.`;
 }
 
 /**

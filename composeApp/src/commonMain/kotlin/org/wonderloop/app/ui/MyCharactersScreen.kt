@@ -72,7 +72,7 @@ private val CorkFrameInner = Color(0xFFB97440)
 private val PaperPolaroid = Color(0xFFFFFFFF)
 
 // Pushpin Colors harmonized with the new palette
-private val PinColors = listOf(
+internal val PinColors = listOf(
     Color(0xFFD9384A), // Coral Hero
     Color(0xFFFFB830), // Sunny Gold
     Color(0xFF0E7F64), // Mint Accent
@@ -838,7 +838,7 @@ private fun AddCharacterPolaroidSlot(
 }
 
 @Composable
-private fun Pushpin3D(
+internal fun Pushpin3D(
     pinColor: Color,
     modifier: Modifier = Modifier
 ) {

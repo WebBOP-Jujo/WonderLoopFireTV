@@ -26,6 +26,10 @@ const PAGE_DIRECTION: Record<number, { shot: string; light: string }> = {
 const SAFE_FINISH =
   'Friendly, gentle and safe for young children; clean well-formed anatomy and hands; no text, letters, numbers or watermarks anywhere in the image.';
 
+/** Kids read sadness into every frown: faces stay upbeat, at most a light 'oops' or curious look. */
+const FACES =
+  'Faces: cheerful, curious, surprised or determined, matching the moment; at most a mild, playful worried look when there is a problem. Never sad, crying, gloomy, angry or scared faces.';
+
 function describeLook(c?: CharacterProfile): string {
   if (!c) return '';
   if (c.visualDescriptionEn) return c.visualDescriptionEn;
@@ -133,7 +137,7 @@ export class NanobananaImageAdapter implements IImageAdapter {
       `Redraw the child's drawing in the attached photo as a finished, lovable storybook hero, keeping its identity: the same body shape, the same features and the same colors (${palette(character) || character.primaryColors.join(', ')}).`,
       `The hero is ${character.name}: ${describeLook(character)}.`,
       character.shapeLanguage ? `Silhouette: ${character.shapeLanguage}.` : '',
-      `Expression and mood: ${character.mood || 'happy and curious'}; personality: ${character.personality}.`,
+      `Expression and mood: ${character.mood || 'happy and curious'}; personality: ${character.personality}. The face is always joyful and friendly, even if the drawing has a straight or downturned mouth.`,
       'Center the character, full body, facing the viewer with a warm smile, on a simple soft background vignette.',
       SAFE_FINISH
     ].filter(Boolean).join('\n');
@@ -215,6 +219,7 @@ export class NanobananaImageAdapter implements IImageAdapter {
       settingBible ? `Setting (keep it consistent across the whole story): ${settingBible}.` : '',
       `Moment to illustrate: ${visualPrompt}`,
       `Camera: ${direction.shot}. Lighting: ${direction.light}.`,
+      FACES,
       'Composition: full-bleed artwork filling the whole frame edge to edge (no white paper margins, borders or frames); characters clearly visible and expressive, uncluttered background, calm space in the lower third.',
       SAFE_FINISH
     ].filter(Boolean).join('\n');

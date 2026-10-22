@@ -389,21 +389,43 @@ actual object PlatformAudioService {
         return pcm
     }
 
+    /**
+     * A paper page flip: a band-limited "swish" that swells as the page lifts, flutters while it
+     * travels, then a soft low "flap" as it lands. Quiet on purpose: it plays under the narration.
+     */
     private fun generatePageTurnPcm(sampleRate: Int): ShortArray {
-        val durationMs = 130
+        val durationMs = 360
         val totalSamples = (sampleRate * durationMs) / 1000
         val pcm = ShortArray(totalSamples)
-        var lastRandom = 0.0
+        val random = java.util.Random(7)
+        fun onePole(cutoffHz: Double) = 1.0 - exp(-2.0 * PI * cutoffHz / sampleRate)
+        val aHigh = onePole(5200.0)
+        val aLow = onePole(650.0)
+        val aFlap = onePole(1400.0)
+        var lpHigh = 0.0
+        var lpLow = 0.0
+        var lpFlap = 0.0
+        val swishEnd = 0.29
+        val flapStart = 0.27
 
         for (i in 0 until totalSamples) {
-            val progress = i.toDouble() / totalSamples
-            // Soft envelope: smooth swell and fade
-            val envelope = sin(progress * PI)
-            // Low-pass filtered noise to simulate paper rustle
-            val whiteNoise = (Math.random() * 2.0 - 1.0)
-            lastRandom = (lastRandom * 0.75) + (whiteNoise * 0.25)
-            val sample = lastRandom * envelope * 18000.0
-            pcm[i] = sample.toInt().coerceIn(-32767, 32767).toShort()
+            val t = i.toDouble() / sampleRate
+            val noise = random.nextDouble() * 2.0 - 1.0
+            // Band-pass (~650 Hz – 5 kHz): the papery "shh" without hiss or rumble
+            lpHigh += aHigh * (noise - lpHigh)
+            lpLow += aLow * (noise - lpLow)
+            val band = lpHigh - lpLow
+            val swishEnv = if (t < swishEnd) {
+                val p = t / swishEnd
+                sin(PI * p).let { it * it } * (0.55 + 0.45 * p)
+            } else 0.0
+            val flutter = 1.0 + 0.3 * sin(2.0 * PI * 23.0 * t) * (1.0 - t / swishEnd).coerceAtLeast(0.0)
+            // Landing: short, darker burst
+            lpFlap += aFlap * (noise - lpFlap)
+            val flapEnv = if (t >= flapStart) exp(-(t - flapStart) / 0.018) else 0.0
+            val sample = band * swishEnv * flutter * 15000.0 + lpFlap * flapEnv * 26000.0
+            val fadeIn = (t / 0.004).coerceAtMost(1.0)
+            pcm[i] = (sample * fadeIn).toInt().coerceIn(-32767, 32767).toShort()
         }
         return pcm
     }

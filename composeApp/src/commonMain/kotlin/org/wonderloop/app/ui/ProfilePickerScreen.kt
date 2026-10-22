@@ -362,6 +362,9 @@ private fun AddProfileCard(freeSlots: Int, focusRequester: FocusRequester?, onCl
             .tvFocusable(
                 shape = RoundedCornerShape(32.dp),
                 focusedScale = 1.07f,
+                // Translucent slot: a focus shadow would show through as a grey veil
+                focusedElevation = 0.dp,
+                focusedContainerColor = Color.White.copy(alpha = 0.85f),
                 focusRequester = focusRequester,
                 onClick = onClick
             )

@@ -246,7 +246,7 @@ object AppStrings {
     val medalSagaTitle get() = if (isEnglish) "To Be Continued" else "Continuará..."
     val medalSagaDesc get() = if (isEnglish) "Continue a story saga" else "Continúa un capítulo de saga"
     val medalMasterTitle get() = if (isEnglish) "Super Author" else "Súper Autor"
-    val medalMasterDesc get() = if (isEnglish) "Create 5 magical stories" else "Crea 5 cuentos mágicos"
+    val medalMasterDesc get() = if (isEnglish) "Create 10 magical stories" else "Crea 10 cuentos mágicos"
 
     // Parents Zone Screen ("Zona de padres" - Mockup 11)
     val parentsZoneTitle get() = if (isEnglish) "Parents Zone" else "Zona de padres"

@@ -146,8 +146,8 @@ fun ChildProfileScreen(
                 emoji = "👑",
                 title = AppStrings.medalMasterTitle,
                 description = AppStrings.medalMasterDesc,
-                isUnlocked = storiesCount >= 5,
-                progressText = "${minOf(storiesCount, 5)}/5"
+                isUnlocked = storiesCount >= 10,
+                progressText = "${minOf(storiesCount, 10)}/10"
             )
         )
     }
@@ -307,47 +307,52 @@ fun ChildProfileScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(20.dp),
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         // Avatar + Edit button
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(106.dp)
-                                    .tvFocusable(shape = CircleShape, focusedScale = 1.08f, onClick = {
-                                        PlatformAudioService.playSfx(SoundEffect.POP)
-                                        showAvatarPicker = true
-                                    })
-                            ) {
+                            Box(modifier = Modifier.size(92.dp)) {
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
-                                        .size(98.dp)
-                                        .shadow(6.dp, CircleShape)
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                        .border(4.dp, ChildCoral, CircleShape)
+                                        .fillMaxSize()
+                                        .tvFocusable(shape = CircleShape, focusedScale = 1.08f, onClick = {
+                                            PlatformAudioService.playSfx(SoundEffect.POP)
+                                            showAvatarPicker = true
+                                        })
                                 ) {
-                                    Text(text = childAvatar.ifBlank { "👦" }, fontSize = 52.sp)
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(86.dp)
+                                            .shadow(6.dp, CircleShape)
+                                            .clip(CircleShape)
+                                            .background(Color.White)
+                                            .border(4.dp, ChildCoral, CircleShape)
+                                    ) {
+                                        Text(text = childAvatar.ifBlank { "👦" }, fontSize = 46.sp)
+                                    }
                                 }
 
-                                // Floating edit badge
+                                // Floating edit badge: a sibling drawn after the focusable circle,
+                                // so the focus ring never covers it
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
-                                        .size(34.dp)
+                                        .offset(x = 4.dp, y = 2.dp)
+                                        .size(32.dp)
+                                        .shadow(3.dp, CircleShape)
                                         .clip(CircleShape)
                                         .background(ChildCoral)
                                         .border(2.dp, Color.White, CircleShape)
                                 ) {
-                                    Text(text = "🎨", fontSize = 16.sp)
+                                    Text(text = "🎨", fontSize = 15.sp)
                                 }
                             }
 
@@ -355,7 +360,7 @@ fun ChildProfileScreen(
                             Text(
                                 text = childName.ifBlank { "Leo" },
                                 fontFamily = TitleFont(),
-                                fontSize = 32.sp,
+                                fontSize = 28.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ChildInkDark,
                                 textAlign = TextAlign.Center
@@ -406,7 +411,7 @@ fun ChildProfileScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(14.dp)
+                                    .padding(horizontal = 14.dp, vertical = 11.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -472,7 +477,7 @@ fun ChildProfileScreen(
                             shadowElevation = 3.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(46.dp)
+                                .height(44.dp)
                                 .tvFocusable(
                                     shape = RoundedCornerShape(22.dp),
                                     focusedScale = 1.04f,

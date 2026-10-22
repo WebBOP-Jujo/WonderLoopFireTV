@@ -453,6 +453,9 @@ fun ParentsZoneScreen(
                                     .tvFocusable(
                                         shape = RoundedCornerShape(24.dp),
                                         focusedScale = 1.06f,
+                                        // Translucent slot: a focus shadow would show through as a grey veil
+                                        focusedElevation = 0.dp,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.85f),
                                         focusRequester = addProfileFocusRequester,
                                         onClick = {
                                             PlatformAudioService.playSfx(SoundEffect.POP)
