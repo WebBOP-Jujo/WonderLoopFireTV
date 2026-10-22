@@ -1,6 +1,7 @@
 package org.wonderloop.app.ui
 
 import androidx.compose.animation.core.*
+import org.wonderloop.app.ui.components.WonderLoopMark
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -306,52 +307,21 @@ fun SplashScreen() {
                     drawPath(path = path, color = Color(0xFFFFC93C))
                 }
 
-                // Infinity Loop SVG (<svg viewBox="0 0 120 80">)
-                Canvas(
-                    modifier = Modifier.size(width = 96.dp, height = 64.dp)
-                ) {
-                    val scaleX = size.width / 120f
-                    val scaleY = size.height / 80f
-                    val s = minOf(scaleX, scaleY)
-
-                    // Left loop: cx=34, cy=40, r=26, stroke=#FF6B6B, strokeWidth=15
-                    drawCircle(
-                        color = Color(0xFFFF6B6B),
-                        radius = 26f * s,
-                        center = Offset(34f * scaleX, 40f * scaleY),
-                        style = Stroke(width = 15f * s)
-                    )
-
-                    // Right loop: cx=86, cy=40, r=26, stroke=#1FBE9C, strokeWidth=15
-                    drawCircle(
-                        color = Color(0xFF1FBE9C),
-                        radius = 26f * s,
-                        center = Offset(86f * scaleX, 40f * scaleY),
-                        style = Stroke(width = 15f * s)
-                    )
-
-                    // Center rotated bridge: rect x=52, y=26, width=16, height=28, rx=8, fill=#FF9466, rotate(28, 60, 40)
-                    rotate(degrees = 28f, pivot = Offset(60f * scaleX, 40f * scaleY)) {
-                        drawRoundRect(
-                            color = Color(0xFFFF9466),
-                            topLeft = Offset(52f * scaleX, 26f * scaleY),
-                            size = Size(16f * scaleX, 28f * scaleY),
-                            cornerRadius = CornerRadius(8f * s, 8f * s)
-                        )
-                    }
-                }
+                // Infinity mark, same geometry as the launcher icon and the Fire TV banner
+                WonderLoopMark(
+                    modifier = Modifier.size(width = 104.dp, height = 62.dp),
+                    gapColor = Color.White
+                )
             }
 
             Spacer(modifier = Modifier.height(22.dp))
 
-            // Brand Name: Wonder (Gradient) + Loop (#2B2340)
+            // Brand Name: Wonder (coral) + Loop (teal), the same wordmark as the home top bar
             Text(
                 text = buildAnnotatedString {
                     withStyle(
                         SpanStyle(
-                            brush = Brush.linearGradient(
-                                colors = listOf(Color(0xFFFF6B6B), Color(0xFF1FBE9C))
-                            ),
+                            color = Color(0xFFE5484D),
                             fontWeight = FontWeight.SemiBold
                         )
                     ) {
@@ -359,7 +329,7 @@ fun SplashScreen() {
                     }
                     withStyle(
                         SpanStyle(
-                            color = Color(0xFF2B2340),
+                            color = Color(0xFF12A58A),
                             fontWeight = FontWeight.SemiBold
                         )
                     ) {

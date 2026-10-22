@@ -1,54 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Generated: WonderLoop infinity mark (lemniscate ribbon, coral → violet → teal, over-under crossing) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- Playful WonderLoop Ribbon: Left Lobe (Coral / Crayon Warmth) -->
-    <path
-        android:strokeColor="#FF6B6B"
-        android:strokeWidth="8.5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M54,54 C46,42 35,39 29,46 C22,53 22,58 29,65 C35,72 46,69 54,54" />
-
-    <!-- Playful WonderLoop Ribbon: Right Lobe (Mint / Magic Green) -->
-    <path
-        android:strokeColor="#2EC4B6"
-        android:strokeWidth="8.5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M54,54 C62,42 73,39 79,46 C86,53 86,58 79,65 C73,72 62,69 54,54" />
-
-    <!-- Overlapping Crossover Highlight (Gives 3D ribbon weave depth) -->
-    <path
-        android:strokeColor="#FF8E53"
-        android:strokeWidth="8.5"
-        android:strokeLineCap="round"
-        android:pathData="M48,47 C51,51 54,54 57,58" />
-
-    <!-- Central Magic Sparkle Star -->
-    <path
-        android:fillColor="#FFD166"
-        android:pathData="M54,23 C54,29 49,33 43,33 C49,33 54,37 54,43 C54,37 59,33 65,33 C59,33 54,29 54,23 Z" />
-
-    <!-- Inner Bright Core for Magic Star -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,27 C54,31 51.5,33 48,33 C51.5,33 54,35 54,39 C54,35 56.5,33 60,33 C56.5,33 54,31 54,27 Z" />
-
-    <!-- Floating Playful Sparkles -->
-    <path
-        android:fillColor="#FF8E53"
-        android:pathData="M31,33m-2.5,0a2.5,2.5 0 1,0 5,0a2.5,2.5 0 1,0 -5,0" />
-
-    <path
-        android:fillColor="#4ECDC4"
-        android:pathData="M77,33m-2.5,0a2.5,2.5 0 1,0 5,0a2.5,2.5 0 1,0 -5,0" />
-
-    <path
-        android:fillColor="#FFD166"
-        android:pathData="M54,74m-2.8,0a2.8,2.8 0 1,0 5.6,0a2.8,2.8 0 1,0 -5.6,0" />
-
+    <path android:strokeWidth="10.50" android:strokeLineJoin="round" android:pathData="M83.75,57.00 L83.70,58.50 L83.53,59.99 L83.27,61.44 L82.90,62.83 L82.44,64.16 L81.89,65.41 L81.27,66.57 L80.58,67.62 L79.83,68.57 L79.03,69.41 L78.19,70.14 L77.32,70.75 L76.43,71.26 L75.52,71.65 L74.61,71.94 L73.70,72.14 L72.79,72.23 L71.89,72.25 L71.00,72.18 L70.13,72.03 L69.27,71.82 L68.43,71.54 L67.62,71.21 L66.82,70.82 L66.05,70.39 L65.30,69.91 L64.57,69.40 L63.86,68.85 L63.17,68.28 L62.50,67.67 L61.85,67.05 L61.21,66.40 L60.60,65.74 L59.99,65.06 L59.40,64.36 L58.83,63.66 L58.26,62.94 L57.71,62.22 L57.16,61.48 L56.62,60.74 L56.09,60.00 L55.56,59.25 L55.04,58.50 L54.52,57.75 L54.00,57.00 L53.48,56.25 L52.96,55.50 L52.44,54.75 L51.91,54.00 L51.38,53.26 L50.84,52.52 L50.29,51.78 L49.74,51.06 L49.17,50.34 L48.60,49.64 L48.01,48.94 L47.40,48.26 L46.79,47.60 L46.15,46.95 L45.50,46.33 L44.83,45.72 L44.14,45.15 L43.43,44.60 L42.70,44.09 L41.95,43.61 L41.18,43.18 L40.38,42.79 L39.57,42.46 L38.73,42.18 L37.87,41.97 L37.00,41.82 L36.11,41.75 L35.21,41.77 L34.30,41.86 L33.39,42.06 L32.48,42.35 L31.57,42.74 L30.68,43.25 L29.81,43.86 L28.97,44.59 L28.17,45.43 L27.42,46.38 L26.73,47.43 L26.11,48.59 L25.56,49.84 L25.10,51.17 L24.73,52.56 L24.47,54.01 L24.30,55.50 L24.25,57.00 L24.30,58.50 L24.47,59.99 L24.73,61.44 L25.10,62.83 L25.56,64.16 L26.11,65.41 L26.73,66.57 L27.42,67.62 L28.17,68.57 L28.97,69.41 L29.81,70.14 L30.68,70.75 L31.57,71.26 L32.48,71.65 L33.39,71.94 L34.30,72.14 L35.21,72.23 L36.11,72.25 L37.00,72.18 L37.87,72.03 L38.73,71.82 L39.57,71.54 L40.38,71.21 L41.18,70.82 L41.95,70.39 L42.70,69.91 L43.43,69.40 L44.14,68.85 L44.83,68.28 L45.50,67.67 L46.15,67.05 L46.79,66.40 L47.40,65.74 L48.01,65.06 L48.60,64.36 L49.17,63.66 L49.74,62.94 L50.29,62.22 L50.84,61.48 L51.38,60.74 L51.91,60.00 L52.44,59.25 L52.96,58.50 L53.48,57.75 L54.00,57.00 L54.52,56.25 L55.04,55.50 L55.56,54.75 L56.09,54.00 L56.62,53.26 L57.16,52.52 L57.71,51.78 L58.26,51.06 L58.83,50.34 L59.40,49.64 L59.99,48.94 L60.60,48.26 L61.21,47.60 L61.85,46.95 L62.50,46.33 L63.17,45.72 L63.86,45.15 L64.57,44.60 L65.30,44.09 L66.05,43.61 L66.82,43.18 L67.62,42.79 L68.43,42.46 L69.27,42.18 L70.13,41.97 L71.00,41.82 L71.89,41.75 L72.79,41.77 L73.70,41.86 L74.61,42.06 L75.52,42.35 L76.43,42.74 L77.32,43.25 L78.19,43.86 L79.03,44.59 L79.83,45.43 L80.58,46.38 L81.27,47.43 L81.89,48.59 L82.44,49.84 L82.90,51.17 L83.27,52.56 L83.53,54.01 L83.70,55.50 L83.75,57.00 Z">
+        <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="19" android:startY="0" android:endX="89" android:endY="0"
+                    android:startColor="#FF6B6B" android:centerColor="#A77BCA" android:endColor="#1FBE9C"/>
+            </aapt:attr>
+    </path>
+    <path android:strokeColor="#FFFBF5" android:strokeWidth="16.28" android:pathData="M59.59,64.58 L59.29,64.22 L58.99,63.86 L58.69,63.49 L58.40,63.12 L58.11,62.75 L57.83,62.38 L57.54,62.00 L57.26,61.62 L56.98,61.24 L56.71,60.86 L56.43,60.48 L56.16,60.10 L55.88,59.71 L55.61,59.32 L55.34,58.94 L55.07,58.55 L54.80,58.16 L54.54,57.78 L54.27,57.39 L54.00,57.00 L53.73,56.61 L53.46,56.22 L53.20,55.84 L52.93,55.45 L52.66,55.06 L52.39,54.68 L52.12,54.29 L51.84,53.90 L51.57,53.52 L51.29,53.14 L51.02,52.76 L50.74,52.38 L50.46,52.00 L50.17,51.62 L49.89,51.25 L49.60,50.88 L49.31,50.51 L49.01,50.14 L48.71,49.78 L48.41,49.42" />
+    <path android:strokeWidth="10.50" android:pathData="M62.06,67.25 L61.69,66.89 L61.33,66.52 L60.97,66.14 L60.62,65.76 L60.27,65.37 L59.93,64.98 L59.59,64.58 L59.25,64.18 L58.92,63.78 L58.60,63.37 L58.27,62.96 L57.95,62.54 L57.64,62.12 L57.33,61.71 L57.01,61.28 L56.71,60.86 L56.40,60.44 L56.10,60.01 L55.79,59.58 L55.49,59.15 L55.19,58.72 L54.89,58.29 L54.60,57.86 L54.30,57.43 L54.00,57.00 L53.70,56.57 L53.40,56.14 L53.11,55.71 L52.81,55.28 L52.51,54.85 L52.21,54.42 L51.90,53.99 L51.60,53.56 L51.29,53.14 L50.99,52.72 L50.67,52.29 L50.36,51.88 L50.05,51.46 L49.73,51.04 L49.40,50.63 L49.08,50.22 L48.75,49.82 L48.41,49.42 L48.07,49.02 L47.73,48.63 L47.38,48.24 L47.03,47.86 L46.67,47.48 L46.31,47.11 L45.94,46.75">
+        <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="19" android:startY="0" android:endX="89" android:endY="0"
+                    android:startColor="#FF6B6B" android:centerColor="#A77BCA" android:endColor="#1FBE9C"/>
+            </aapt:attr>
+    </path>
+    <path android:fillColor="#FFC93C" android:pathData="M54,22 C55,29 55,29 62,30 C55,31 55,31 54,38 C53,31 53,31 46,30 C53,29 53,29 54,22 Z" />
 </vector>

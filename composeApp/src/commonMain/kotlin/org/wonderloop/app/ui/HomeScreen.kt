@@ -46,6 +46,8 @@ import org.wonderloop.app.platform.WonderLoopImage
 import org.wonderloop.app.theme.*
 import org.wonderloop.app.ui.tv.TvClickableSurface
 import org.wonderloop.app.ui.components.WonderBackdrop
+import org.wonderloop.app.ui.components.WonderLoopMark
+import org.wonderloop.app.ui.components.MinimalistLockIcon
 
 private val HomeCream = Color(0xFFFFFBF5)
 private val HomeIvoryGlow = Color(0xFFFFF6E3)
@@ -185,10 +187,11 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 HeaderChip(
-                    icon = "🔒",
+                    icon = "",
                     label = if (en) "Parents" else "Padres",
                     focusRequester = requester("parents"),
-                    onClick = remembered("parents", onParentsClick)
+                    onClick = remembered("parents", onParentsClick),
+                    lockIcon = true
                 )
             }
 
@@ -359,12 +362,7 @@ private fun Modifier.railFocusEntry(firstItem: () -> FocusRequester): Modifier =
 @Composable
 private fun WonderLoopLogo() {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Canvas(modifier = Modifier.size(width = 37.dp, height = 24.dp)) {
-            val strokeW = 4.dp.toPx()
-            val r = 9.dp.toPx()
-            drawCircle(color = Color(0xFFFF6B6B), radius = r, center = Offset(11.dp.toPx(), 12.dp.toPx()), style = Stroke(width = strokeW))
-            drawCircle(color = Color(0xFF1FBE9C), radius = r, center = Offset(26.dp.toPx(), 12.dp.toPx()), style = Stroke(width = strokeW))
-        }
+        WonderLoopMark(modifier = Modifier.size(width = 40.dp, height = 24.dp))
         Row {
             Text(text = "Wonder", fontFamily = TitleFont(), fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE5484D))
             Text(text = "Loop", fontFamily = TitleFont(), fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color(0xFF12A58A))
@@ -379,7 +377,8 @@ private fun HeaderChip(
     focusRequester: FocusRequester,
     onClick: () -> Unit,
     accent: Color = HomeInk,
-    contentDescription: String? = null
+    contentDescription: String? = null,
+    lockIcon: Boolean = false
 ) {
     TvClickableSurface(
         onClick = onClick,
@@ -398,7 +397,12 @@ private fun HeaderChip(
                 .padding(horizontal = 14.dp)
                 .align(Alignment.Center)
         ) {
-            Text(text = icon, fontSize = 15.sp)
+            if (lockIcon) {
+                // Same line-art lock as the profile picker: grown-up area, not a toy to press
+                MinimalistLockIcon(tint = accent, size = 16.dp)
+            } else {
+                Text(text = icon, fontSize = 15.sp)
+            }
             Spacer(modifier = Modifier.width(6.dp))
             Text(text = label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = accent, maxLines = 1)
         }
