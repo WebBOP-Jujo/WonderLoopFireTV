@@ -39,6 +39,12 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 
+/**
+ * The free Fire TV build has unlimited stories and billing off (BILLING_ENABLED = false), so the plan card
+ * only shows the status. Set to true for an Appstore release to bring back "Manage" → paywall.
+ */
+private const val SHOW_SUBSCRIPTION_MANAGEMENT = false
+
 private val ParentsCreamBg = Color(0xFFFFFBF5)
 private val ParentsInkDark = Color(0xFF2B2340)
 private val ParentsInkMuted = Color(0xFF6B6480)
@@ -294,30 +300,32 @@ fun ParentsZoneScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(10.dp))
+                        if (SHOW_SUBSCRIPTION_MANAGEMENT) {
+                            Spacer(modifier = Modifier.width(10.dp))
 
-                        Surface(
-                            shape = RoundedCornerShape(50.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, ParentsGoldBorder),
-                            modifier = Modifier.tvFocusable(
+                            Surface(
                                 shape = RoundedCornerShape(50.dp),
-                                focusedScale = 1.08f,
-                                focusRequester = gestionarFocusRequester,
-                                onClick = {
-                                    PlatformAudioService.playSfx(SoundEffect.POP)
-                                    onManageSubscriptionClick()
-                                }
-                            )
-                        ) {
-                            Text(
-                                text = AppStrings.manageButtonLabel,
-                                fontFamily = TitleFont(),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = ParentsCoral,
-                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
-                            )
+                                color = Color.White,
+                                border = BorderStroke(1.dp, ParentsGoldBorder),
+                                modifier = Modifier.tvFocusable(
+                                    shape = RoundedCornerShape(50.dp),
+                                    focusedScale = 1.08f,
+                                    focusRequester = gestionarFocusRequester,
+                                    onClick = {
+                                        PlatformAudioService.playSfx(SoundEffect.POP)
+                                        onManageSubscriptionClick()
+                                    }
+                                )
+                            ) {
+                                Text(
+                                    text = AppStrings.manageButtonLabel,
+                                    fontFamily = TitleFont(),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ParentsCoral,
+                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
+                                )
+                            }
                         }
                     }
                 }
