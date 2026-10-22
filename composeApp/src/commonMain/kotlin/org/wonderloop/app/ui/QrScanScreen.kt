@@ -152,7 +152,7 @@ fun QrScanScreen(
                 PlatformAudioService.playSfx(SoundEffect.MAGIC_CHIME)
             } catch (e: Exception) {
                 isLoadingSession = false
-                errorMessage = e.message ?: "Error al conectar con el servidor"
+                errorMessage = e.message ?: (if (AppStrings.isEnglish) "Could not reach the server" else "Error al conectar con el servidor")
             }
         }
     }
@@ -179,14 +179,14 @@ fun QrScanScreen(
                 }
                 if (pollResult.expiresInSeconds <= 0) {
                     sessionStatus = "expired"
-                    errorMessage = if (AppStrings.isEnglish) "QR session expired. Click Retry to generate a new code." else "La sesión QR ha caducado. Pulsa Reintentar para generar un nuevo código."
+                    errorMessage = if (AppStrings.isEnglish) "QR session expired. Press Retry to get a new code." else "La sesión QR ha caducado. Pulsa Reintentar para generar un nuevo código."
                     break
                 }
             } catch (e: Exception) {
                 val msg = e.message ?: ""
                 if (msg.contains("404") || msg.contains("SESSION_NOT_FOUND")) {
                     sessionStatus = "expired"
-                    errorMessage = if (AppStrings.isEnglish) "QR session expired. Click Retry to generate a new code." else "La sesión QR ha caducado. Pulsa Reintentar para generar un nuevo código."
+                    errorMessage = if (AppStrings.isEnglish) "QR session expired. Press Retry to get a new code." else "La sesión QR ha caducado. Pulsa Reintentar para generar un nuevo código."
                     break
                 }
                 // Ignore transient network poll blips
@@ -194,7 +194,7 @@ fun QrScanScreen(
         }
         if (pollCount >= maxPolls && sessionStatus != "ready") {
             sessionStatus = "expired"
-            errorMessage = if (AppStrings.isEnglish) "Session timed out. Click Retry for a new QR." else "Tiempo de espera agotado. Pulsa Reintentar para generar un nuevo QR."
+            errorMessage = if (AppStrings.isEnglish) "Session timed out. Press Retry for a new QR." else "Tiempo de espera agotado. Pulsa Reintentar para generar un nuevo QR."
         }
     }
 
@@ -317,9 +317,9 @@ fun QrScanScreen(
                         ) {
                             Text(
                                 text = if (continuation != null)
-                                    "✨ ${AppStrings.sagaBadge(continuation.chapterIndex)} · RETO DE DIBUJO ✨"
+                                    "✨ ${AppStrings.sagaBadge(continuation.chapterIndex)} · " + (if (AppStrings.isEnglish) "DRAWING CHALLENGE" else "RETO DE DIBUJO") + " ✨"
                                 else
-                                    "✨ EL PORTAL MÁGICO ✨",
+                                    if (AppStrings.isEnglish) "✨ THE MAGIC PORTAL ✨" else "✨ EL PORTAL MÁGICO ✨",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFF9E6700),
@@ -329,9 +329,9 @@ fun QrScanScreen(
 
                         Text(
                             text = if (continuation != null)
-                                "¡Envía el dibujo para el Capítulo ${continuation.chapterIndex}!"
+                                if (AppStrings.isEnglish) "Send the drawing for Chapter ${continuation.chapterIndex}!" else "¡Envía el dibujo para el Capítulo ${continuation.chapterIndex}!"
                             else
-                                "¡Pasa tu dibujo del papel a la tele!",
+                                if (AppStrings.isEnglish) "Bring your drawing to the TV!" else "¡Pasa tu dibujo del papel a la tele!",
                             fontFamily = TitleFont(),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
@@ -398,7 +398,7 @@ fun QrScanScreen(
                                     Text(text = "⚠️", fontSize = 32.sp)
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = errorMessage ?: "No se pudo crear la sesión QR",
+                                        text = errorMessage ?: (if (AppStrings.isEnglish) "Could not create the QR session" else "No se pudo crear la sesión QR"),
                                         fontSize = 14.sp,
                                         color = QrCoral,
                                         textAlign = TextAlign.Center
@@ -418,7 +418,7 @@ fun QrScanScreen(
                                             .padding(horizontal = 24.dp, vertical = 10.dp)
                                     ) {
                                         Text(
-                                            text = "Reintentar",
+                                            text = if (AppStrings.isEnglish) "Retry" else "Reintentar",
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color.White
@@ -478,10 +478,10 @@ fun QrScanScreen(
                             ) {
                                 Text(
                                     text = when (sessionStatus) {
-                                        "connected" -> "✅ Móvil conectado · ¡haz la foto!"
-                                        "uploading" -> "⬆️ Enviando dibujo a la tele..."
-                                        "ready" -> "✨ ¡Dibujo recibido! Transformando..."
-                                        else -> "⏳ Esperando escaneo con el móvil..."
+                                        "connected" -> if (AppStrings.isEnglish) "✅ Phone connected · take the photo!" else "✅ Móvil conectado · ¡haz la foto!"
+                                        "uploading" -> if (AppStrings.isEnglish) "⬆️ Sending the drawing to the TV..." else "⬆️ Enviando dibujo a la tele..."
+                                        "ready" -> if (AppStrings.isEnglish) "✨ Drawing received! Transforming..." else "✨ ¡Dibujo recibido! Transformando..."
+                                        else -> if (AppStrings.isEnglish) "⏳ Waiting for a phone to scan..." else "⏳ Esperando escaneo con el móvil..."
                                     },
                                     fontFamily = TitleFont(),
                                     fontSize = 13.5.sp,
@@ -544,24 +544,24 @@ fun QrScanScreen(
                     QrStepCard(
                         number = "1",
                         icon = "📱",
-                        title = "Escanea el QR",
-                        desc = "Abre la cámara de tu móvil y enfoca la tele",
+                        title = if (AppStrings.isEnglish) "Scan the QR" else "Escanea el QR",
+                        desc = if (AppStrings.isEnglish) "Open your phone camera and point it at the TV" else "Abre la cámara de tu móvil y enfoca la tele",
                         isActive = currentStep == 1,
                         modifier = Modifier.weight(1f)
                     )
                     QrStepCard(
                         number = "2",
                         icon = "📷",
-                        title = "Haz la foto",
-                        desc = "Fotografía el dibujo en papel de tu peque",
+                        title = if (AppStrings.isEnglish) "Take the photo" else "Haz la foto",
+                        desc = if (AppStrings.isEnglish) "Snap your little one's paper drawing" else "Fotografía el dibujo en papel de tu peque",
                         isActive = currentStep == 2,
                         modifier = Modifier.weight(1f)
                     )
                     QrStepCard(
                         number = "3",
                         icon = "✨",
-                        title = "¡Mira la tele!",
-                        desc = "El dibujo cobrará vida en tu salón",
+                        title = if (AppStrings.isEnglish) "Watch the TV!" else "¡Mira la tele!",
+                        desc = if (AppStrings.isEnglish) "The drawing comes alive in your living room" else "El dibujo cobrará vida en tu salón",
                         isActive = currentStep == 3,
                         modifier = Modifier.weight(1f)
                     )
@@ -684,14 +684,14 @@ fun QrScanScreen(
                         ) {
                             Column {
                                 Text(
-                                    text = "🎮 ¿Sin móvil a mano?",
+                                    text = if (AppStrings.isEnglish) "🎮 No phone at hand?" else "🎮 ¿Sin móvil a mano?",
                                     fontFamily = TitleFont(),
                                     fontSize = 14.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = QrInkDark
                                 )
                                 Text(
-                                    text = "Prueba con un dibujo de ejemplo",
+                                    text = if (AppStrings.isEnglish) "Try a sample drawing" else "Prueba con un dibujo de ejemplo",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = QrInkMuted
@@ -703,7 +703,7 @@ fun QrScanScreen(
                                 color = Color(0xFFF6F0E8)
                             ) {
                                 Text(
-                                    text = "OK para elegir",
+                                    text = if (AppStrings.isEnglish) "OK to choose" else "OK para elegir",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = QrInkMuted,
@@ -745,7 +745,7 @@ fun QrScanScreen(
                                         Text(text = demo.emoji, fontSize = 24.sp)
                                         Spacer(modifier = Modifier.height(3.dp))
                                         Text(
-                                            text = demo.name,
+                                            text = if (AppStrings.isEnglish) demo.nameEn else demo.name,
                                             fontFamily = TitleFont(),
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold,

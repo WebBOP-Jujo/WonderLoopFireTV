@@ -7,6 +7,7 @@ package org.wonderloop.app.ui
 data class DemoDrawingItem(
     val id: String,
     val name: String,
+    val nameEn: String = name,
     val emoji: String,
     val species: String,
     val description: String,
@@ -18,6 +19,7 @@ object DemoDrawings {
         DemoDrawingItem(
             id = "demo_dragon",
             name = "Dragón Chispa",
+            nameEn = "Spark Dragon",
             emoji = "🐲",
             species = "dragón verde",
             description = "Un dragón verde simpático con alas amarillas y escamas brillantes",
@@ -26,6 +28,7 @@ object DemoDrawings {
         DemoDrawingItem(
             id = "demo_dog",
             name = "Perrito Toby",
+            nameEn = "Toby Puppy",
             emoji = "🐶",
             species = "perrito marrón",
             description = "Un cachorro marrón con orejas caídas y pañuelo azul al cuello",
@@ -34,6 +37,7 @@ object DemoDrawings {
         DemoDrawingItem(
             id = "demo_robot",
             name = "Robot Bip",
+            nameEn = "Bip Robot",
             emoji = "🤖",
             species = "robot plateado",
             description = "Un robot plateado con antena de estrella y corazón rojo que parpadea",
@@ -42,6 +46,7 @@ object DemoDrawings {
         DemoDrawingItem(
             id = "demo_unicorn",
             name = "Unicornio Luz",
+            nameEn = "Glow Unicorn",
             emoji = "🦄",
             species = "unicornio blanco",
             description = "Un unicornio blanco con cuerno dorado y crin de arcoíris",

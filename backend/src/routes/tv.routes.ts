@@ -604,14 +604,6 @@ function renderMobileUploadHtml(session: TvSession): string {
       color: var(--coral);
     }
     .brand-title b { color: var(--mint); font-weight: 700; }
-    .session-badge {
-      font-size: 12px;
-      font-weight: 800;
-      background: var(--warm-card);
-      color: var(--text-secondary);
-      padding: 3px 8px;
-      border-radius: 999px;
-    }
     .lang-toggle {
       background: var(--paper);
       border: none;
@@ -851,7 +843,6 @@ function renderMobileUploadHtml(session: TvSession): string {
     <div class="brand-pill">
       <span class="brand-logo">✨</span>
       <span class="brand-title">Wonder<b>Loop</b></span>
-      <span class="session-badge">${session.shortCode}</span>
     </div>
     <button type="button" class="lang-toggle" id="langBtn">🇪🇸 ES / 🇬🇧 EN</button>
   </div>
