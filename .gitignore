@@ -49,3 +49,16 @@ Thumbs.db
 
 # Local TTS voice samples
 polly-samples/
+
+# Local working files kept out of the public repo
+.agent/
+.agents/
+.gemini/
+.adbt-config.json
+AGENTS.md
+CONTEXTO_MAESTRO_WONDERLOOP_TV.md
+WonderLoop_PRD_MVP*.md
+backend/deploy-cloudrun.ps1
+/*.png
+/*.js
+/pipeline_*.html
