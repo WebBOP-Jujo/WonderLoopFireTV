@@ -198,7 +198,23 @@ Fire TV app / phone browser ──HTTPS──► EC2 (Elastic IP)
 
 ## 🧪 How to Test (5 minutes)
 
-The app talks to the live AWS backend by default, so **nothing has to run on your computer**: install the APK on a Fire TV (see [Building & Installing](#2-building--installing-on-amazon-fire-tv)) and use the remote.
+The app talks to the live AWS backend by default, so **nothing has to run on your computer**: install the APK on a Fire TV and use the remote.
+
+### 📦 Install the prebuilt APK
+
+**[⬇️ Download WonderLoopTV-v1.0.0.apk](https://github.com/WebBOP-Jujo/WonderLoopFireTV/releases/latest/download/WonderLoopTV-v1.0.0.apk)** (signed release, ~12 MB, Fire OS 7+ / Android 8+).
+
+* **With the Downloader app on the Fire TV:** Settings → My Fire TV → Developer Options → allow *Install unknown apps* for Downloader, then open this URL in Downloader:
+  `https://github.com/WebBOP-Jujo/WonderLoopFireTV/releases/latest/download/WonderLoopTV-v1.0.0.apk`
+* **With ADB from a computer** (enable *ADB debugging* in Developer Options; the IP is in Settings → My Fire TV → About → Network):
+  ```bash
+  adb connect <FIRE_TV_IP>:5555
+  adb install -r WonderLoopTV-v1.0.0.apk
+  ```
+
+WonderLoop appears in **Your Apps & Channels** (sideloaded apps show their square icon on a grey tile). To build it yourself instead, see [Building & Installing](#2-building--installing-on-amazon-fire-tv).
+
+### ▶️ Walkthrough
 
 1. **Pick a profile** on "Who is imagining today?" (or add one), then press OK on **"Hi, {name}! · Scan my drawing"**.
 2. **Bring a drawing in**, either way:

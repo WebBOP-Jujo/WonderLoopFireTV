@@ -81,9 +81,23 @@ android {
         }
     }
 
+    // Release signing from local.properties (keystore and passwords never in source control)
+    val releaseStoreFile = localProperties.getProperty("wonderloop.release.storeFile")
+    if (releaseStoreFile != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = localProperties.getProperty("wonderloop.release.storePassword")
+                keyAlias = localProperties.getProperty("wonderloop.release.keyAlias")
+                keyPassword = localProperties.getProperty("wonderloop.release.keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 
