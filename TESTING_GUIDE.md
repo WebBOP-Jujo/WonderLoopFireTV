@@ -189,7 +189,11 @@ If the app cannot reach the backend, check the server address in the dialog on t
    - `✅ [Bedrock] Story Text Generation (...) via us.amazon.nova-2-lite-v1:0 (tool-use) in ~5-6s`
    - `✅ [PollyAudioAdapter] Page N synthesized ... (Lucia/neural ...)` (or `Ruth` in English) for all 5 pages.
 3. In the reader: turn pages with `DPAD_RIGHT` / `DPAD_LEFT` (or fast-forward / rewind); narration starts automatically and `PLAY_PAUSE` (or OK while the controls are hidden) pauses it. The voice must be Lucia (Spanish) or Ruth (English), with film-style subtitles where the spoken word lights up in gold.
-4. The text must not show asterisks (`*Plop!*`).
+4. **Reading modes** (same page, three ways):
+   - **Listen** (default): ◀ ▶ turn the page while the subtitles follow the voice.
+   - **At my own pace:** press OK (or "Pause") to stop the narrator; now ◀ ▶ step through the subtitles one or two sentences at a time and, after the last one, turn the page. "Listen" switches the voice back on.
+   - **"📖 I'll read":** shows the full page text for a grown-up and silences the narrator; ◀ ▶ still turn the page and BACK closes the panel before leaving the story.
+5. The text must not show asterisks (`*Plop!*`).
 
 ### 🟢 5. Creative loop (sagas)
 1. After page 5 the **drawing challenge** appears (narrated as well).

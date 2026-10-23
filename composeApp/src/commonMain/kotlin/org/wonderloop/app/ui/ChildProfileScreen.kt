@@ -268,7 +268,7 @@ fun ChildProfileScreen(
                     ) {
                         Text(text = childAvatar.ifBlank { "👦" }, fontSize = 18.sp)
                         Text(
-                            text = childName.ifBlank { "Leo" },
+                            text = childName.ifBlank { if (AppStrings.isEnglish) "Explorer" else "Explorador" },
                             fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = ChildInkDark
@@ -358,7 +358,7 @@ fun ChildProfileScreen(
 
                             // Child Name
                             Text(
-                                text = childName.ifBlank { "Leo" },
+                                text = childName.ifBlank { if (AppStrings.isEnglish) "Explorer" else "Explorador" },
                                 fontFamily = TitleFont(),
                                 fontSize = 28.sp,
                                 fontWeight = FontWeight.SemiBold,

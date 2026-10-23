@@ -47,7 +47,7 @@ private val ProfCardBorder = Color(0xFFEDE8E1)
 
 @Composable
 fun ProfileScreen(
-    initialName: String = "Leo",
+    initialName: String = "",
     initialAge: Int = 6,
     initialAvatar: String = "🧒",
     profileId: String? = null,

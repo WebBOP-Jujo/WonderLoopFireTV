@@ -80,7 +80,7 @@ fun App(
                 screenStack = listOf(screen)
             }
 
-            var childName by remember { mutableStateOf("Leo") }
+            var childName by remember { mutableStateOf("") }
             var childAge by remember { mutableStateOf(6) }
             var childAvatar by remember { mutableStateOf("🧒") }
             val backendOnline = api.isOnline
@@ -155,7 +155,8 @@ fun App(
                 SubscriptionManager.init()
 
                 val active = ProfileRepository.activeProfile
-                if (active != null) {
+                // The first-run placeholder is never shown by name (e.g. "Leaving already, friend?")
+                if (active != null && !ProfileRepository.isStarterUnclaimed()) {
                     childName = active.name
                     childAge = active.age
                     childAvatar = active.avatar
@@ -179,6 +180,9 @@ fun App(
                 val onboardingDone = PlatformStorage.getBoolean("onboarding_completed", false)
                 if (!onboardingDone) {
                     screenStack = listOf(Screen.Onboarding)
+                } else if (ProfileRepository.isStarterUnclaimed()) {
+                    // The app was closed before the first profile was created: ask for it again
+                    screenStack = listOf(Screen.Profile(isNewProfile = true))
                 } else if (ProfileRepository.profiles.size >= 2) {
                     screenStack = listOf(Screen.ProfilePicker(canGoBack = false))
                 } else {

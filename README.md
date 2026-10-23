@@ -89,6 +89,15 @@ WonderLoop TV is **not** a scaled-up mobile app. It was designed and built from 
 
 * **Compose for TV (`androidx.tv:tv-material`):** focusable cards and buttons are built on Google's TV `Surface`, which handles D-pad focus, OK/Enter, long-press, focus scale, golden focus border and glow natively ([`ui/tv`](composeApp/src/commonMain/kotlin/org/wonderloop/app/ui/tv/TvPrimitives.kt) primitives with an Android `actual`).
 * **Cinema-mode reader:** each page shows its 16:9 illustration full-bleed with a slow Ken Burns drift and **film-style subtitles synchronized with the Amazon Polly narration**: one or two sentences at a time, the spoken word lit in gold (Polly speech marks aligned to the on-screen words), so the artwork stays visible. Controls behave like a Fire TV video player: they fade out while the narrator reads and return on any key; OK pauses, ◀ ▶ always turn the page (or step through subtitles at the child's own pace when the voice is off), and **"📖 I'll read"** shows the full page text for a grown-up reading aloud. BACK closes that panel first, then exits (progress is saved).
+* **Three ways to read the same page**, so the TV adapts to the child instead of the other way round:
+
+  | Mode | How to get there | What ◀ ▶ do |
+  | :--- | :--- | :--- |
+  | 🔊 **Listen** (default) | Narration starts on every page | Turn the page; subtitles follow the voice, the spoken word lit in gold |
+  | 🐢 **At my own pace** | Pause the narrator (OK, or "Pause" in the controls) | Step through the subtitles one or two sentences at a time, then turn the page |
+  | 📖 **I'll read** | "📖 I'll read" in the controls (BACK closes it) | Turn the page; the full page text is shown for a grown-up reading aloud, and the narrator stays quiet |
+
+  "Listen" switches the narrator back on at any time.
 * **Chapter-end pages:** the drawing mission (hero polaroid, the challenge in large type, draw → scan → next chapter steps) is **narrated by Polly too**, so pre-readers hear their mission; the "challenge completed" page shows the drawn friend and a preview of the next chapter.
 * **Streaming-style home:** a wide "Hi, Leo! What story shall we create today?" card with "Scan my drawing" and a taped paper note with a drawing idea (16 ideas, a new one on every visit), next to "Continue reading" (with the story's own illustration); rails of 16:9 story covers and drawn friends as pinned polaroids; focus restored to the last opened item after BACK. Entering a rail lands on its first card, or on the one the child last left there.
 * **A new profile is never an empty screen:** the rails show a focusable "Your first story" slot and a "?" polaroid ("Your first friend") that lead to scanning, beside faint placeholder cards, and the side card explains the three steps (draw → scan → watch it come alive).
@@ -221,7 +230,7 @@ WonderLoop appears in **Your Apps & Channels** (sideloaded apps show their squar
    * **With a phone:** scan the QR code on the TV with any phone camera (any network works), take a photo of a drawing on paper and send it.
    * **Without a phone:** press ▼ to **"No phone at hand?"** and choose one of the four sample drawings.
 3. **Meet the hero:** the TV shows the drawing turned into a storybook character. Confirm it and choose the story language (Spanish or English).
-4. **Read the story:** ◀ ▶ turn pages; Amazon Polly narrates with film-style subtitles (the spoken word lights up in gold). OK pauses, **"📖 I'll read"** shows the full text for a grown-up.
+4. **Read the story:** ◀ ▶ turn pages; Amazon Polly narrates with film-style subtitles (the spoken word lights up in gold). Press **OK** to pause the narrator: ◀ ▶ then walk through the subtitles at the child's own pace. **"📖 I'll read"** shows the whole page text for a grown-up reading aloud.
 5. **Close the loop:** at the end the hero asks the child to draw something that helps in the next chapter. Scan (or pick) another drawing and **Chapter 2** continues the saga with the new friend.
 6. **Grown-ups:** **Parents** (top right) opens the Parents Zone behind an arithmetic parental gate (profiles, language, art style, sound effects).
 
