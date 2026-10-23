@@ -683,7 +683,7 @@ private fun BookCoverItem(
                         color = ShelfCoralSoft
                     ) {
                         Text(
-                            text = "✨ PÁG. 1",
+                            text = if (AppStrings.isEnglish) "✨ PAGE 1" else "✨ PÁG. 1",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = ShelfCoral,

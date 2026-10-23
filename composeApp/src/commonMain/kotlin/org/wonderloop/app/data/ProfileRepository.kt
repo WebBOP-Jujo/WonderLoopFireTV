@@ -18,6 +18,7 @@ object ProfileRepository {
 
     private const val KEY_PROFILES = "child_profiles"
     private const val KEY_ACTIVE_PROFILE_ID = "active_child_profile_id"
+    private const val KEY_STARTER_UNCLAIMED = "starter_profile_unclaimed"
 
     fun init() {
         if (isInitialized) return
@@ -62,6 +63,8 @@ object ProfileRepository {
                 )
                 profiles.add(defaultProfile)
                 persistProfiles()
+                // Placeholder only: the first profile the family creates takes it over (see addProfile)
+                PlatformStorage.saveBoolean(KEY_STARTER_UNCLAIMED, true)
                 println("👤 [ProfileRepository] Created default profile '${defaultProfile.name}' (id: ${defaultProfile.id})")
             }
 
@@ -92,7 +95,18 @@ object ProfileRepository {
         return found
     }
 
+    /** True while the only profile is the "Leo" placeholder from the first run, not one the family created. */
+    fun isStarterUnclaimed(): Boolean =
+        profiles.size == 1 && PlatformStorage.getBoolean(KEY_STARTER_UNCLAIMED, false)
+
     fun addProfile(name: String, age: Int, avatar: String): ChildProfile {
+        // The first real profile replaces the placeholder instead of appearing next to an empty "Leo"
+        if (isStarterUnclaimed()) {
+            val starter = profiles.first()
+            updateProfile(starter.id, name, age, avatar)
+            setActiveProfile(starter.id)
+            return profiles.first()
+        }
         val cleanName = name.trim().ifBlank { "Pequeño Autor" }
         val cleanAge = age.coerceIn(4, 10)
         val cleanAvatar = avatar.ifBlank { "🧒" }
@@ -134,6 +148,8 @@ object ProfileRepository {
             )
             profiles[index] = updated
             persistProfiles()
+            // Once named by the family, the starter is a real profile
+            PlatformStorage.saveBoolean(KEY_STARTER_UNCLAIMED, false)
             if (activeProfile?.id == id) {
                 setActiveProfile(id)
             }

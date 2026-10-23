@@ -80,7 +80,7 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
   - Simply enabling `android:usesCleartextTraffic="true"` globally in `AndroidManifest.xml` triggers security warnings and risks Appstore certification issues for production releases.
   - Finding the exact configuration for `<network-security-config>` that permits local IP subnets while strictly enforcing HTTPS for cloud endpoints required manual trial and error.
 * **Resolution:**
-  - Created [`network_security_config.xml`](file:///c:/Users/jorge.arcicollar/Documents/WonderLoopTV/composeApp/src/androidMain/res/xml/network_security_config.xml) with explicit trust anchors and local subnet exception rules.
+  - Created [`network_security_config.xml`](composeApp/src/androidMain/res/xml/network_security_config.xml) with explicit trust anchors and local subnet exception rules.
 * **Actionable Feedback for Amazon:**
   > **CLI / MCP Tool:** Provide an `amazon-devices-network-config` tool in the MCP server that auto-generates a certified network security XML file with local development profiles.
 
@@ -184,7 +184,7 @@ This friction log chronicles our end-to-end journey, identifying key stumbling b
   - Shrinking the text breaks 10-foot legibility; a side-by-side layout crops the 16:9 art to less than half the screen.
 * **Resolution:** We borrowed the **Fire TV video player conventions** instead of inventing new ones:
   - Film-style subtitles (1–2 sentences, 28 sp, gold highlight on the word being narrated) synced to Amazon Polly speech marks, covering ~20 % of the frame.
-  - Controls in a vertical rail that fades out while the narrator reads and returns on any key; OK pauses, like in a video app. ◀ ▶ always turn the page; a "Read it myself" mode shows the full text for a grown-up.
+  - Controls in a vertical rail that fades out while the narrator reads and returns on any key; OK pauses, like in a video app. ◀ ▶ always turn the page; an "I'll read" mode shows the full text for a grown-up.
 * **Actionable Feedback for Amazon:**
   > **Docs:** Add a "reading & subtitle-style text over full-screen art" pattern to the Fire TV design guidelines (safe text band, minimum size, auto-hiding overlays, select-to-pause), so book, education and karaoke apps converge on the same remote behaviour.
 

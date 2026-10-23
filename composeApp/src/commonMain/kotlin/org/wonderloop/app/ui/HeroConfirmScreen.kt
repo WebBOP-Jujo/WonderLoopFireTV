@@ -225,7 +225,7 @@ fun HeroConfirmScreen(
                                 if (!displayImage.isNullOrBlank()) {
                                     WonderLoopImage(
                                         model = displayImage,
-                                        contentDescription = "Foto capturada",
+                                        contentDescription = if (AppStrings.isEnglish) "Captured photo" else "Foto capturada",
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier.fillMaxSize()
                                     )
@@ -883,7 +883,7 @@ fun HeroConfirmScreen(
                                     text = if (continuation != null) {
                                         AppStrings.continueSagaButton(continuation.chapterIndex)
                                     } else {
-                                        "✨ ¡Crear Cuento en la Tele!"
+                                        if (AppStrings.isEnglish) "✨ Create the story on TV!" else "✨ ¡Crear Cuento en la Tele!"
                                     },
                                     fontFamily = TitleFont(),
                                     fontSize = 18.sp,
@@ -941,7 +941,7 @@ fun HeroConfirmScreen(
                     onClick = { onStartStoryClick(selectedLanguage) },
                     colors = ButtonDefaults.buttonColors(containerColor = HeroCoral)
                 ) {
-                    Text(text = "Comenzar Cuento")
+                    Text(text = if (AppStrings.isEnglish) "Start the story" else "Comenzar Cuento")
                 }
             }
         }

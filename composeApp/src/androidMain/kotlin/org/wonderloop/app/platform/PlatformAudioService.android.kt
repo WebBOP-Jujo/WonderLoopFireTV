@@ -391,7 +391,7 @@ actual object PlatformAudioService {
 
     /**
      * A paper page flip: a band-limited "swish" that swells as the page lifts, flutters while it
-     * travels, then a soft low "flap" as it lands. Quiet on purpose: it plays under the narration.
+     * travels, then a soft low "flap" as it lands. Very quiet on purpose (~-10 dB): it plays under the narration.
      */
     private fun generatePageTurnPcm(sampleRate: Int): ShortArray {
         val durationMs = 360
@@ -423,7 +423,7 @@ actual object PlatformAudioService {
             // Landing: short, darker burst
             lpFlap += aFlap * (noise - lpFlap)
             val flapEnv = if (t >= flapStart) exp(-(t - flapStart) / 0.018) else 0.0
-            val sample = band * swishEnv * flutter * 15000.0 + lpFlap * flapEnv * 26000.0
+            val sample = band * swishEnv * flutter * 4800.0 + lpFlap * flapEnv * 8300.0
             val fadeIn = (t / 0.004).coerceAtMost(1.0)
             pcm[i] = (sample * fadeIn).toInt().coerceIn(-32767, 32767).toShort()
         }

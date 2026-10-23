@@ -483,7 +483,8 @@ fun App(
                                 val previousScreen = screenStack.dropLast(1).lastOrNull()
                                 if (previousScreen is Screen.ParentsZone) {
                                     navigateBack()
-                                } else if (ProfileRepository.profiles.isEmpty()) {
+                                } else if (ProfileRepository.profiles.isEmpty() || ProfileRepository.isStarterUnclaimed()) {
+                                    // First run: the family creates its first profile right after the tutorial
                                     navigateReplace(Screen.Profile(isNewProfile = true))
                                 } else if (ProfileRepository.profiles.size >= 2) {
                                     navigateReplace(Screen.ProfilePicker(canGoBack = false))

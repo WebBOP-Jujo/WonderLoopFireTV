@@ -374,6 +374,8 @@ WRITING RULES
 ILLUSTRATION PROMPTS (visualPrompt, always in ENGLISH, 20-45 words per page)
 - Describe only what is visible at that page's key moment: who (${heroName} the ${sanitizeString(hero.species, 60)}${companion ? ` and ${companionName} the ${sanitizeString(companion.species, 60)}` : ''}), the action and pose, the facial emotion (cheerful, curious, surprised or determined; never sad, crying or scared), the key props and the exact spot in ${world.nameEn}.
 - Every page shows a different moment and spot.${companion ? ` Both ${heroName} and ${companionName} appear in every page.` : ''}
+- The illustrator only sees one page at a time and has a reference picture of ${heroName}${companion ? ` and ${companionName}` : ''} only. So any other character (at most ONE secondary helper in the whole story) must be described with the SAME species, size, colours and one clothing detail in EVERY visualPrompt where it appears, always with the same words (pattern: "<Name>, a <size> <colour> <animal> with <one detail>"; invent an original helper that fits this world), never by its name alone, and it must stay the same animal on every page.
+- ${childName} is the reader, not a character: never put ${childName} in a visualPrompt and never give a story character the name ${childName}.
 - Do NOT write art style, camera, lighting, "16:9" or "illustration": they are added automatically.
 
 DRAWING CHALLENGE (creativeChallenge)

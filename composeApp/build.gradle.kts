@@ -65,7 +65,7 @@ android {
         applicationId = "org.wonderloop.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0.0"
         buildConfigField("String", "WONDERLOOP_APP_KEY", "\"$wonderLoopAppKey\"")
         buildConfigField("String", "WONDERLOOP_BACKEND_URL", "\"$wonderLoopBackendUrl\"")
